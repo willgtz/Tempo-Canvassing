@@ -1,0 +1,273 @@
+"use client";
+
+import { useState, useTransition } from "react";
+import { assignZip, unassignZip, updateUser, type UserRole } from "./actions";
+
+export type ManagedUser = {
+  id: string;
+  full_name: string;
+  email: string;
+  phone: string | null;
+  role: UserRole;
+  active: boolean;
+  manager_id: string | null;
+};
+
+type ManagerOption = { id: string; full_name: string; role: string };
+type Assignment = { id: string; zipcode: string };
+
+const ROLE_OPTIONS: UserRole[] = ["rep", "team_lead", "admin", "super_admin"];
+
+export function RepCard({
+  user,
+  managerOptions,
+  isSelf,
+  managerName,
+  initialAssignments,
+}: {
+  user: ManagedUser;
+  managerOptions: ManagerOption[];
+  isSelf: boolean;
+  managerName: string | null;
+  initialAssignments: Assignment[];
+}) {
+  const [editing, setEditing] = useState(false);
+  const [fullName, setFullName] = useState(user.full_name);
+  const [email, setEmail] = useState(user.email);
+  const [phone, setPhone] = useState(user.phone ?? "");
+  const [role, setRole] = useState<UserRole>(user.role);
+  const [active, setActive] = useState(user.active);
+  const [managerId, setManagerId] = useState(user.manager_id ?? "");
+  const [profileError, setProfileError] = useState<string | null>(null);
+  const [isSavingProfile, startProfileSave] = useTransition();
+
+  const [assignments, setAssignments] = useState(initialAssignments);
+  const [zipInput, setZipInput] = useState("");
+  const [zipError, setZipError] = useState<string | null>(null);
+  const [isSavingZip, startZipSave] = useTransition();
+
+  function handleCancel() {
+    setFullName(user.full_name);
+    setEmail(user.email);
+    setPhone(user.phone ?? "");
+    setRole(user.role);
+    setActive(user.active);
+    setManagerId(user.manager_id ?? "");
+    setProfileError(null);
+    setEditing(false);
+  }
+
+  function handleSaveProfile() {
+    setProfileError(null);
+    startProfileSave(async () => {
+      const result = await updateUser(user.id, {
+        fullName,
+        email,
+        phone: phone || null,
+        role,
+        active,
+        managerId: managerId || null,
+      });
+      if (!result.ok) {
+        setProfileError(result.error);
+        return;
+      }
+      setEditing(false);
+    });
+  }
+
+  function handleAssignZip(e: React.FormEvent) {
+    e.preventDefault();
+    setZipError(null);
+    const zip = zipInput.trim();
+    startZipSave(async () => {
+      const result = await assignZip(user.id, zip);
+      if (!result.ok) {
+        setZipError(result.error);
+        return;
+      }
+      setAssignments((prev) => [...prev, result.assignment]);
+      setZipInput("");
+    });
+  }
+
+  function handleRemoveZip(assignmentId: string) {
+    setZipError(null);
+    startZipSave(async () => {
+      const result = await unassignZip(assignmentId);
+      if (!result.ok) {
+        setZipError(result.error);
+        return;
+      }
+      setAssignments((prev) => prev.filter((a) => a.id !== assignmentId));
+    });
+  }
+
+  return (
+    <div className="rounded-lg border border-black/10 p-4 dark:border-white/10">
+      {editing ? (
+        <div className="space-y-3">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1">
+              <label className="text-xs font-medium">Full name</label>
+              <input
+                value={fullName}
+                onChange={(e) => setFullName(e.target.value)}
+                className="w-full rounded border border-black/15 px-2 py-1 text-sm dark:border-white/20 dark:bg-transparent"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium">Email</label>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full rounded border border-black/15 px-2 py-1 text-sm dark:border-white/20 dark:bg-transparent"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium">Phone (optional)</label>
+              <input
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                className="w-full rounded border border-black/15 px-2 py-1 text-sm dark:border-white/20 dark:bg-transparent"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium">Role</label>
+              <select
+                value={role}
+                onChange={(e) => setRole(e.target.value as UserRole)}
+                className="w-full rounded border border-black/15 px-2 py-1 text-sm dark:border-white/20 dark:bg-transparent"
+              >
+                {ROLE_OPTIONS.map((r) => (
+                  <option key={r} value={r}>
+                    {r}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium">Reports to</label>
+              <select
+                value={managerId}
+                onChange={(e) => setManagerId(e.target.value)}
+                className="w-full rounded border border-black/15 px-2 py-1 text-sm dark:border-white/20 dark:bg-transparent"
+              >
+                <option value="">No manager</option>
+                {managerOptions
+                  .filter((m) => m.id !== user.id)
+                  .map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.full_name} ({m.role})
+                    </option>
+                  ))}
+              </select>
+            </div>
+            <label className="flex items-center gap-1.5 self-end pb-1.5 text-sm">
+              <input
+                type="checkbox"
+                checked={active}
+                onChange={(e) => setActive(e.target.checked)}
+              />
+              Active
+            </label>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleCancel}
+              disabled={isSavingProfile}
+              className="rounded border border-black/15 px-3 py-1 text-sm disabled:opacity-50 dark:border-white/20"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSaveProfile}
+              disabled={isSavingProfile}
+              className="rounded bg-black px-3 py-1 text-sm font-medium text-white disabled:opacity-50 dark:bg-white dark:text-black"
+            >
+              {isSavingProfile ? "Saving…" : "Save"}
+            </button>
+            {profileError && (
+              <span className="text-sm text-red-600 dark:text-red-400">{profileError}</span>
+            )}
+          </div>
+        </div>
+      ) : (
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="font-medium">
+              {user.full_name}{" "}
+              <span className="text-xs font-normal text-black/50 dark:text-white/50">
+                ({user.role}
+                {!user.active ? ", inactive" : ""}
+                {isSelf ? ", you" : ""})
+              </span>
+            </p>
+            <p className="text-sm text-black/60 dark:text-white/60">{user.email}</p>
+            {user.phone && (
+              <p className="text-sm text-black/60 dark:text-white/60">{user.phone}</p>
+            )}
+            <p className="text-xs text-black/50 dark:text-white/50">
+              Reports to: {managerName ?? "—"}
+            </p>
+          </div>
+          {isSelf ? (
+            <span className="shrink-0 text-xs text-black/40 dark:text-white/40">
+              Can&apos;t edit your own account
+            </span>
+          ) : (
+            <button
+              onClick={() => setEditing(true)}
+              className="shrink-0 rounded border border-black/15 px-2 py-1 text-xs dark:border-white/20"
+            >
+              Edit
+            </button>
+          )}
+        </div>
+      )}
+
+      <div className="mt-3 flex flex-wrap gap-2">
+        {assignments.length === 0 && (
+          <span className="text-sm italic text-black/40 dark:text-white/40">
+            No active zip assignments
+          </span>
+        )}
+        {assignments.map((a) => (
+          <button
+            key={a.id}
+            type="button"
+            disabled={isSavingZip}
+            onClick={() => handleRemoveZip(a.id)}
+            className="rounded-full border border-black/15 px-3 py-1 text-xs disabled:opacity-50 dark:border-white/20"
+            title="Remove assignment"
+          >
+            {a.zipcode} ×
+          </button>
+        ))}
+      </div>
+
+      <form onSubmit={handleAssignZip} className="mt-3 flex items-center gap-2">
+        <input
+          value={zipInput}
+          onChange={(e) => setZipInput(e.target.value)}
+          placeholder="Zip code"
+          inputMode="numeric"
+          pattern="\d{5}"
+          maxLength={5}
+          required
+          className="w-28 rounded border border-black/15 px-2 py-1 text-sm dark:border-white/20 dark:bg-transparent"
+        />
+        <button
+          type="submit"
+          disabled={isSavingZip}
+          className="rounded border border-black/15 px-3 py-1 text-sm disabled:opacity-50 dark:border-white/20"
+        >
+          Assign
+        </button>
+        {zipError && <span className="text-xs text-red-600 dark:text-red-400">{zipError}</span>}
+      </form>
+    </div>
+  );
+}

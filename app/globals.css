@@ -3,6 +3,13 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  /* Dashboard chart palette — see the dataviz skill's reference palette.
+     Sequential blue is the default hue for magnitude/ranking charts;
+     disposition breakdowns use each disposition's own stored color
+     instead, for consistency with map pins/badges elsewhere in the app. */
+  --chart-series-1: #2a78d6;
+  --chart-text-secondary: #52514e;
+  --chart-gridline: #e1e0d9;
 }
 
 @theme inline {
@@ -16,6 +23,9 @@
   :root {
     --background: #0a0a0a;
     --foreground: #ededed;
+    --chart-series-1: #3987e5;
+    --chart-text-secondary: #c3c2b7;
+    --chart-gridline: #2c2c2a;
   }
 }
 

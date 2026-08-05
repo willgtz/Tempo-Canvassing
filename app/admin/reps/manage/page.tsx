@@ -1,0 +1,69 @@
+import { getAdminSession } from "@/lib/auth/admin";
+import { createClient } from "@/lib/supabase/server";
+import { RepCard, type ManagedUser } from "../rep-card";
+
+export default async function ManageRepsPage() {
+  const session = await getAdminSession();
+  const supabase = await createClient();
+
+  const [{ data: profiles, error }, { data: assignments, error: assignmentsError }] =
+    await Promise.all([
+      supabase
+        .from("profiles")
+        .select("id, full_name, email, phone, role, active, manager_id")
+        .order("full_name"),
+      supabase
+        .from("zip_assignments")
+        .select("id, user_id, zipcode")
+        .is("unassigned_at", null)
+        .order("zipcode"),
+    ]);
+
+  if (error || assignmentsError || !session) {
+    return (
+      <div className="mx-auto w-full max-w-3xl p-6 text-sm text-red-600 dark:text-red-400">
+        Failed to load reps: {error?.message ?? assignmentsError?.message}
+      </div>
+    );
+  }
+
+  const managerOptions = (profiles ?? []).filter((p) =>
+    ["team_lead", "admin", "super_admin"].includes(p.role)
+  );
+  const nameById = new Map((profiles ?? []).map((p) => [p.id, p.full_name]));
+
+  const assignmentsByUser = new Map<string, { id: string; zipcode: string }[]>();
+  for (const a of assignments ?? []) {
+    const list = assignmentsByUser.get(a.user_id) ?? [];
+    list.push({ id: a.id, zipcode: a.zipcode });
+    assignmentsByUser.set(a.user_id, list);
+  }
+
+  return (
+    <div className="mx-auto w-full max-w-4xl space-y-3 p-6">
+      <div>
+        <h1 className="text-xl font-semibold">Manage Reps</h1>
+        <p className="text-sm text-black/60 dark:text-white/60">
+          Zip assignment is always available. Editing name, email, phone,
+          role, manager, or active status requires hitting Edit — you
+          can&apos;t edit your own account here, and the last remaining
+          admin/super_admin can&apos;t be demoted or deactivated. Removing a
+          zip closes it out (keeps history) rather than deleting the row.
+        </p>
+      </div>
+
+      <div className="space-y-3">
+        {(profiles ?? []).map((p) => (
+          <RepCard
+            key={p.id}
+            user={p as ManagedUser}
+            managerOptions={managerOptions}
+            isSelf={p.id === session.userId}
+            managerName={p.manager_id ? (nameById.get(p.manager_id) ?? null) : null}
+            initialAssignments={assignmentsByUser.get(p.id) ?? []}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
