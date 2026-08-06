@@ -218,6 +218,19 @@ export function LeadsExplorer({
                 </option>
               ))}
             </Select>
+            {/* This list is built from who currently has an active zip
+                assignment (subordinate_zip_assignments RPC) — a rep with
+                no zips assigned yet won't appear here at all. Not an
+                error state, just an easy thing to mistake for one. */}
+            {repOptions.length === 0 && (
+              <p className="text-xs text-black/40 dark:text-white/40">
+                No reps have assigned zips yet — assign one in{" "}
+                <a href="/admin/reps/manage" className="underline">
+                  Manage Reps
+                </a>{" "}
+                to filter by them here.
+              </p>
+            )}
           </div>
         )}
 
