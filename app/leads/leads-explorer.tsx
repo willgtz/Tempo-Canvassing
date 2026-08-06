@@ -364,6 +364,7 @@ export function LeadsExplorer({
         ) : (
           <LeadsList
             leads={filteredLeads}
+            dispositions={dispositions}
             dispositionById={dispositionById}
             onSelectLead={setSelectedLeadId}
           />
