@@ -4,6 +4,10 @@ import { useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { AppointmentDetailPanel } from "./appointment-detail-panel";
 import { AppointmentsCalendar } from "./appointments-calendar";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input, Select } from "@/components/ui/input";
+import { cn } from "@/components/ui/cn";
 import type {
   ActiveProfile,
   Appointment,
@@ -152,25 +156,27 @@ export function AppointmentsExplorer({
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <div className="flex gap-1 rounded border border-black/15 p-0.5 dark:border-white/20">
+        <div className="flex gap-1 overflow-hidden rounded-full border border-black/15 p-0.5 dark:border-white/20">
           {(["list", "calendar"] as const).map((mode) => (
             <button
               key={mode}
               onClick={() => setViewMode(mode)}
-              className={`rounded px-2.5 py-1 text-xs font-medium capitalize ${
+              className={cn(
+                "rounded-full px-3 py-1 text-xs font-medium capitalize transition-colors",
                 viewMode === mode
-                  ? "bg-black text-white dark:bg-white dark:text-black"
-                  : "text-black/60 hover:bg-black/5 dark:text-white/60 dark:hover:bg-white/5"
-              }`}
+                  ? "bg-blue-600 text-white dark:bg-blue-500"
+                  : "text-black/60 hover:bg-black/5 dark:text-white/60 dark:hover:bg-white/10"
+              )}
             >
               {mode}
             </button>
           ))}
         </div>
-        <button
+        <Button
+          variant="secondary"
+          size="sm"
           onClick={() => startRefresh(() => router.refresh())}
           disabled={isRefreshing}
-          className="flex items-center gap-1.5 rounded border border-black/15 px-2.5 py-1 text-xs font-medium disabled:opacity-50 dark:border-white/20"
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -187,24 +193,25 @@ export function AppointmentsExplorer({
             />
           </svg>
           {isRefreshing ? "Refreshing…" : "Refresh"}
-        </button>
+        </Button>
       </div>
 
-      <div className="space-y-3 rounded-lg border border-black/10 p-4 dark:border-white/10">
-        <input
+      <Card className="space-y-3 p-4">
+        <Input
           value={searchText}
           onChange={(e) => setSearchText(e.target.value)}
           placeholder="Search name or address…"
-          className="w-full rounded border border-black/15 px-2 py-1.5 text-sm dark:border-white/20 dark:bg-transparent"
+          className="w-full"
         />
         <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={() => setSelectedStatusIds(new Set())}
-            className={`rounded-full border px-3 py-1 text-xs font-medium ${
+            className={cn(
+              "rounded-full border px-3 py-1 text-xs font-medium transition-colors",
               selectedStatusIds.size === 0
-                ? "border-black bg-black text-white dark:border-white dark:bg-white dark:text-black"
-                : "border-black/15 dark:border-white/20"
-            }`}
+                ? "border-blue-600 bg-blue-600 text-white dark:border-blue-500 dark:bg-blue-500"
+                : "border-black/15 hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+            )}
           >
             All
           </button>
@@ -212,11 +219,12 @@ export function AppointmentsExplorer({
             <button
               key={status.id}
               onClick={() => toggleStatus(status.id)}
-              className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium ${
+              className={cn(
+                "flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors",
                 selectedStatusIds.has(status.id)
-                  ? "border-black bg-black text-white dark:border-white dark:bg-white dark:text-black"
-                  : "border-black/15 dark:border-white/20"
-              }`}
+                  ? "border-blue-600 bg-blue-600 text-white dark:border-blue-500 dark:bg-blue-500"
+                  : "border-black/15 hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+              )}
             >
               <span className="inline-block h-2 w-2 rounded-full" style={{ backgroundColor: status.color }} />
               {status.name}
@@ -226,36 +234,27 @@ export function AppointmentsExplorer({
         <div className="flex flex-wrap items-center gap-3 text-xs">
           <label className="flex items-center gap-1.5">
             Scheduled from
-            <input
+            <Input
               type="date"
               value={scheduledFrom}
               onChange={(e) => setScheduledFrom(e.target.value)}
-              className="rounded border border-black/15 px-2 py-1 dark:border-white/20 dark:bg-transparent"
+              className="text-xs"
             />
           </label>
           <label className="flex items-center gap-1.5">
             to
-            <input
-              type="date"
-              value={scheduledTo}
-              onChange={(e) => setScheduledTo(e.target.value)}
-              className="rounded border border-black/15 px-2 py-1 dark:border-white/20 dark:bg-transparent"
-            />
+            <Input type="date" value={scheduledTo} onChange={(e) => setScheduledTo(e.target.value)} className="text-xs" />
           </label>
           <label className="flex items-center gap-1.5">
             Closer
-            <select
-              value={selectedCloserId}
-              onChange={(e) => setSelectedCloserId(e.target.value)}
-              className="rounded border border-black/15 px-2 py-1 dark:border-white/20 dark:bg-transparent"
-            >
+            <Select value={selectedCloserId} onChange={(e) => setSelectedCloserId(e.target.value)} className="text-xs">
               <option value="">All</option>
               {closers.map((c) => (
                 <option key={c.userId} value={c.userId}>
                   {c.fullName}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
           {(searchText || selectedStatusIds.size > 0 || scheduledFrom || scheduledTo || selectedCloserId) && (
             <button
@@ -272,7 +271,7 @@ export function AppointmentsExplorer({
             </button>
           )}
         </div>
-      </div>
+      </Card>
 
       {appointments.length === 0 && (
         <p className="text-sm italic text-black/50 dark:text-white/50">No appointments yet.</p>
@@ -316,7 +315,7 @@ export function AppointmentsExplorer({
               </svg>
             </button>
             {!isCollapsed && (
-              <div className="overflow-x-auto rounded-lg border border-black/10 dark:border-white/10">
+              <div className="overflow-x-auto rounded-xl border border-black/10 dark:border-white/10">
                 <table className="w-full min-w-[640px] text-left text-sm">
                   <thead className="bg-black/5 dark:bg-white/5">
                     <tr>

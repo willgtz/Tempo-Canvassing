@@ -12,7 +12,7 @@ export default function PrivacyPolicyPage() {
     <div className="mx-auto w-full max-w-2xl space-y-6 p-6 text-sm leading-relaxed">
       <div>
         <h1 className="text-xl font-semibold">Privacy Policy</h1>
-        <p className="mt-1 text-black/60 dark:text-white/60">Last updated: August 6, 2026</p>
+        <p className="mt-1 text-black/60 dark:text-white/60">Last updated: August 7, 2026</p>
       </div>
 
       <p>
@@ -31,9 +31,13 @@ export default function PrivacyPolicyPage() {
             what information you can see in the App.
           </li>
           <li>
-            Your device&apos;s location, only while actively using the route-planning feature, to
-            calculate an efficient order for visiting assigned properties. Location is used
-            in the moment to build a route and is not continuously tracked in the background.
+            Your device&apos;s location, captured at two specific moments: (1) while actively
+            using the route-planning feature, to calculate an efficient order for visiting
+            assigned properties; and (2) at the moment you change a lead&apos;s status or add a
+            note, to confirm you were near that property&apos;s address (&ldquo;door-knock
+            verification&rdquo;) for internal activity-tracking purposes. In both cases, location
+            is captured in the moment for that specific action and is not continuously tracked in
+            the background.
           </li>
           <li>Records of actions you take in the App — status changes, notes, appointments you create or are assigned to — attributed to your account.</li>
         </ul>

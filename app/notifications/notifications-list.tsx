@@ -96,7 +96,7 @@ export function NotificationsList({
           Clear all
         </button>
       </div>
-      <div className="divide-y divide-black/10 rounded-lg border border-black/10 dark:divide-white/10 dark:border-white/10">
+      <div className="divide-y divide-black/10 rounded-xl border border-black/10 dark:divide-white/10 dark:border-white/10">
         {notifications.map((n) => (
           <div key={n.id} className="flex items-start gap-2 p-4 hover:bg-black/5 dark:hover:bg-white/5">
             <button onClick={() => handleClick(n)} className="flex flex-1 items-start gap-3 text-left">
