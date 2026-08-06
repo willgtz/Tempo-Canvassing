@@ -46,18 +46,18 @@ export function SearchableMultiSelect({
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="block min-w-40 rounded border border-black/15 px-2 py-1 text-left text-sm dark:border-white/20 dark:bg-transparent"
+        className="block min-w-40 rounded-lg border border-black/15 px-3 py-1.5 text-left text-sm text-black hover:bg-black/5 dark:border-white/20 dark:text-white dark:hover:bg-white/10"
       >
         {summary}
       </button>
       {open && (
-        <div className="absolute z-10 mt-1 w-56 rounded border border-black/15 bg-white p-2 shadow-lg dark:border-white/20 dark:bg-neutral-900">
+        <div className="absolute z-10 mt-1 w-56 rounded-xl border border-black/15 bg-white p-2 shadow-lg dark:border-white/20 dark:bg-neutral-900">
           <input
             autoFocus
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search…"
-            className="mb-2 w-full rounded border border-black/15 px-2 py-1 text-sm dark:border-white/20 dark:bg-transparent"
+            className="mb-2 w-full rounded-lg border border-black/15 px-2 py-1 text-sm dark:border-white/20 dark:bg-transparent"
           />
           <div className="max-h-48 overflow-y-auto">
             {filtered.length === 0 && (

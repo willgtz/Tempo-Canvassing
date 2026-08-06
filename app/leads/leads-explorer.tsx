@@ -7,6 +7,9 @@ import { SearchableMultiSelect } from "./searchable-multi-select";
 import { LeadDetailPanel } from "./lead-detail-panel";
 import { AddLeadModal } from "./add-lead-modal";
 import { RouteResultPanel } from "./route-result-panel";
+import { Button } from "@/components/ui/button";
+import { Input, Select } from "@/components/ui/input";
+import { cn } from "@/components/ui/cn";
 import type { AppointmentFormField, Disposition, Lead, RouteStop, TeamZip } from "./types";
 
 type ViewMode = "map" | "list";
@@ -187,30 +190,26 @@ export function LeadsExplorer({
       <div className="flex flex-wrap items-end gap-3 border-b border-black/10 px-6 py-3 dark:border-white/10">
         <div className="space-y-1">
           <label className="text-xs font-medium">Disposition</label>
-          <select
-            value={dispositionFilter}
-            onChange={(e) => setDispositionFilter(e.target.value)}
-            className="block rounded border border-black/15 px-2 py-1 text-sm dark:border-white/20 dark:bg-transparent"
-          >
+          <Select value={dispositionFilter} onChange={(e) => setDispositionFilter(e.target.value)} className="block">
             <option value="all">All</option>
             {dispositions.map((d) => (
               <option key={d.id} value={d.id}>
                 {d.name}
               </option>
             ))}
-          </select>
+          </Select>
         </div>
 
         {canFilterByRep && (
           <div className="space-y-1">
             <label className="text-xs font-medium">Rep</label>
-            <select
+            <Select
               value={repFilter}
               onChange={(e) => {
                 setRepFilter(e.target.value);
                 setZipFilter([]);
               }}
-              className="block rounded border border-black/15 px-2 py-1 text-sm dark:border-white/20 dark:bg-transparent"
+              className="block"
             >
               <option value="all">All reps</option>
               {repOptions.map((r) => (
@@ -218,7 +217,7 @@ export function LeadsExplorer({
                   {r.id === currentUserId ? `${r.name} (me)` : r.name}
                 </option>
               ))}
-            </select>
+            </Select>
           </div>
         )}
 
@@ -232,27 +231,17 @@ export function LeadsExplorer({
 
         <div className="space-y-1">
           <label className="text-xs font-medium">From</label>
-          <input
-            type="date"
-            value={dateFrom}
-            onChange={(e) => setDateFrom(e.target.value)}
-            className="block rounded border border-black/15 px-2 py-1 text-sm dark:border-white/20 dark:bg-transparent"
-          />
+          <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="block" />
         </div>
         <div className="space-y-1">
           <label className="text-xs font-medium">To</label>
-          <input
-            type="date"
-            value={dateTo}
-            onChange={(e) => setDateTo(e.target.value)}
-            className="block rounded border border-black/15 px-2 py-1 text-sm dark:border-white/20 dark:bg-transparent"
-          />
+          <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="block" />
         </div>
 
         <div className="space-y-1">
           <label className="text-xs font-medium">Search address</label>
           <div className="flex gap-1">
-            <input
+            <Input
               value={addressQuery}
               onChange={(e) => setAddressQuery(e.target.value)}
               onKeyDown={(e) => {
@@ -262,15 +251,10 @@ export function LeadsExplorer({
                 }
               }}
               placeholder="123 Main St"
-              className="rounded border border-black/15 px-2 py-1 text-sm dark:border-white/20 dark:bg-transparent"
             />
-            <button
-              type="button"
-              onClick={() => setAppliedAddressQuery(addressQuery)}
-              className="rounded border border-black/15 px-3 py-1 text-sm dark:border-white/20"
-            >
+            <Button type="button" variant="secondary" size="sm" onClick={() => setAppliedAddressQuery(addressQuery)}>
               Search
-            </button>
+            </Button>
           </div>
         </div>
 
@@ -285,64 +269,54 @@ export function LeadsExplorer({
                   </span>
                 )}
               </span>
-              <button
+              <Button
                 type="button"
+                size="sm"
                 onClick={handleBuildRoute}
                 disabled={selectedLeadIds.length < 1 || isRouting}
-                className="rounded bg-black px-3 py-1 text-sm font-medium text-white disabled:opacity-50 dark:bg-white dark:text-black"
               >
                 {isRouting ? "Routing…" : "Route"}
-              </button>
-              <button
-                type="button"
-                onClick={handleCancelSelect}
-                className="rounded border border-black/15 px-3 py-1 text-sm dark:border-white/20"
-              >
+              </Button>
+              <Button type="button" variant="secondary" size="sm" onClick={handleCancelSelect}>
                 Cancel
-              </button>
+              </Button>
               {routeError && (
                 <span className="text-sm text-red-600 dark:text-red-400">{routeError}</span>
               )}
             </>
           ) : (
             <>
-              <button
-                type="button"
-                onClick={() => setShowAddLead(true)}
-                className="rounded bg-black px-3 py-1 text-sm font-medium text-white dark:bg-white dark:text-black"
-              >
+              <Button type="button" size="sm" onClick={() => setShowAddLead(true)}>
                 + Add Lead
-              </button>
-              <button
-                type="button"
-                onClick={() => setSelectMode(true)}
-                className="rounded border border-black/15 px-3 py-1 text-sm dark:border-white/20"
-              >
+              </Button>
+              <Button type="button" variant="secondary" size="sm" onClick={() => setSelectMode(true)}>
                 Select Leads
-              </button>
-              <button
-                type="button"
-                onClick={handleClearFilters}
-                className="rounded border border-black/15 px-3 py-1 text-sm dark:border-white/20"
-              >
+              </Button>
+              <Button type="button" variant="secondary" size="sm" onClick={handleClearFilters}>
                 Clear filters
-              </button>
+              </Button>
             </>
           )}
           <span className="text-sm text-black/60 dark:text-white/60">
             {filteredLeads.length} lead{filteredLeads.length === 1 ? "" : "s"}
             {viewMode === "map" && withoutLocation > 0 && ` (${withoutLocation} without a location)`}
           </span>
-          <div className="flex overflow-hidden rounded border border-black/15 dark:border-white/20">
+          <div className="flex overflow-hidden rounded-full border border-black/15 dark:border-white/20">
             <button
               onClick={() => setViewMode("map")}
-              className={`px-3 py-1 text-sm ${viewMode === "map" ? "bg-black text-white dark:bg-white dark:text-black" : ""}`}
+              className={cn(
+                "px-3 py-1 text-sm font-medium transition-colors",
+                viewMode === "map" ? "bg-blue-600 text-white dark:bg-blue-500" : "hover:bg-black/5 dark:hover:bg-white/10"
+              )}
             >
               Map
             </button>
             <button
               onClick={() => setViewMode("list")}
-              className={`px-3 py-1 text-sm ${viewMode === "list" ? "bg-black text-white dark:bg-white dark:text-black" : ""}`}
+              className={cn(
+                "px-3 py-1 text-sm font-medium transition-colors",
+                viewMode === "list" ? "bg-blue-600 text-white dark:bg-blue-500" : "hover:bg-black/5 dark:hover:bg-white/10"
+              )}
             >
               List
             </button>
