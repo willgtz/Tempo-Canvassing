@@ -1,31 +1,15 @@
 "use client";
 
-import { useMemo } from "react";
-import { APIProvider, Map, Marker } from "@vis.gl/react-google-maps";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { AdvancedMarker, APIProvider, Map, useMap } from "@vis.gl/react-google-maps";
+import { MarkerClusterer } from "@googlemaps/markerclusterer";
+import type { Marker as ClustererMarker } from "@googlemaps/markerclusterer";
 import type { Disposition, Lead } from "./types";
 
 const DEFAULT_COLOR = "#6B7280";
 const FALLBACK_CENTER = { lat: 39.8283, lng: -98.5795 }; // center of contiguous US
 
 type LocatedLead = Lead & { lat: number; lng: number };
-
-// Manual (cold-knock) leads get a dashed black ring instead of the plain
-// white one, so it's visually obvious on the map why a pin is showing up
-// outside a rep's assigned zip.
-function pinIcon(color: string, isManual: boolean): string {
-  const stroke = isManual ? "#000000" : "#ffffff";
-  const dash = isManual ? ' stroke-dasharray="3,2"' : "";
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="26" height="26"><circle cx="13" cy="13" r="9" fill="${color}" stroke="${stroke}" stroke-width="2.5"${dash}/></svg>`;
-  return `data:image/svg+xml;utf-8,${encodeURIComponent(svg)}`;
-}
-
-// Shown instead of the disposition-colored pin while a lead is selected in
-// select mode — the number is its position in selection order, which is
-// also what determines route origin (1) / destination (last) later.
-function numberedPinIcon(number: number): string {
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28"><circle cx="14" cy="14" r="11" fill="#000000" stroke="#ffffff" stroke-width="2.5"/><text x="14" y="15" text-anchor="middle" dominant-baseline="middle" font-size="12" font-family="sans-serif" fill="#ffffff" font-weight="bold">${number}</text></svg>`;
-  return `data:image/svg+xml;utf-8,${encodeURIComponent(svg)}`;
-}
 
 export function LeadsMap({
   leads,
@@ -69,32 +53,118 @@ export function LeadsMap({
   return (
     <APIProvider apiKey={apiKey}>
       <Map
+        // Advanced Markers (needed for clustering) require a real Map ID
+        // resource, separate from the API key — "DEMO_MAP_ID" is Google's
+        // own documented placeholder that works out of the box for this,
+        // but isn't meant to be relied on long-term. Set
+        // NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID (Google Cloud Console -> Maps
+        // Platform -> Map Management -> create one, free) to use a real
+        // one instead — no code change needed once that's set.
+        mapId={process.env.NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID || "DEMO_MAP_ID"}
         defaultCenter={center}
         defaultZoom={locatedLeads.length > 0 ? 11 : 4}
         className="h-[calc(100dvh-160px)] min-h-[480px] w-full"
         gestureHandling="greedy"
       >
-        {locatedLeads.map((lead) => {
-          const disposition = lead.disposition_id ? dispositionById.get(lead.disposition_id) : undefined;
-          const name = [lead.first_name, lead.last_name].filter(Boolean).join(" ") || "Lead";
-          const selectionIndex = selectMode ? selectedLeadIds.indexOf(lead.id) : -1;
-          const isSelected = selectionIndex !== -1;
-
-          return (
-            <Marker
-              key={lead.id}
-              position={{ lat: lead.lat, lng: lead.lng }}
-              icon={
-                isSelected
-                  ? numberedPinIcon(selectionIndex + 1)
-                  : pinIcon(disposition?.color ?? DEFAULT_COLOR, lead.is_manual)
-              }
-              title={lead.is_manual ? `${name} (manually entered)` : name}
-              onClick={() => (selectMode ? onTogglePin(lead.id) : onSelectLead(lead.id))}
-            />
-          );
-        })}
+        <LeadMarkers
+          leads={locatedLeads}
+          dispositionById={dispositionById}
+          selectMode={selectMode}
+          selectedLeadIds={selectedLeadIds}
+          onSelectLead={onSelectLead}
+          onTogglePin={onTogglePin}
+        />
       </Map>
     </APIProvider>
+  );
+}
+
+// Clustering (@googlemaps/markerclusterer) needs real
+// google.maps.marker.AdvancedMarkerElement instances, which the
+// declarative <AdvancedMarker> JSX component hands back via a ref
+// callback — this is the standard vis.gl pattern for wiring the two
+// together (their own official clustering example uses the same
+// collect-refs-into-a-map-then-feed-a-clusterer approach). Disabled
+// entirely in select mode, same reasoning as iOS: picking leads for a
+// route depends on tapping individual pins, and clustering them away at
+// low zoom would make that workflow confusing/impossible.
+function LeadMarkers({
+  leads,
+  dispositionById,
+  selectMode,
+  selectedLeadIds,
+  onSelectLead,
+  onTogglePin,
+}: {
+  leads: LocatedLead[];
+  dispositionById: Map<string, Disposition>;
+  selectMode: boolean;
+  selectedLeadIds: string[];
+  onSelectLead: (leadId: string) => void;
+  onTogglePin: (leadId: string) => void;
+}) {
+  const map = useMap();
+  const clusterer = useRef<MarkerClusterer | null>(null);
+  const [markerRefs, setMarkerRefs] = useState<Record<string, google.maps.marker.AdvancedMarkerElement>>({});
+
+  useEffect(() => {
+    if (!map) return;
+    if (!clusterer.current) {
+      clusterer.current = new MarkerClusterer({ map });
+    }
+  }, [map]);
+
+  useEffect(() => {
+    if (!clusterer.current) return;
+    clusterer.current.clearMarkers();
+    if (!selectMode) {
+      clusterer.current.addMarkers(Object.values(markerRefs) as ClustererMarker[]);
+    }
+  }, [markerRefs, selectMode]);
+
+  function setMarkerRef(marker: google.maps.marker.AdvancedMarkerElement | null, leadId: string) {
+    setMarkerRefs((prev) => {
+      if (marker && prev[leadId] === marker) return prev;
+      if (!marker && !prev[leadId]) return prev;
+      const next = { ...prev };
+      if (marker) next[leadId] = marker;
+      else delete next[leadId];
+      return next;
+    });
+  }
+
+  return (
+    <>
+      {leads.map((lead) => {
+        const disposition = lead.disposition_id ? dispositionById.get(lead.disposition_id) : undefined;
+        const name = [lead.first_name, lead.last_name].filter(Boolean).join(" ") || "Lead";
+        const selectionIndex = selectMode ? selectedLeadIds.indexOf(lead.id) : -1;
+        const isSelected = selectionIndex !== -1;
+
+        return (
+          <AdvancedMarker
+            key={lead.id}
+            ref={(marker) => setMarkerRef(marker, lead.id)}
+            position={{ lat: lead.lat, lng: lead.lng }}
+            title={lead.is_manual ? `${name} (manually entered)` : name}
+            onClick={() => (selectMode ? onTogglePin(lead.id) : onSelectLead(lead.id))}
+          >
+            {isSelected ? (
+              <div className="flex h-7 w-7 items-center justify-center rounded-full border-2 border-white bg-black text-xs font-bold text-white shadow">
+                {selectionIndex + 1}
+              </div>
+            ) : (
+              <div
+                className="h-[26px] w-[26px] rounded-full shadow"
+                style={{
+                  backgroundColor: disposition?.color ?? DEFAULT_COLOR,
+                  border: lead.is_manual ? "2.5px dashed #000000" : "2.5px solid #ffffff",
+                }}
+              />
+            )}
+          </AdvancedMarker>
+        );
+      })}
+    </>
   );
 }
