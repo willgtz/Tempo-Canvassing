@@ -7,6 +7,7 @@ const NAV_LINKS = [
   { href: "/admin/leads/upload", label: "Manage Leads" },
   { href: "/admin/appointments", label: "Appointments" },
   { href: "/admin/reps/manage", label: "Reps" },
+  { href: "/admin/settings", label: "Settings" },
   { href: "/leads", label: "Leads Map" },
 ];
 

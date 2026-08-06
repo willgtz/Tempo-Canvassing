@@ -11,6 +11,7 @@ type Stats = {
   last7: number;
   last30: number;
   doorsKnocked30: number;
+  doorsKnockedTotal30: number;
   withoutLocation: number;
   manual: number;
   trend30: { date: string; count: number }[];
@@ -50,7 +51,15 @@ export function RepDashboardClient({ stats }: { stats: Stats }) {
         {isVisible("last7") && <StatTile label="Created in last 7 days" value={stats.last7} />}
         {isVisible("last30") && <StatTile label="Created in last 30 days" value={stats.last30} />}
         {isVisible("doorsKnocked") && (
-          <StatTile label="Doors knocked (30 days)" value={stats.doorsKnocked30} />
+          <StatTile
+            label="Doors knocked (30 days)"
+            value={stats.doorsKnocked30}
+            hint={
+              stats.doorsKnockedTotal30 > stats.doorsKnocked30
+                ? `${stats.doorsKnockedTotal30 - stats.doorsKnocked30} more not counted — too far from the lead's saved location`
+                : undefined
+            }
+          />
         )}
         {isVisible("withoutLocation") && (
           <StatTile label="Leads without a location" value={stats.withoutLocation} />

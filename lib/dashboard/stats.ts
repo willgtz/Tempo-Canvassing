@@ -11,11 +11,6 @@ export type StatLead = {
   created_at: string;
 };
 
-export type StatHistoryEntry = {
-  user_id: string;
-  changed_at: string;
-};
-
 function cutoffIso(days: number, now: Date): string {
   const cutoff = new Date(now);
   cutoff.setDate(cutoff.getDate() - days);
@@ -76,30 +71,6 @@ export function dailyCounts(
   }
 
   return Array.from(buckets, ([date, count]) => ({ date, count }));
-}
-
-export function doorsKnockedCount(
-  history: StatHistoryEntry[],
-  userId: string,
-  days: number,
-  now = new Date()
-): number {
-  const cutoff = cutoffIso(days, now);
-  return history.filter((h) => h.user_id === userId && h.changed_at >= cutoff).length;
-}
-
-export function doorsKnockedByRep(
-  history: StatHistoryEntry[],
-  days: number,
-  now = new Date()
-): Map<string, number> {
-  const cutoff = cutoffIso(days, now);
-  const counts = new Map<string, number>();
-  for (const h of history) {
-    if (h.changed_at < cutoff) continue;
-    counts.set(h.user_id, (counts.get(h.user_id) ?? 0) + 1);
-  }
-  return counts;
 }
 
 // Leads have no owner column (visibility is zip-based, not assignment-

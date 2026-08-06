@@ -11,6 +11,8 @@ export type ManagedUser = {
   role: UserRole;
   active: boolean;
   manager_id: string | null;
+  can_view_company_leaderboard: boolean;
+  excluded_from_leaderboard: boolean;
 };
 
 type ManagerOption = { id: string; full_name: string; role: string };
@@ -49,6 +51,12 @@ export function RepCard({
   const [role, setRole] = useState<UserRole>(user.role);
   const [active, setActive] = useState(user.active);
   const [managerId, setManagerId] = useState(user.manager_id ?? "");
+  const [canViewCompanyLeaderboard, setCanViewCompanyLeaderboard] = useState(
+    user.can_view_company_leaderboard
+  );
+  const [excludedFromLeaderboard, setExcludedFromLeaderboard] = useState(
+    user.excluded_from_leaderboard
+  );
   const [profileError, setProfileError] = useState<string | null>(null);
   const [isSavingProfile, startProfileSave] = useTransition();
 
@@ -64,6 +72,8 @@ export function RepCard({
     setRole(user.role);
     setActive(user.active);
     setManagerId(user.manager_id ?? "");
+    setCanViewCompanyLeaderboard(user.can_view_company_leaderboard);
+    setExcludedFromLeaderboard(user.excluded_from_leaderboard);
     setProfileError(null);
     setEditing(false);
   }
@@ -78,6 +88,8 @@ export function RepCard({
         role,
         active,
         managerId: managerId || null,
+        canViewCompanyLeaderboard,
+        excludedFromLeaderboard,
       });
       if (!result.ok) {
         setProfileError(result.error);
@@ -183,6 +195,31 @@ export function RepCard({
               />
               Active
             </label>
+          </div>
+
+          <div className="space-y-1 border-t border-black/10 pt-3 dark:border-white/10">
+            <p className="text-xs font-medium">Door-knock leaderboard</p>
+            <label className="flex items-center gap-1.5 text-sm">
+              <input
+                type="checkbox"
+                checked={canViewCompanyLeaderboard}
+                onChange={(e) => setCanViewCompanyLeaderboard(e.target.checked)}
+              />
+              Can view company-wide door-knock leaderboard
+            </label>
+            <label className="flex items-center gap-1.5 text-sm">
+              <input
+                type="checkbox"
+                checked={excludedFromLeaderboard}
+                onChange={(e) => setExcludedFromLeaderboard(e.target.checked)}
+              />
+              Excluded from other people&apos;s leaderboard view
+            </label>
+            <p className="text-xs text-black/50 dark:text-white/50">
+              To let a specific user see specific other users&apos; door counts
+              (without the full company leaderboard), use Settings →
+              Door-Knock Visibility.
+            </p>
           </div>
 
           <div className="flex items-center gap-2">

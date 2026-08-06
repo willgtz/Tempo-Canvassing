@@ -14,33 +14,42 @@ export default async function AdminDashboardPage() {
 
   const supabase = await createClient();
 
-  // is_admin(auth.uid()) bypasses zip-based RLS on leads/lead_history, and
+  const now = new Date();
+  const thirtyDaysAgo = new Date(now);
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+  const dateOnly = (d: Date) => d.toISOString().slice(0, 10);
+
+  // is_admin(auth.uid()) bypasses zip-based RLS on leads, and
   // subordinate_zip_assignments(admin_id) returns every active assignment
   // company-wide (same bypass, baked into that function) — so this is
   // genuinely everything, not just this admin's own subtree.
+  // door_knock_counts (schema.sql) is what replaced the old raw
+  // lead_history read — is_admin() also short-circuits its internal
+  // can_view_door_knock_count check, so an admin always gets every rep's
+  // row back here, verified counts included.
   const [
     { data: leads, error: leadsError },
-    { data: history, error: historyError },
+    { data: doorKnockCounts, error: doorKnockError },
     { data: dispositions, error: dispositionsError },
     { data: profiles, error: profilesError },
     { data: teamZips, error: teamZipsError },
   ] = await Promise.all([
     supabase.from("leads").select("id, disposition_id, zipcode, lat, is_manual, created_at"),
-    supabase
-      .from("lead_history")
-      .select("user_id, lead_id, changed_at")
-      .eq("field_changed", "disposition"),
+    supabase.rpc("door_knock_counts", {
+      from_date: dateOnly(thirtyDaysAgo),
+      to_date: dateOnly(now),
+    }),
     supabase.from("dispositions").select("id, name, color, sort_order").order("sort_order"),
     supabase.from("profiles").select("id, full_name, role, active").order("full_name"),
     supabase.rpc("subordinate_zip_assignments", { root_user_id: session.userId }),
   ]);
 
-  if (leadsError || historyError || dispositionsError || profilesError || teamZipsError) {
+  if (leadsError || doorKnockError || dispositionsError || profilesError || teamZipsError) {
     return (
       <div className="mx-auto w-full max-w-6xl p-6 text-sm text-red-600 dark:text-red-400">
         Failed to load dashboard:{" "}
         {leadsError?.message ??
-          historyError?.message ??
+          doorKnockError?.message ??
           dispositionsError?.message ??
           profilesError?.message ??
           teamZipsError?.message}
@@ -51,7 +60,7 @@ export default async function AdminDashboardPage() {
   return (
     <AdminDashboardClient
       leads={leads ?? []}
-      history={history ?? []}
+      doorKnockCounts={doorKnockCounts ?? []}
       dispositions={dispositions ?? []}
       profiles={profiles ?? []}
       teamZips={teamZips ?? []}

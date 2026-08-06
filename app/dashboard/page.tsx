@@ -7,42 +7,60 @@ import {
   countWithoutLocation,
   countManual,
   dailyCounts,
-  doorsKnockedCount,
 } from "@/lib/dashboard/stats";
 import { RepDashboardClient } from "./rep-dashboard-client";
+
+function dateOnly(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
+
+type DoorKnockCount = {
+  user_id: string;
+  full_name: string;
+  verified_count: number;
+  total_count: number;
+};
 
 export default async function DashboardPage() {
   const session = await requireSession();
   const supabase = await createClient();
 
+  const now = new Date();
+  const thirtyDaysAgo = new Date(now);
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
   // No manual zip filtering — leads_select RLS already scopes this to
   // whatever the signed-in user can currently see, same as app/leads.
+  // door_knock_counts (schema.sql) replaces the old raw lead_history
+  // count — it's location-verified server-side and always includes this
+  // caller's own row regardless of any grant/leaderboard flag.
   const [
     { data: leads, error: leadsError },
-    { data: history, error: historyError },
+    { data: doorKnockCounts, error: doorKnockError },
     { data: dispositions, error: dispositionsError },
   ] = await Promise.all([
     supabase.from("leads").select("id, disposition_id, zipcode, lat, is_manual, created_at"),
-    supabase
-      .from("lead_history")
-      .select("user_id, changed_at")
-      .eq("field_changed", "disposition")
-      .eq("user_id", session.userId),
+    supabase.rpc("door_knock_counts", {
+      from_date: dateOnly(thirtyDaysAgo),
+      to_date: dateOnly(now),
+    }),
     supabase.from("dispositions").select("id, name, color, sort_order").order("sort_order"),
   ]);
 
-  if (leadsError || historyError || dispositionsError) {
+  if (leadsError || doorKnockError || dispositionsError) {
     return (
       <div className="mx-auto w-full max-w-5xl p-6 text-sm text-red-600 dark:text-red-400">
         Failed to load dashboard:{" "}
-        {leadsError?.message ?? historyError?.message ?? dispositionsError?.message}
+        {leadsError?.message ?? doorKnockError?.message ?? dispositionsError?.message}
       </div>
     );
   }
 
   const leadsList = leads ?? [];
-  const historyList = history ?? [];
   const dispositionById = new Map((dispositions ?? []).map((d) => [d.id, d]));
+  const myDoorKnocks = ((doorKnockCounts ?? []) as DoorKnockCount[]).find(
+    (row) => row.user_id === session.userId
+  );
 
   const dispositionBreakdown = Array.from(countByDisposition(leadsList), ([id, count]) => ({
     label: id ? (dispositionById.get(id)?.name ?? "Unknown") : "No disposition",
@@ -59,7 +77,8 @@ export default async function DashboardPage() {
     total: leadsList.length,
     last7: countInLastDays(leadsList, 7),
     last30: countInLastDays(leadsList, 30),
-    doorsKnocked30: doorsKnockedCount(historyList, session.userId, 30),
+    doorsKnocked30: myDoorKnocks?.verified_count ?? 0,
+    doorsKnockedTotal30: myDoorKnocks?.total_count ?? 0,
     withoutLocation: countWithoutLocation(leadsList),
     manual: countManual(leadsList),
     trend30: dailyCounts(leadsList, 30),

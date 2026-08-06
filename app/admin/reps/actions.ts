@@ -26,6 +26,8 @@ export type UpdateUserInput = {
   role: UserRole;
   active: boolean;
   managerId: string | null;
+  canViewCompanyLeaderboard: boolean;
+  excludedFromLeaderboard: boolean;
 };
 
 export type UpdateUserResult = { ok: true } | { ok: false; error: string };
@@ -220,6 +222,8 @@ export async function updateUser(
       role: input.role,
       active: input.active,
       manager_id: input.managerId,
+      can_view_company_leaderboard: input.canViewCompanyLeaderboard,
+      excluded_from_leaderboard: input.excludedFromLeaderboard,
     })
     .eq("id", userId);
 
@@ -274,6 +278,77 @@ export async function assignZip(userId: string, zipcode: string): Promise<Assign
   revalidatePath("/admin/reps/manage");
   revalidatePath("/admin/reps/add");
   return { ok: true, assignment: { id: data.id, zipcode: data.zipcode } };
+}
+
+export type GrantVisibilityResult =
+  | { ok: true; grant: { id: string; granteeId: string; targetId: string } }
+  | { ok: false; error: string };
+
+export type RevokeVisibilityResult = { ok: true } | { ok: false; error: string };
+
+// door_knock_visibility_grants (schema.sql) — asymmetric: granting Ricky
+// visibility into Ryan's count doesn't give Ryan visibility into Ricky's.
+// RLS (dkvg_admin_write) independently enforces the admin-only write here
+// too; this check just produces a clean error instead of a raw DB one.
+export async function grantDoorKnockVisibility(
+  granteeId: string,
+  targetId: string
+): Promise<GrantVisibilityResult> {
+  const session = await getAdminSession();
+  if (!session) return { ok: false, error: "Unauthorized" };
+  if (granteeId === targetId) return { ok: false, error: "Can't grant a user visibility into their own count." };
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("door_knock_visibility_grants")
+    .insert({ grantee_id: granteeId, target_id: targetId, granted_by: session.userId })
+    .select("id, grantee_id, target_id")
+    .single();
+
+  if (error || !data) {
+    return { ok: false, error: error?.message ?? "Failed to add grant." };
+  }
+
+  revalidatePath("/admin/settings");
+  return { ok: true, grant: { id: data.id, granteeId: data.grantee_id, targetId: data.target_id } };
+}
+
+export async function revokeDoorKnockVisibility(grantId: string): Promise<RevokeVisibilityResult> {
+  const session = await getAdminSession();
+  if (!session) return { ok: false, error: "Unauthorized" };
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("door_knock_visibility_grants").delete().eq("id", grantId);
+
+  if (error) {
+    return { ok: false, error: error.message };
+  }
+
+  revalidatePath("/admin/settings");
+  return { ok: true };
+}
+
+export type UpdateRadiusResult = { ok: true } | { ok: false; error: string };
+
+export async function updateDoorKnockRadius(feet: number): Promise<UpdateRadiusResult> {
+  const session = await getAdminSession();
+  if (!session) return { ok: false, error: "Unauthorized" };
+  if (!Number.isFinite(feet) || feet <= 0) {
+    return { ok: false, error: "Radius must be a positive number." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("app_settings")
+    .update({ value: feet, updated_at: new Date().toISOString(), updated_by: session.userId })
+    .eq("key", "door_knock_radius_feet");
+
+  if (error) {
+    return { ok: false, error: error.message };
+  }
+
+  revalidatePath("/admin/settings");
+  return { ok: true };
 }
 
 export async function unassignZip(assignmentId: string): Promise<UnassignZipResult> {

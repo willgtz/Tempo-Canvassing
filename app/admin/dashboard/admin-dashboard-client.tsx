@@ -13,12 +13,16 @@ import {
   countWithoutLocation,
   countManual,
   dailyCounts,
-  doorsKnockedByRep,
   countByRepViaZips,
   type StatLead,
 } from "@/lib/dashboard/stats";
 
-type HistoryEntry = { user_id: string; lead_id: string; changed_at: string };
+type DoorKnockCount = {
+  user_id: string;
+  full_name: string;
+  verified_count: number;
+  total_count: number;
+};
 type Disposition = { id: string; name: string; color: string; sort_order: number };
 type Profile = { id: string; full_name: string; role: string; active: boolean };
 type TeamZip = { user_id: string; full_name: string; zipcode: string };
@@ -40,13 +44,13 @@ const WIDGETS = [
 
 export function AdminDashboardClient({
   leads,
-  history,
+  doorKnockCounts,
   dispositions,
   profiles,
   teamZips,
 }: {
   leads: StatLead[];
-  history: HistoryEntry[];
+  doorKnockCounts: DoorKnockCount[];
   dispositions: Disposition[];
   profiles: Profile[];
   teamZips: TeamZip[];
@@ -86,13 +90,6 @@ export function AdminDashboardClient({
     });
   }, [leads, repZips, zipFilter]);
 
-  const filteredLeadIds = useMemo(() => new Set(filteredLeads.map((l) => l.id)), [filteredLeads]);
-
-  const filteredHistory = useMemo(
-    () => history.filter((h) => filteredLeadIds.has(h.lead_id)),
-    [history, filteredLeadIds]
-  );
-
   const dispositionBreakdown = useMemo(() => {
     return Array.from(countByDisposition(filteredLeads), ([id, count]) => ({
       label: id ? (dispositionById.get(id)?.name ?? "Unknown") : "No disposition",
@@ -126,12 +123,18 @@ export function AdminDashboardClient({
     })).sort((a, b) => b.value - a.value);
   }, [filteredLeads, zipToUserIds, nameByUserId]);
 
+  // door_knock_counts has no per-lead/zip breakdown (it's a dedup'd count,
+  // not raw rows) — only the rep filter applies here, not the zip one.
+  // Already scoped to whoever this admin can see (everyone, since
+  // is_admin() bypasses can_view_door_knock_count) and already sorted by
+  // verified_count desc.
   const doorsKnockedBreakdown = useMemo(() => {
-    return Array.from(doorsKnockedByRep(filteredHistory, 30), ([userId, count]) => ({
-      label: nameByUserId.get(userId) ?? "Unknown",
-      value: count,
-    })).sort((a, b) => b.value - a.value);
-  }, [filteredHistory, nameByUserId]);
+    const rows =
+      repFilter === "all" ? doorKnockCounts : doorKnockCounts.filter((r) => r.user_id === repFilter);
+    return rows
+      .map((r) => ({ label: r.full_name, value: r.verified_count }))
+      .sort((a, b) => b.value - a.value);
+  }, [doorKnockCounts, repFilter]);
 
   const activeRepsCount = useMemo(
     () => profiles.filter((p) => p.role === "rep" && p.active).length,

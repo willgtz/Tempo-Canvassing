@@ -13,7 +13,9 @@ export default async function ManageRepsPage() {
   ] = await Promise.all([
     supabase
       .from("profiles")
-      .select("id, full_name, email, phone, role, active, manager_id")
+      .select(
+        "id, full_name, email, phone, role, active, manager_id, can_view_company_leaderboard, excluded_from_leaderboard"
+      )
       .order("full_name"),
     supabase
       .from("zip_assignments")
