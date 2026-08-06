@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { Button } from "@/components/ui/button";
 
 export type WidgetOption = { id: string; label: string };
 
@@ -28,15 +29,11 @@ export function WidgetCustomizeMenu({
 
   return (
     <div className="relative" ref={containerRef}>
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        className="rounded border border-black/15 px-3 py-1 text-sm dark:border-white/20"
-      >
+      <Button type="button" variant="secondary" size="sm" onClick={() => setOpen((o) => !o)}>
         Customize
-      </button>
+      </Button>
       {open && (
-        <div className="absolute right-0 z-10 mt-1 w-64 rounded border border-black/15 bg-white p-2 shadow-lg dark:border-white/20 dark:bg-neutral-900">
+        <div className="absolute right-0 z-10 mt-1 w-64 rounded-xl border border-black/15 bg-white p-2 shadow-lg dark:border-white/20 dark:bg-neutral-900">
           <p className="px-1 pb-1 text-xs font-medium text-black/50 dark:text-white/50">
             Show on this dashboard
           </p>

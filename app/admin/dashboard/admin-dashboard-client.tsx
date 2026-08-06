@@ -6,6 +6,9 @@ import { BarChart } from "@/components/dashboard/bar-chart";
 import { TrendChart } from "@/components/dashboard/trend-chart";
 import { WidgetCustomizeMenu } from "@/components/dashboard/widget-customize-menu";
 import { useWidgetVisibility } from "@/components/dashboard/use-widget-visibility";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Select } from "@/components/ui/input";
 import {
   countInLastDays,
   countByDisposition,
@@ -167,50 +170,43 @@ export function AdminDashboardClient({
         <WidgetCustomizeMenu widgets={WIDGETS} isVisible={isVisible} onToggle={toggle} />
       </div>
 
-      <div className="flex flex-wrap items-end gap-3 rounded-lg border border-black/10 p-3 dark:border-white/10">
+      <Card className="flex flex-wrap items-end gap-3 p-3">
         <div className="space-y-1">
           <label className="text-xs font-medium">Rep</label>
-          <select
-            value={repFilter}
-            onChange={(e) => setRepFilter(e.target.value)}
-            className="block rounded border border-black/15 px-2 py-1 text-sm dark:border-white/20 dark:bg-transparent"
-          >
+          <Select value={repFilter} onChange={(e) => setRepFilter(e.target.value)} className="block">
             <option value="all">All reps</option>
             {repOptions.map((r) => (
               <option key={r.id} value={r.id}>
                 {r.name}
               </option>
             ))}
-          </select>
+          </Select>
         </div>
         <div className="space-y-1">
           <label className="text-xs font-medium">Zip</label>
-          <select
-            value={zipFilter}
-            onChange={(e) => setZipFilter(e.target.value)}
-            className="block rounded border border-black/15 px-2 py-1 text-sm dark:border-white/20 dark:bg-transparent"
-          >
+          <Select value={zipFilter} onChange={(e) => setZipFilter(e.target.value)} className="block">
             <option value="all">All zips</option>
             {zipOptions.map((z) => (
               <option key={z} value={z}>
                 {z}
               </option>
             ))}
-          </select>
+          </Select>
         </div>
         {(repFilter !== "all" || zipFilter !== "all") && (
-          <button
+          <Button
             type="button"
+            variant="secondary"
+            size="sm"
             onClick={() => {
               setRepFilter("all");
               setZipFilter("all");
             }}
-            className="rounded border border-black/15 px-3 py-1 text-sm dark:border-white/20"
           >
             Clear filters
-          </button>
+          </Button>
         )}
-      </div>
+      </Card>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         {isVisible("total") && <StatTile label="Total leads" value={filteredLeads.length} />}
@@ -236,46 +232,46 @@ export function AdminDashboardClient({
       </div>
 
       {isVisible("trend") && (
-        <div className="rounded-lg border border-black/10 p-4 dark:border-white/10">
+        <Card className="p-4">
           <h2 className="text-sm font-medium">Leads created — last 30 days</h2>
           <div className="mt-3">
             <TrendChart data={trend30} />
           </div>
-        </div>
+        </Card>
       )}
 
       <div className="grid gap-4 sm:grid-cols-2">
         {isVisible("disposition") && (
-          <div className="rounded-lg border border-black/10 p-4 dark:border-white/10">
+          <Card className="p-4">
             <h2 className="text-sm font-medium">Leads by disposition</h2>
             <div className="mt-3">
               <BarChart items={dispositionBreakdown} />
             </div>
-          </div>
+          </Card>
         )}
         {isVisible("zip") && (
-          <div className="rounded-lg border border-black/10 p-4 dark:border-white/10">
+          <Card className="p-4">
             <h2 className="text-sm font-medium">Leads by zip</h2>
             <div className="mt-3">
               <BarChart items={zipBreakdown} />
             </div>
-          </div>
+          </Card>
         )}
         {isVisible("byRep") && showRepBreakdown && (
-          <div className="rounded-lg border border-black/10 p-4 dark:border-white/10">
+          <Card className="p-4">
             <h2 className="text-sm font-medium">Leads by rep</h2>
             <div className="mt-3">
               <BarChart items={byRepBreakdown} />
             </div>
-          </div>
+          </Card>
         )}
         {isVisible("doorsKnocked") && showRepBreakdown && (
-          <div className="rounded-lg border border-black/10 p-4 dark:border-white/10">
+          <Card className="p-4">
             <h2 className="text-sm font-medium">Doors knocked by rep (30 days)</h2>
             <div className="mt-3">
               <BarChart items={doorsKnockedBreakdown} />
             </div>
-          </div>
+          </Card>
         )}
       </div>
     </div>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Badge } from "@/components/ui/badge";
 import type { Disposition, Lead } from "./types";
 
 const DEFAULT_COLOR = "#6B7280";
@@ -96,9 +97,7 @@ export function LeadsList({
                         <td className="px-3 py-2">
                           {[lead.first_name, lead.last_name].filter(Boolean).join(" ") || "—"}
                           {lead.is_manual && (
-                            <span className="ml-2 rounded-full border border-black/20 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-black/60 dark:border-white/30 dark:text-white/60">
-                              Manual
-                            </span>
+                            <Badge className="ml-2 text-[10px] uppercase tracking-wide">Manual</Badge>
                           )}
                         </td>
                         <td className="px-3 py-2">
@@ -109,13 +108,7 @@ export function LeadsList({
                         </td>
                         <td className="px-3 py-2">{lead.zipcode}</td>
                         <td className="px-3 py-2">
-                          <span className="inline-flex items-center gap-1.5">
-                            <span
-                              className="inline-block h-3 w-3 rounded-full border border-black/10 dark:border-white/20"
-                              style={{ backgroundColor: disposition?.color ?? DEFAULT_COLOR }}
-                            />
-                            {disposition?.name ?? "—"}
-                          </span>
+                          <Badge color={disposition?.color ?? DEFAULT_COLOR}>{disposition?.name ?? "—"}</Badge>
                         </td>
                         <td className="px-3 py-2">{new Date(lead.created_at).toLocaleDateString()}</td>
                       </tr>

@@ -5,6 +5,7 @@ import { BarChart, type BarChartItem } from "@/components/dashboard/bar-chart";
 import { TrendChart } from "@/components/dashboard/trend-chart";
 import { WidgetCustomizeMenu } from "@/components/dashboard/widget-customize-menu";
 import { useWidgetVisibility } from "@/components/dashboard/use-widget-visibility";
+import { Card } from "@/components/ui/card";
 
 type Stats = {
   total: number;
@@ -68,30 +69,30 @@ export function RepDashboardClient({ stats }: { stats: Stats }) {
       </div>
 
       {isVisible("trend") && (
-        <div className="rounded-lg border border-black/10 p-4 dark:border-white/10">
+        <Card className="p-4">
           <h2 className="text-sm font-medium">Leads created — last 30 days</h2>
           <div className="mt-3">
             <TrendChart data={stats.trend30} />
           </div>
-        </div>
+        </Card>
       )}
 
       <div className="grid gap-4 sm:grid-cols-2">
         {isVisible("disposition") && (
-          <div className="rounded-lg border border-black/10 p-4 dark:border-white/10">
+          <Card className="p-4">
             <h2 className="text-sm font-medium">Leads by disposition</h2>
             <div className="mt-3">
               <BarChart items={stats.dispositionBreakdown} />
             </div>
-          </div>
+          </Card>
         )}
         {isVisible("zip") && (
-          <div className="rounded-lg border border-black/10 p-4 dark:border-white/10">
+          <Card className="p-4">
             <h2 className="text-sm font-medium">Leads by zip</h2>
             <div className="mt-3">
               <BarChart items={stats.zipBreakdown} />
             </div>
-          </div>
+          </Card>
         )}
       </div>
     </div>

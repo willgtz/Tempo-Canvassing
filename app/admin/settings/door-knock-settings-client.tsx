@@ -6,6 +6,9 @@ import {
   revokeDoorKnockVisibility,
   updateDoorKnockRadius,
 } from "../reps/actions";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input, Select } from "@/components/ui/input";
 
 type Profile = { id: string; full_name: string };
 type Grant = { id: string; granteeId: string; targetId: string };
@@ -89,7 +92,7 @@ export function DoorKnockSettingsClient({
         </p>
       </div>
 
-      <div className="rounded-lg border border-black/10 p-4 dark:border-white/10">
+      <Card className="p-4">
         <h2 className="text-sm font-medium">Door-knock verification radius</h2>
         <p className="mt-1 text-xs text-black/50 dark:text-white/50">
           A disposition change or note only counts toward a rep&apos;s door
@@ -98,7 +101,7 @@ export function DoorKnockSettingsClient({
           saves either way — this only affects whether it&apos;s counted.
         </p>
         <div className="mt-3 flex items-center gap-2">
-          <input
+          <Input
             type="number"
             min={1}
             value={radiusInput}
@@ -106,22 +109,18 @@ export function DoorKnockSettingsClient({
               setRadiusInput(e.target.value);
               setRadiusSaved(false);
             }}
-            className="w-24 rounded border border-black/15 px-2 py-1 text-sm dark:border-white/20 dark:bg-transparent"
+            className="w-24"
           />
           <span className="text-sm text-black/60 dark:text-white/60">feet</span>
-          <button
-            onClick={handleSaveRadius}
-            disabled={isSavingRadius}
-            className="rounded bg-black px-3 py-1 text-sm font-medium text-white disabled:opacity-50 dark:bg-white dark:text-black"
-          >
+          <Button size="sm" onClick={handleSaveRadius} disabled={isSavingRadius}>
             {isSavingRadius ? "Saving…" : "Save"}
-          </button>
+          </Button>
           {radiusSaved && <span className="text-sm text-green-700 dark:text-green-500">Saved.</span>}
           {radiusError && <span className="text-sm text-red-600 dark:text-red-400">{radiusError}</span>}
         </div>
-      </div>
+      </Card>
 
-      <div className="rounded-lg border border-black/10 p-4 dark:border-white/10">
+      <Card className="p-4">
         <h2 className="text-sm font-medium">Door-knock visibility grants</h2>
         <p className="mt-1 text-xs text-black/50 dark:text-white/50">
           Give one person visibility into another specific person&apos;s door
@@ -132,24 +131,16 @@ export function DoorKnockSettingsClient({
         </p>
 
         <form onSubmit={handleAddGrant} className="mt-3 flex flex-wrap items-center gap-2">
-          <select
-            value={granteeId}
-            onChange={(e) => setGranteeId(e.target.value)}
-            className="rounded border border-black/15 px-2 py-1 text-sm dark:border-white/20 dark:bg-transparent"
-          >
+          <Select value={granteeId} onChange={(e) => setGranteeId(e.target.value)}>
             <option value="">Grantee (who sees)…</option>
             {profiles.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.full_name}
               </option>
             ))}
-          </select>
+          </Select>
           <span className="text-sm text-black/50 dark:text-white/50">can see</span>
-          <select
-            value={targetId}
-            onChange={(e) => setTargetId(e.target.value)}
-            className="rounded border border-black/15 px-2 py-1 text-sm dark:border-white/20 dark:bg-transparent"
-          >
+          <Select value={targetId} onChange={(e) => setTargetId(e.target.value)}>
             <option value="">Target (whose count)…</option>
             {profiles
               .filter((p) => p.id !== granteeId)
@@ -158,14 +149,10 @@ export function DoorKnockSettingsClient({
                   {p.full_name}
                 </option>
               ))}
-          </select>
-          <button
-            type="submit"
-            disabled={isSavingGrant}
-            className="rounded border border-black/15 px-3 py-1 text-sm disabled:opacity-50 dark:border-white/20"
-          >
+          </Select>
+          <Button type="submit" variant="secondary" size="sm" disabled={isSavingGrant}>
             Add
-          </button>
+          </Button>
           {grantError && <span className="text-sm text-red-600 dark:text-red-400">{grantError}</span>}
         </form>
 
@@ -179,17 +166,13 @@ export function DoorKnockSettingsClient({
                 <span className="font-medium">{nameById.get(g.granteeId) ?? "Unknown"}</span> can see{" "}
                 <span className="font-medium">{nameById.get(g.targetId) ?? "Unknown"}</span>
               </span>
-              <button
-                onClick={() => handleRemoveGrant(g.id)}
-                disabled={isSavingGrant}
-                className="text-xs text-black/50 hover:text-black disabled:opacity-50 dark:text-white/50 dark:hover:text-white"
-              >
+              <Button variant="ghost" size="sm" onClick={() => handleRemoveGrant(g.id)} disabled={isSavingGrant}>
                 Remove
-              </button>
+              </Button>
             </div>
           ))}
         </div>
-      </div>
+      </Card>
     </div>
   );
 }
