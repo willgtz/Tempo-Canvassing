@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, type ReactNode } from "react";
 import {
   addAppointmentNote,
+  markDealSubmitted,
   rescheduleAppointment,
   saveAppointmentAssignments,
   updateAppointmentLeadName,
@@ -20,6 +21,12 @@ import type {
 } from "./types";
 import type { AppointmentFormField } from "@/app/leads/types";
 
+// Configured once William confirms the deal tool's actual stable
+// production URL (Vercel Dashboard → tempo-deal-tool project → Domains —
+// per-deployment URLs with a random hash turned out unreliable last time,
+// don't hardcode one of those here).
+const DEAL_TOOL_URL = process.env.NEXT_PUBLIC_DEAL_TOOL_URL;
+
 // datetime-local wants "YYYY-MM-DDTHH:mm" in local time, no seconds/Z —
 // same conversion set-appointment-modal.tsx already uses.
 function toDatetimeLocal(iso: string): string {
@@ -32,7 +39,9 @@ function toDatetimeLocal(iso: string): string {
 // always-editable schedule date, staged opener/closer assign editor, status
 // picker (with a "Rescheduled" special case that also asks for a new date),
 // submission-form answers, and the notes section (submission note shown as
-// a distinct card + ongoing notes below it).
+// a distinct card + ongoing notes below it). Section order (below the
+// always-fixed Close button) is admin-configurable — see sectionOrder prop
+// and /admin/appointments/section-order.
 export function AppointmentDetailPanel({
   appointment,
   lead,
@@ -41,6 +50,7 @@ export function AppointmentDetailPanel({
   assignments,
   notes,
   activeProfiles,
+  sectionOrder,
   onClose,
   onAppointmentUpdated,
   onAssignmentsUpdated,
@@ -54,6 +64,7 @@ export function AppointmentDetailPanel({
   assignments: AppointmentAssignment[];
   notes: AppointmentNote[];
   activeProfiles: ActiveProfile[];
+  sectionOrder: string[];
   onClose: () => void;
   onAppointmentUpdated: (updated: Appointment) => void;
   onAssignmentsUpdated: (newAssignments: AppointmentAssignment[]) => void;
@@ -84,6 +95,8 @@ export function AppointmentDetailPanel({
   const [newNoteText, setNewNoteText] = useState("");
   const [isSavingNote, startNoteSave] = useTransition();
   const [noteError, setNoteError] = useState<string | null>(null);
+
+  const [isMarkingDeal, startMarkDeal] = useTransition();
 
   const hasUnsavedAssignmentChanges =
     JSON.stringify([...stagedOpenerIds].sort()) !== JSON.stringify(openers.map((a) => a.user_id).sort()) ||
@@ -231,32 +244,286 @@ export function AppointmentDetailPanel({
     });
   }
 
+  function handleSubmitDeal() {
+    window.open(`${DEAL_TOOL_URL}/submit`, "_blank");
+    startMarkDeal(async () => {
+      const result = await markDealSubmitted(appointment.id);
+      if (result.ok) {
+        onAppointmentUpdated({ ...appointment, deal_submitted_at: new Date().toISOString() });
+      }
+    });
+  }
+
   const currentStatus = statuses.find((s) => s.id === appointment.status_id);
+
+  // Deal isn't one of the six admin-orderable sections (appointment_
+  // detail_sections) — it always renders right after Status, same fixed
+  // relationship the two already had before section ordering existed.
+  const dealBlock = DEAL_TOOL_URL && (
+    <div className="mt-6 space-y-2">
+      <label className="text-xs font-medium">Deal</label>
+      {appointment.deal_submitted_at ? (
+        <div className="flex items-center gap-2 text-sm">
+          <span className="text-black/60 dark:text-white/60">
+            Deal submitted {new Date(appointment.deal_submitted_at).toLocaleString()}
+          </span>
+          <button
+            onClick={handleSubmitDeal}
+            disabled={isMarkingDeal}
+            className="rounded border border-black/15 px-2 py-1 text-xs disabled:opacity-50 dark:border-white/20"
+          >
+            Resubmit
+          </button>
+        </div>
+      ) : (
+        <button
+          onClick={handleSubmitDeal}
+          disabled={isMarkingDeal}
+          className="rounded bg-black px-3 py-1 text-sm font-medium text-white disabled:opacity-50 dark:bg-white dark:text-black"
+        >
+          Submit Deal
+        </button>
+      )}
+    </div>
+  );
+
+  const sectionContent: Record<string, ReactNode> = {
+    lead: (
+      <div>
+        <div className="flex items-center gap-2">
+          <input
+            value={nameDraft}
+            onChange={(e) => setNameDraft(e.target.value)}
+            className="w-full rounded border border-black/15 px-2 py-1 text-lg font-semibold dark:border-white/20 dark:bg-transparent"
+          />
+          {nameDraft.trim() && nameDraft.trim() !== originalName && (
+            <button
+              onClick={handleSaveName}
+              disabled={isSavingName}
+              className="shrink-0 rounded bg-black px-2 py-1 text-xs text-white disabled:opacity-50 dark:bg-white dark:text-black"
+            >
+              {isSavingName ? "…" : "Save"}
+            </button>
+          )}
+        </div>
+        {nameError && <p className="text-xs text-red-600 dark:text-red-400">{nameError}</p>}
+        {lead && (
+          <p className="mt-1 text-sm text-black/70 dark:text-white/70">
+            {lead.address_line}
+            <br />
+            {[lead.city, lead.state, lead.zipcode].filter(Boolean).join(", ")}
+          </p>
+        )}
+      </div>
+    ),
+
+    schedule: (
+      <div className="space-y-2">
+        <label className="text-xs font-medium">Schedule</label>
+        {isEditingDate ? (
+          <div className="flex items-center gap-2">
+            <input
+              type="datetime-local"
+              value={dateEditDraft}
+              onChange={(e) => setDateEditDraft(e.target.value)}
+              className="rounded border border-black/15 px-2 py-1 text-sm dark:border-white/20 dark:bg-transparent"
+            />
+            <button
+              onClick={handleSaveDate}
+              disabled={isSavingDate}
+              className="rounded bg-black px-2 py-1 text-xs text-white disabled:opacity-50 dark:bg-white dark:text-black"
+            >
+              {isSavingDate ? "Saving…" : "Save"}
+            </button>
+            <button
+              onClick={() => setIsEditingDate(false)}
+              className="rounded border border-black/15 px-2 py-1 text-xs dark:border-white/20"
+            >
+              Cancel
+            </button>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2">
+            <span className="text-sm">{new Date(appointment.scheduled_at).toLocaleString()}</span>
+            <button
+              onClick={() => {
+                setDateEditDraft(toDatetimeLocal(appointment.scheduled_at));
+                setIsEditingDate(true);
+              }}
+              className="text-xs text-black/50 hover:text-black dark:text-white/50 dark:hover:text-white"
+            >
+              Edit
+            </button>
+          </div>
+        )}
+      </div>
+    ),
+
+    assigned: (
+      <div className="space-y-3">
+        <label className="text-xs font-medium">Assigned</label>
+        <AssignRoleEditor
+          title={stagedOpenerIds.length > 1 ? "Openers" : "Opener"}
+          staged={stagedOpenerIds}
+          setStaged={setStagedOpenerIds}
+          activeProfiles={activeProfiles}
+          profileName={profileName}
+        />
+        <AssignRoleEditor
+          title={stagedCloserIds.length > 1 ? "Closers" : "Closer"}
+          staged={stagedCloserIds}
+          setStaged={setStagedCloserIds}
+          activeProfiles={activeProfiles}
+          profileName={profileName}
+        />
+        <button
+          onClick={handleSaveAssignments}
+          disabled={isSavingAssignments || !hasUnsavedAssignmentChanges}
+          className="rounded bg-black px-3 py-1 text-sm font-medium text-white disabled:opacity-50 dark:bg-white dark:text-black"
+        >
+          {isSavingAssignments ? "Saving…" : "Save Assignment Changes"}
+        </button>
+        {assignError && <p className="text-xs text-red-600 dark:text-red-400">{assignError}</p>}
+      </div>
+    ),
+
+    submission_details: otherFormFields.length > 0 && (
+      <div className="space-y-1">
+        <label className="text-xs font-medium">Submission Details</label>
+        {otherFormFields.map((field) => (
+          <div key={field.id} className="flex justify-between text-sm">
+            <span className="text-black/60 dark:text-white/60">{field.label}</span>
+            <span>{submissionAnswer(field)}</span>
+          </div>
+        ))}
+      </div>
+    ),
+
+    status: (
+      <div className="space-y-2">
+        <label className="text-xs font-medium">Status</label>
+        {pendingRescheduleStatusId ? (
+          <div className="space-y-2">
+            <input
+              type="datetime-local"
+              value={rescheduleDate}
+              onChange={(e) => setRescheduleDate(e.target.value)}
+              className="w-full rounded border border-black/15 px-2 py-1 text-sm dark:border-white/20 dark:bg-transparent"
+            />
+            <div className="flex gap-2">
+              <button
+                onClick={handleConfirmReschedule}
+                disabled={isUpdatingStatus}
+                className="rounded bg-black px-3 py-1 text-sm font-medium text-white disabled:opacity-50 dark:bg-white dark:text-black"
+              >
+                Confirm
+              </button>
+              <button
+                onClick={() => setPendingRescheduleStatusId(null)}
+                className="rounded border border-black/15 px-3 py-1 text-sm dark:border-white/20"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            {statuses.map((status) => {
+              const isSelected = status.id === appointment.status_id;
+              return (
+                <button
+                  key={status.id}
+                  onClick={() => handleSelectStatus(status)}
+                  disabled={isUpdatingStatus}
+                  className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium disabled:opacity-50 ${
+                    isSelected
+                      ? "border-black bg-black text-white dark:border-white dark:bg-white dark:text-black"
+                      : "border-black/15 dark:border-white/20"
+                  }`}
+                >
+                  <span
+                    className="inline-block h-2 w-2 rounded-full"
+                    style={{ backgroundColor: status.color }}
+                  />
+                  {status.name}
+                </button>
+              );
+            })}
+          </div>
+        )}
+        {isUpdatingStatus && !pendingRescheduleStatusId && (
+          <p className="text-xs text-black/50 dark:text-white/50">Updating…</p>
+        )}
+        {statusError && <p className="text-xs text-red-600 dark:text-red-400">{statusError}</p>}
+        {!pendingRescheduleStatusId && currentStatus && (
+          <p className="text-xs text-black/40 dark:text-white/40">Current: {currentStatus.name}</p>
+        )}
+        {dealBlock}
+      </div>
+    ),
+
+    notes: (
+      <div className="space-y-3">
+        <h3 className="text-sm font-medium">Notes</h3>
+        <div className="space-y-1">
+          <textarea
+            value={newNoteText}
+            onChange={(e) => setNewNoteText(e.target.value)}
+            rows={3}
+            placeholder="Add a note…"
+            className="w-full rounded border border-black/15 px-2 py-1 text-sm dark:border-white/20 dark:bg-transparent"
+          />
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleSaveNote}
+              disabled={!newNoteText.trim() || isSavingNote}
+              className="rounded bg-black px-3 py-1 text-sm font-medium text-white disabled:opacity-50 dark:bg-white dark:text-black"
+            >
+              {isSavingNote ? "Saving…" : "Save Note"}
+            </button>
+            {noteError && <span className="text-xs text-red-600 dark:text-red-400">{noteError}</span>}
+          </div>
+          <p className="text-xs text-black/40 dark:text-white/40">
+            Only visible to people assigned to this appointment.
+          </p>
+        </div>
+
+        <div className="space-y-3 border-t border-black/10 pt-3 dark:border-white/10">
+          {!submissionNoteText && notes.length === 0 && (
+            <p className="text-xs italic text-black/40 dark:text-white/40">No notes yet.</p>
+          )}
+
+          {/* The note typed into the submission form itself — shown with
+              a card treatment so it visually reads as the appointment's
+              own note, same distinction AppointmentDetailScreen.swift
+              makes on iOS. */}
+          {submissionNoteText && (
+            <div className="rounded-md bg-black/[0.03] p-3 text-sm dark:bg-white/[0.06]">
+              <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-black/50 dark:text-white/50">
+                Appointment Note
+              </p>
+              <p className="whitespace-pre-wrap">{submissionNoteText}</p>
+            </div>
+          )}
+
+          {notes.map((n) => (
+            <div key={n.id} className="text-sm">
+              <p className="text-xs text-black/50 dark:text-white/50">
+                {n.author_name} · {new Date(n.created_at).toLocaleString()}
+              </p>
+              <p className="whitespace-pre-wrap">{n.note}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    ),
+  };
 
   return (
     <>
       <div className="fixed inset-0 z-20 bg-black/30" onClick={onClose} />
       <div className="fixed right-0 top-0 z-30 h-full w-full max-w-md overflow-y-auto border-l border-black/10 bg-white p-6 shadow-xl dark:border-white/10 dark:bg-neutral-950">
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex-1 space-y-1">
-            <div className="flex items-center gap-2">
-              <input
-                value={nameDraft}
-                onChange={(e) => setNameDraft(e.target.value)}
-                className="w-full rounded border border-black/15 px-2 py-1 text-lg font-semibold dark:border-white/20 dark:bg-transparent"
-              />
-              {nameDraft.trim() && nameDraft.trim() !== originalName && (
-                <button
-                  onClick={handleSaveName}
-                  disabled={isSavingName}
-                  className="shrink-0 rounded bg-black px-2 py-1 text-xs text-white disabled:opacity-50 dark:bg-white dark:text-black"
-                >
-                  {isSavingName ? "…" : "Save"}
-                </button>
-              )}
-            </div>
-            {nameError && <p className="text-xs text-red-600 dark:text-red-400">{nameError}</p>}
-          </div>
+        <div className="flex justify-end">
           <button
             onClick={onClose}
             className="text-sm text-black/50 hover:text-black dark:text-white/50 dark:hover:text-white"
@@ -265,212 +532,11 @@ export function AppointmentDetailPanel({
           </button>
         </div>
 
-        {lead && (
-          <p className="mt-1 text-sm text-black/70 dark:text-white/70">
-            {lead.address_line}
-            <br />
-            {[lead.city, lead.state, lead.zipcode].filter(Boolean).join(", ")}
-          </p>
-        )}
-
-        {/* Schedule */}
-        <div className="mt-6 space-y-2">
-          <label className="text-xs font-medium">Schedule</label>
-          {isEditingDate ? (
-            <div className="flex items-center gap-2">
-              <input
-                type="datetime-local"
-                value={dateEditDraft}
-                onChange={(e) => setDateEditDraft(e.target.value)}
-                className="rounded border border-black/15 px-2 py-1 text-sm dark:border-white/20 dark:bg-transparent"
-              />
-              <button
-                onClick={handleSaveDate}
-                disabled={isSavingDate}
-                className="rounded bg-black px-2 py-1 text-xs text-white disabled:opacity-50 dark:bg-white dark:text-black"
-              >
-                {isSavingDate ? "Saving…" : "Save"}
-              </button>
-              <button
-                onClick={() => setIsEditingDate(false)}
-                className="rounded border border-black/15 px-2 py-1 text-xs dark:border-white/20"
-              >
-                Cancel
-              </button>
-            </div>
-          ) : (
-            <div className="flex items-center gap-2">
-              <span className="text-sm">{new Date(appointment.scheduled_at).toLocaleString()}</span>
-              <button
-                onClick={() => {
-                  setDateEditDraft(toDatetimeLocal(appointment.scheduled_at));
-                  setIsEditingDate(true);
-                }}
-                className="text-xs text-black/50 hover:text-black dark:text-white/50 dark:hover:text-white"
-              >
-                Edit
-              </button>
-            </div>
-          )}
-        </div>
-
-        {/* Assigned */}
-        <div className="mt-6 space-y-3">
-          <label className="text-xs font-medium">Assigned</label>
-          <AssignRoleEditor
-            title={stagedOpenerIds.length > 1 ? "Openers" : "Opener"}
-            staged={stagedOpenerIds}
-            setStaged={setStagedOpenerIds}
-            activeProfiles={activeProfiles}
-            profileName={profileName}
-          />
-          <AssignRoleEditor
-            title={stagedCloserIds.length > 1 ? "Closers" : "Closer"}
-            staged={stagedCloserIds}
-            setStaged={setStagedCloserIds}
-            activeProfiles={activeProfiles}
-            profileName={profileName}
-          />
-          <button
-            onClick={handleSaveAssignments}
-            disabled={isSavingAssignments || !hasUnsavedAssignmentChanges}
-            className="rounded bg-black px-3 py-1 text-sm font-medium text-white disabled:opacity-50 dark:bg-white dark:text-black"
-          >
-            {isSavingAssignments ? "Saving…" : "Save Assignment Changes"}
-          </button>
-          {assignError && <p className="text-xs text-red-600 dark:text-red-400">{assignError}</p>}
-        </div>
-
-        {/* Status */}
-        <div className="mt-6 space-y-2">
-          <label className="text-xs font-medium">Status</label>
-          {pendingRescheduleStatusId ? (
-            <div className="space-y-2">
-              <input
-                type="datetime-local"
-                value={rescheduleDate}
-                onChange={(e) => setRescheduleDate(e.target.value)}
-                className="w-full rounded border border-black/15 px-2 py-1 text-sm dark:border-white/20 dark:bg-transparent"
-              />
-              <div className="flex gap-2">
-                <button
-                  onClick={handleConfirmReschedule}
-                  disabled={isUpdatingStatus}
-                  className="rounded bg-black px-3 py-1 text-sm font-medium text-white disabled:opacity-50 dark:bg-white dark:text-black"
-                >
-                  Confirm
-                </button>
-                <button
-                  onClick={() => setPendingRescheduleStatusId(null)}
-                  className="rounded border border-black/15 px-3 py-1 text-sm dark:border-white/20"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div className="flex flex-wrap gap-2">
-              {statuses.map((status) => {
-                const isSelected = status.id === appointment.status_id;
-                return (
-                  <button
-                    key={status.id}
-                    onClick={() => handleSelectStatus(status)}
-                    disabled={isUpdatingStatus}
-                    className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium disabled:opacity-50 ${
-                      isSelected
-                        ? "border-black bg-black text-white dark:border-white dark:bg-white dark:text-black"
-                        : "border-black/15 dark:border-white/20"
-                    }`}
-                  >
-                    <span
-                      className="inline-block h-2 w-2 rounded-full"
-                      style={{ backgroundColor: status.color }}
-                    />
-                    {status.name}
-                  </button>
-                );
-              })}
-            </div>
-          )}
-          {isUpdatingStatus && !pendingRescheduleStatusId && (
-            <p className="text-xs text-black/50 dark:text-white/50">Updating…</p>
-          )}
-          {statusError && <p className="text-xs text-red-600 dark:text-red-400">{statusError}</p>}
-          {!pendingRescheduleStatusId && currentStatus && (
-            <p className="text-xs text-black/40 dark:text-white/40">
-              Current: {currentStatus.name}
-            </p>
-          )}
-        </div>
-
-        {/* Submission Details */}
-        {otherFormFields.length > 0 && (
-          <div className="mt-6 space-y-1">
-            <label className="text-xs font-medium">Submission Details</label>
-            {otherFormFields.map((field) => (
-              <div key={field.id} className="flex justify-between text-sm">
-                <span className="text-black/60 dark:text-white/60">{field.label}</span>
-                <span>{submissionAnswer(field)}</span>
-              </div>
-            ))}
+        {sectionOrder.map((key, index) => (
+          <div key={key} className={index === 0 ? "-mt-6" : "mt-6"}>
+            {sectionContent[key] ?? null}
           </div>
-        )}
-
-        {/* Notes */}
-        <div className="mt-8 space-y-3">
-          <h3 className="text-sm font-medium">Notes</h3>
-          <div className="space-y-1">
-            <textarea
-              value={newNoteText}
-              onChange={(e) => setNewNoteText(e.target.value)}
-              rows={3}
-              placeholder="Add a note…"
-              className="w-full rounded border border-black/15 px-2 py-1 text-sm dark:border-white/20 dark:bg-transparent"
-            />
-            <div className="flex items-center gap-2">
-              <button
-                onClick={handleSaveNote}
-                disabled={!newNoteText.trim() || isSavingNote}
-                className="rounded bg-black px-3 py-1 text-sm font-medium text-white disabled:opacity-50 dark:bg-white dark:text-black"
-              >
-                {isSavingNote ? "Saving…" : "Save Note"}
-              </button>
-              {noteError && <span className="text-xs text-red-600 dark:text-red-400">{noteError}</span>}
-            </div>
-            <p className="text-xs text-black/40 dark:text-white/40">
-              Only visible to people assigned to this appointment.
-            </p>
-          </div>
-
-          <div className="space-y-3 border-t border-black/10 pt-3 dark:border-white/10">
-            {!submissionNoteText && notes.length === 0 && (
-              <p className="text-xs italic text-black/40 dark:text-white/40">No notes yet.</p>
-            )}
-
-            {/* The note typed into the submission form itself — shown with
-                a card treatment so it visually reads as the appointment's
-                own note, same distinction AppointmentDetailScreen.swift
-                makes on iOS. */}
-            {submissionNoteText && (
-              <div className="rounded-md bg-black/[0.03] p-3 text-sm dark:bg-white/[0.06]">
-                <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-black/50 dark:text-white/50">
-                  Appointment Note
-                </p>
-                <p className="whitespace-pre-wrap">{submissionNoteText}</p>
-              </div>
-            )}
-
-            {notes.map((n) => (
-              <div key={n.id} className="text-sm">
-                <p className="text-xs text-black/50 dark:text-white/50">
-                  {n.author_name} · {new Date(n.created_at).toLocaleString()}
-                </p>
-                <p className="whitespace-pre-wrap">{n.note}</p>
-              </div>
-            ))}
-          </div>
-        </div>
+        ))}
       </div>
     </>
   );

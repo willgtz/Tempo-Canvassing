@@ -2,7 +2,12 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { clearAllNotifications, deleteNotification, markNotificationRead } from "./actions";
+import {
+  clearAllNotifications,
+  deleteNotification,
+  markAllNotificationsRead,
+  markNotificationRead,
+} from "./actions";
 
 type Notification = {
   id: string;
@@ -29,7 +34,9 @@ export function NotificationsList({
   const [notifications, setNotifications] = useState(initialNotifications);
   const [, startTransition] = useTransition();
   const [isClearingAll, startClearAll] = useTransition();
+  const [isMarkingAllRead, startMarkAllRead] = useTransition();
   const router = useRouter();
+  const hasUnread = notifications.some((n) => !n.read_at);
 
   function handleClick(n: Notification) {
     if (!n.read_at) {
@@ -58,13 +65,29 @@ export function NotificationsList({
     });
   }
 
+  function handleMarkAllRead() {
+    setNotifications((prev) => prev.map((n) => (n.read_at ? n : { ...n, read_at: new Date().toISOString() })));
+    startMarkAllRead(async () => {
+      await markAllNotificationsRead();
+    });
+  }
+
   if (notifications.length === 0) {
     return <p className="text-sm italic text-black/40 dark:text-white/40">No notifications yet.</p>;
   }
 
   return (
     <div className="space-y-3">
-      <div className="flex justify-end">
+      <div className="flex justify-end gap-4">
+        {hasUnread && (
+          <button
+            onClick={handleMarkAllRead}
+            disabled={isMarkingAllRead}
+            className="text-xs text-black/50 hover:text-black disabled:opacity-50 dark:text-white/50 dark:hover:text-white"
+          >
+            Read all
+          </button>
+        )}
         <button
           onClick={handleClearAll}
           disabled={isClearingAll}

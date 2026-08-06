@@ -26,6 +26,10 @@ type NoteJoinRow = {
   profiles: { full_name: string } | null;
 };
 
+// Fallback if appointment_detail_sections is empty (e.g. migration not
+// yet run) — matches the seeded default in schema.sql exactly.
+const DEFAULT_SECTION_ORDER = ["lead", "schedule", "assigned", "submission_details", "status", "notes"];
+
 export default async function AppointmentsPage() {
   const supabase = await createClient();
 
@@ -34,10 +38,13 @@ export default async function AppointmentsPage() {
     { data: statuses, error: statusError },
     { data: formFields },
     { data: activeProfiles },
+    { data: detailSections },
   ] = await Promise.all([
     supabase
       .from("appointments")
-      .select("id, lead_id, scheduled_at, status_id, custom_field_responses, created_by, created_at, updated_at")
+      .select(
+        "id, lead_id, scheduled_at, status_id, custom_field_responses, created_by, created_at, updated_at, deal_submitted_at"
+      )
       .order("scheduled_at", { ascending: true }),
     supabase
       .from("appointment_statuses")
@@ -48,7 +55,12 @@ export default async function AppointmentsPage() {
       .select("id, label, field_type, options, is_required, sort_order")
       .order("sort_order"),
     supabase.from("profiles").select("id, full_name").eq("active", true).order("full_name"),
+    supabase.from("appointment_detail_sections").select("key").order("sort_order"),
   ]);
+
+  const sectionOrder = detailSections?.length
+    ? detailSections.map((s) => s.key)
+    : DEFAULT_SECTION_ORDER;
 
   if (apptError || statusError) {
     return (
@@ -119,6 +131,7 @@ export default async function AppointmentsPage() {
         initialAssignments={assignments}
         initialNotes={notes}
         activeProfiles={(activeProfiles ?? []) as ActiveProfile[]}
+        sectionOrder={sectionOrder}
       />
     </div>
   );

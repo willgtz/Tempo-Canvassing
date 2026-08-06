@@ -13,6 +13,7 @@ export type Appointment = {
   created_by: string;
   created_at: string;
   updated_at: string;
+  deal_submitted_at: string | null;
 };
 
 export type AppointmentStatus = {

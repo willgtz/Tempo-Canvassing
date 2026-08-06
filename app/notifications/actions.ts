@@ -45,6 +45,25 @@ export async function deleteNotification(notificationId: string): Promise<Action
   return { ok: true };
 }
 
+// Distinct from clearAllNotifications above — marks every notification
+// read (clears the bell's unread badge) without deleting any of them.
+export async function markAllNotificationsRead(): Promise<ActionResult> {
+  const session = await getSession();
+  if (!session) return { ok: false, error: "Unauthorized" };
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("notifications")
+    .update({ read_at: new Date().toISOString() })
+    .eq("user_id", session.userId)
+    .is("read_at", null);
+
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath("/notifications");
+  return { ok: true };
+}
+
 export async function clearAllNotifications(): Promise<ActionResult> {
   const session = await getSession();
   if (!session) return { ok: false, error: "Unauthorized" };

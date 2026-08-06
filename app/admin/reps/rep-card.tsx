@@ -15,6 +15,14 @@ export type ManagedUser = {
 
 type ManagerOption = { id: string; full_name: string; role: string };
 type Assignment = { id: string; zipcode: string };
+type ZipHistoryEntry = {
+  id: string;
+  zipcode: string;
+  assignedAt: string;
+  assignedByName: string | null;
+  unassignedAt: string | null;
+  unassignedByName: string | null;
+};
 
 const ROLE_OPTIONS: UserRole[] = ["rep", "team_lead", "admin", "super_admin"];
 
@@ -24,14 +32,17 @@ export function RepCard({
   isSelf,
   managerName,
   initialAssignments,
+  zipHistory,
 }: {
   user: ManagedUser;
   managerOptions: ManagerOption[];
   isSelf: boolean;
   managerName: string | null;
   initialAssignments: Assignment[];
+  zipHistory: ZipHistoryEntry[];
 }) {
   const [editing, setEditing] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
   const [fullName, setFullName] = useState(user.full_name);
   const [email, setEmail] = useState(user.email);
   const [phone, setPhone] = useState(user.phone ?? "");
@@ -268,6 +279,38 @@ export function RepCard({
         </button>
         {zipError && <span className="text-xs text-red-600 dark:text-red-400">{zipError}</span>}
       </form>
+
+      {zipHistory.length > 0 && (
+        <div className="mt-3">
+          <button
+            type="button"
+            onClick={() => setShowHistory((v) => !v)}
+            className="text-xs text-black/50 hover:text-black dark:text-white/50 dark:hover:text-white"
+          >
+            {showHistory ? "Hide" : "Show"} zip history ({zipHistory.length})
+          </button>
+          {showHistory && (
+            <ul className="mt-2 space-y-1 border-t border-black/10 pt-2 text-xs text-black/60 dark:border-white/10 dark:text-white/60">
+              {zipHistory.map((h) => (
+                <li key={h.id}>
+                  <span className="font-medium">{h.zipcode}</span> — assigned{" "}
+                  {new Date(h.assignedAt).toLocaleDateString()}
+                  {h.assignedByName ? ` by ${h.assignedByName}` : ""}
+                  {h.unassignedAt ? (
+                    <>
+                      {" "}
+                      → removed {new Date(h.unassignedAt).toLocaleDateString()}
+                      {h.unassignedByName ? ` by ${h.unassignedByName}` : ""}
+                    </>
+                  ) : (
+                    <span className="text-green-700 dark:text-green-500"> — currently active</span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
     </div>
   );
 }

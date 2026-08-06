@@ -178,6 +178,26 @@ export async function saveAppointmentAssignments(input: AssignmentDiffInput): Pr
   return { ok: true };
 }
 
+// Not a real confirmation that a deal was actually submitted in
+// tempo-deal-tool (a fully separate app/Supabase project with no
+// callback) — just records that someone clicked through. See
+// appointments.deal_submitted_at's comment in schema.sql.
+export async function markDealSubmitted(appointmentId: string): Promise<ActionResult> {
+  const session = await getAdminSession();
+  if (!session) return { ok: false, error: "Unauthorized" };
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("appointments")
+    .update({ deal_submitted_at: new Date().toISOString() })
+    .eq("id", appointmentId);
+
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath("/admin/appointments");
+  return { ok: true };
+}
+
 // Goes through the same update_lead_name_for_appointment RPC iOS and the
 // rep-facing submitAppointment action use (app/leads/actions.ts) — not a
 // plain leads table update — so a closer assigned outside their normal zip

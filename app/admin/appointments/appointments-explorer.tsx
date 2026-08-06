@@ -23,6 +23,7 @@ export function AppointmentsExplorer({
   initialAssignments,
   initialNotes,
   activeProfiles,
+  sectionOrder,
 }: {
   initialAppointments: Appointment[];
   statuses: AppointmentStatus[];
@@ -31,6 +32,7 @@ export function AppointmentsExplorer({
   initialAssignments: AppointmentAssignment[];
   initialNotes: AppointmentNote[];
   activeProfiles: ActiveProfile[];
+  sectionOrder: string[];
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -46,6 +48,8 @@ export function AppointmentsExplorer({
   const [selectedStatusIds, setSelectedStatusIds] = useState<Set<string>>(new Set());
   const [scheduledFrom, setScheduledFrom] = useState("");
   const [scheduledTo, setScheduledTo] = useState("");
+  const [selectedCloserId, setSelectedCloserId] = useState("");
+  const [collapsedStatusIds, setCollapsedStatusIds] = useState<Set<string>>(new Set());
 
   // router.refresh() re-runs page.tsx's server-side fetch and passes fresh
   // props down, but doesn't remount this component — its useState wouldn't
@@ -79,6 +83,17 @@ export function AppointmentsExplorer({
 
   const leadById = new Map(leadsState.map((l) => [l.id, l]));
 
+  // Deduped closer list, derived from loaded assignments — same "no
+  // separate lookup table" approach as the closer names already shown in
+  // the list table below.
+  const closers = Array.from(
+    new Map(
+      assignments.filter((a) => a.role === "closer").map((a) => [a.user_id, a.full_name])
+    ).entries()
+  )
+    .map(([userId, fullName]) => ({ userId, fullName }))
+    .sort((a, b) => a.fullName.localeCompare(b.fullName));
+
   // Empty selectedStatusIds means "show all" — same convention the iOS
   // AppointmentsScreen filter uses.
   const query = searchText.trim().toLowerCase();
@@ -89,6 +104,12 @@ export function AppointmentsExplorer({
     const scheduledAt = new Date(a.scheduled_at);
     if (fromDate && scheduledAt < fromDate) return false;
     if (toDate && scheduledAt > toDate) return false;
+    if (
+      selectedCloserId &&
+      !assignments.some((x) => x.appointment_id === a.id && x.role === "closer" && x.user_id === selectedCloserId)
+    ) {
+      return false;
+    }
     if (query) {
       const lead = leadById.get(a.lead_id);
       const haystack = `${lead?.first_name ?? ""} ${lead?.last_name ?? ""} ${lead?.address_line ?? ""}`.toLowerCase();
@@ -108,6 +129,15 @@ export function AppointmentsExplorer({
 
   function toggleStatus(statusId: string) {
     setSelectedStatusIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(statusId)) next.delete(statusId);
+      else next.add(statusId);
+      return next;
+    });
+  }
+
+  function toggleCollapsed(statusId: string) {
+    setCollapsedStatusIds((prev) => {
       const next = new Set(prev);
       if (next.has(statusId)) next.delete(statusId);
       else next.add(statusId);
@@ -195,13 +225,29 @@ export function AppointmentsExplorer({
               className="rounded border border-black/15 px-2 py-1 dark:border-white/20 dark:bg-transparent"
             />
           </label>
-          {(searchText || selectedStatusIds.size > 0 || scheduledFrom || scheduledTo) && (
+          <label className="flex items-center gap-1.5">
+            Closer
+            <select
+              value={selectedCloserId}
+              onChange={(e) => setSelectedCloserId(e.target.value)}
+              className="rounded border border-black/15 px-2 py-1 dark:border-white/20 dark:bg-transparent"
+            >
+              <option value="">All</option>
+              {closers.map((c) => (
+                <option key={c.userId} value={c.userId}>
+                  {c.fullName}
+                </option>
+              ))}
+            </select>
+          </label>
+          {(searchText || selectedStatusIds.size > 0 || scheduledFrom || scheduledTo || selectedCloserId) && (
             <button
               onClick={() => {
                 setSearchText("");
                 setSelectedStatusIds(new Set());
                 setScheduledFrom("");
                 setScheduledTo("");
+                setSelectedCloserId("");
               }}
               className="text-black/50 hover:text-black dark:text-white/50 dark:hover:text-white"
             >
@@ -218,54 +264,73 @@ export function AppointmentsExplorer({
         <p className="text-sm italic text-black/50 dark:text-white/50">No appointments match your search/filters.</p>
       )}
 
-      {groupedByStatus.map((group) => (
-        <div key={group.status.id}>
-          <h2 className="mb-2 flex items-center gap-2 text-sm font-medium">
-            <span
-              className="inline-block h-2 w-2 rounded-full"
-              style={{ backgroundColor: group.status.color }}
-            />
-            {group.status.name}
-          </h2>
-          <div className="overflow-x-auto rounded-lg border border-black/10 dark:border-white/10">
-            <table className="w-full min-w-[640px] text-left text-sm">
-              <thead className="bg-black/5 dark:bg-white/5">
-                <tr>
-                  <th className="px-3 py-2 font-medium">Lead</th>
-                  <th className="px-3 py-2 font-medium">Address</th>
-                  <th className="px-3 py-2 font-medium">Date &amp; Time</th>
-                  <th className="px-3 py-2 font-medium">Closer</th>
-                </tr>
-              </thead>
-              <tbody>
-                {group.appointments.map((a) => {
-                  const lead = leadById.get(a.lead_id);
-                  const closerNames = assignments
-                    .filter((x) => x.appointment_id === a.id && x.role === "closer")
-                    .map((x) => x.full_name)
-                    .join(", ");
-                  return (
-                    <tr
-                      key={a.id}
-                      onClick={() => setSelectedId(a.id)}
-                      className="cursor-pointer border-t border-black/5 hover:bg-black/5 dark:border-white/10 dark:hover:bg-white/5"
-                    >
-                      <td className="px-3 py-2">
-                        {[lead?.first_name, lead?.last_name].filter(Boolean).join(" ") || "Unknown"}
-                      </td>
-                      <td className="px-3 py-2 text-black/70 dark:text-white/70">
-                        {lead?.address_line ?? "—"}
-                      </td>
-                      <td className="px-3 py-2">{new Date(a.scheduled_at).toLocaleString()}</td>
-                      <td className="px-3 py-2">{closerNames || "Unassigned"}</td>
+      {groupedByStatus.map((group) => {
+        const isCollapsed = collapsedStatusIds.has(group.status.id);
+        return (
+          <div key={group.status.id}>
+            <button
+              onClick={() => toggleCollapsed(group.status.id)}
+              className="mb-2 flex w-full items-center gap-2 text-sm font-medium"
+            >
+              <span
+                className="inline-block h-2 w-2 rounded-full"
+                style={{ backgroundColor: group.status.color }}
+              />
+              {group.status.name}
+              <span className="text-black/40 dark:text-white/40">({group.appointments.length})</span>
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={2}
+                className={`ml-auto h-3.5 w-3.5 transition-transform ${isCollapsed ? "-rotate-90" : ""}`}
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25 12 15.75 4.5 8.25" />
+              </svg>
+            </button>
+            {!isCollapsed && (
+              <div className="overflow-x-auto rounded-lg border border-black/10 dark:border-white/10">
+                <table className="w-full min-w-[640px] text-left text-sm">
+                  <thead className="bg-black/5 dark:bg-white/5">
+                    <tr>
+                      <th className="px-3 py-2 font-medium">Lead</th>
+                      <th className="px-3 py-2 font-medium">Address</th>
+                      <th className="px-3 py-2 font-medium">Date &amp; Time</th>
+                      <th className="px-3 py-2 font-medium">Closer</th>
                     </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                  </thead>
+                  <tbody>
+                    {group.appointments.map((a) => {
+                      const lead = leadById.get(a.lead_id);
+                      const closerNames = assignments
+                        .filter((x) => x.appointment_id === a.id && x.role === "closer")
+                        .map((x) => x.full_name)
+                        .join(", ");
+                      return (
+                        <tr
+                          key={a.id}
+                          onClick={() => setSelectedId(a.id)}
+                          className="cursor-pointer border-t border-black/5 hover:bg-black/5 dark:border-white/10 dark:hover:bg-white/5"
+                        >
+                          <td className="px-3 py-2">
+                            {[lead?.first_name, lead?.last_name].filter(Boolean).join(" ") || "Unknown"}
+                          </td>
+                          <td className="px-3 py-2 text-black/70 dark:text-white/70">
+                            {lead?.address_line ?? "—"}
+                          </td>
+                          <td className="px-3 py-2">{new Date(a.scheduled_at).toLocaleString()}</td>
+                          <td className="px-3 py-2">{closerNames || "Unassigned"}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
-        </div>
-      ))}
+        );
+      })}
 
       {selected && (
         <AppointmentDetailPanel
@@ -276,6 +341,7 @@ export function AppointmentsExplorer({
           assignments={assignments.filter((x) => x.appointment_id === selected.id)}
           notes={notes.filter((x) => x.appointment_id === selected.id)}
           activeProfiles={activeProfiles}
+          sectionOrder={sectionOrder}
           onClose={() => setSelectedId(null)}
           onAppointmentUpdated={(updated) => {
             setAppointments((prev) => prev.map((a) => (a.id === updated.id ? updated : a)));
