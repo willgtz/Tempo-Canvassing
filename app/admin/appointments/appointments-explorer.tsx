@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { AppointmentDetailPanel } from "./appointment-detail-panel";
+import { AppointmentsCalendar } from "./appointments-calendar";
 import type {
   ActiveProfile,
   Appointment,
@@ -50,6 +51,7 @@ export function AppointmentsExplorer({
   const [scheduledTo, setScheduledTo] = useState("");
   const [selectedCloserId, setSelectedCloserId] = useState("");
   const [collapsedStatusIds, setCollapsedStatusIds] = useState<Set<string>>(new Set());
+  const [viewMode, setViewMode] = useState<"list" | "calendar">("list");
 
   // router.refresh() re-runs page.tsx's server-side fetch and passes fresh
   // props down, but doesn't remount this component — its useState wouldn't
@@ -149,7 +151,22 @@ export function AppointmentsExplorer({
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-end">
+      <div className="flex items-center justify-between">
+        <div className="flex gap-1 rounded border border-black/15 p-0.5 dark:border-white/20">
+          {(["list", "calendar"] as const).map((mode) => (
+            <button
+              key={mode}
+              onClick={() => setViewMode(mode)}
+              className={`rounded px-2.5 py-1 text-xs font-medium capitalize ${
+                viewMode === mode
+                  ? "bg-black text-white dark:bg-white dark:text-black"
+                  : "text-black/60 hover:bg-black/5 dark:text-white/60 dark:hover:bg-white/5"
+              }`}
+            >
+              {mode}
+            </button>
+          ))}
+        </div>
         <button
           onClick={() => startRefresh(() => router.refresh())}
           disabled={isRefreshing}
@@ -264,7 +281,16 @@ export function AppointmentsExplorer({
         <p className="text-sm italic text-black/50 dark:text-white/50">No appointments match your search/filters.</p>
       )}
 
-      {groupedByStatus.map((group) => {
+      {viewMode === "calendar" && visibleAppointments.length > 0 && (
+        <AppointmentsCalendar
+          appointments={visibleAppointments}
+          statuses={statuses}
+          leadById={leadById}
+          onSelect={setSelectedId}
+        />
+      )}
+
+      {viewMode === "list" && groupedByStatus.map((group) => {
         const isCollapsed = collapsedStatusIds.has(group.status.id);
         return (
           <div key={group.status.id}>
