@@ -259,18 +259,22 @@ export function AppointmentDetailPanel({
   // Deal isn't one of the six admin-orderable sections (appointment_
   // detail_sections) — it always renders right after Status, same fixed
   // relationship the two already had before section ordering existed.
-  const dealBlock = DEAL_TOOL_URL && (
-    <div className="mt-6 space-y-2">
+  // Only shown once the appointment has actually closed — matched by
+  // name, same convention as the "Rescheduled" status match elsewhere in
+  // this panel — not for every status like before.
+  const isClosed = currentStatus?.name.toLowerCase().includes("closed") ?? false;
+  const dealBlock = DEAL_TOOL_URL && isClosed && (
+    <div className="mt-6 rounded-md border border-black/10 p-3 dark:border-white/10">
       <label className="text-xs font-medium">Deal</label>
       {appointment.deal_submitted_at ? (
-        <div className="flex items-center gap-2 text-sm">
+        <div className="mt-1.5 flex items-center justify-between gap-2 text-sm">
           <span className="text-black/60 dark:text-white/60">
-            Deal submitted {new Date(appointment.deal_submitted_at).toLocaleString()}
+            Submitted {new Date(appointment.deal_submitted_at).toLocaleString()}
           </span>
           <button
             onClick={handleSubmitDeal}
             disabled={isMarkingDeal}
-            className="rounded border border-black/15 px-2 py-1 text-xs disabled:opacity-50 dark:border-white/20"
+            className="shrink-0 rounded border border-black/15 px-2 py-1 text-xs disabled:opacity-50 dark:border-white/20"
           >
             Resubmit
           </button>
@@ -279,7 +283,7 @@ export function AppointmentDetailPanel({
         <button
           onClick={handleSubmitDeal}
           disabled={isMarkingDeal}
-          className="rounded bg-black px-3 py-1 text-sm font-medium text-white disabled:opacity-50 dark:bg-white dark:text-black"
+          className="mt-1.5 w-full rounded bg-black px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50 dark:bg-white dark:text-black"
         >
           Submit Deal
         </button>
@@ -526,14 +530,14 @@ export function AppointmentDetailPanel({
         <div className="flex justify-end">
           <button
             onClick={onClose}
-            className="text-sm text-black/50 hover:text-black dark:text-white/50 dark:hover:text-white"
+            className="shrink-0 text-sm text-black/50 hover:text-black dark:text-white/50 dark:hover:text-white"
           >
             Close
           </button>
         </div>
 
-        {sectionOrder.map((key, index) => (
-          <div key={key} className={index === 0 ? "-mt-6" : "mt-6"}>
+        {sectionOrder.map((key) => (
+          <div key={key} className="mt-4">
             {sectionContent[key] ?? null}
           </div>
         ))}

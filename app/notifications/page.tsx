@@ -1,6 +1,7 @@
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { NotificationsList } from "./notifications-list";
+import { BackButton } from "./back-button";
 
 export default async function NotificationsPage() {
   const session = await requireSession();
@@ -23,8 +24,9 @@ export default async function NotificationsPage() {
   const isAdmin = session.role === "admin" || session.role === "super_admin";
 
   return (
-    <div className="mx-auto w-full max-w-2xl space-y-4 p-6">
-      <h1 className="text-xl font-semibold">Notifications</h1>
+    <div className="mx-auto w-full max-w-lg space-y-3 p-4">
+      <BackButton />
+      <h1 className="text-lg font-semibold">Notifications</h1>
       <NotificationsList initialNotifications={notifications ?? []} isAdmin={isAdmin} />
     </div>
   );
