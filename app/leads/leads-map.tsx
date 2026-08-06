@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AdvancedMarker, APIProvider, Map, useMap } from "@vis.gl/react-google-maps";
 import { MarkerClusterer } from "@googlemaps/markerclusterer";
 import type { Marker as ClustererMarker } from "@googlemaps/markerclusterer";
@@ -122,7 +122,11 @@ function LeadMarkers({
     }
   }, [markerRefs, selectMode]);
 
-  function setMarkerRef(marker: google.maps.marker.AdvancedMarkerElement | null, leadId: string) {
+  // Stable across re-renders (empty dep array — the updater form of
+  // setMarkerRefs never needs markerRefs itself as a closure value) so
+  // LeadMarker below can depend on it in its own useCallback without that
+  // callback's identity changing every render.
+  const setMarkerRef = useCallback((marker: google.maps.marker.AdvancedMarkerElement | null, leadId: string) => {
     setMarkerRefs((prev) => {
       if (marker && prev[leadId] === marker) return prev;
       if (!marker && !prev[leadId]) return prev;
@@ -131,7 +135,7 @@ function LeadMarkers({
       else delete next[leadId];
       return next;
     });
-  }
+  }, []);
 
   return (
     <>
@@ -142,29 +146,72 @@ function LeadMarkers({
         const isSelected = selectionIndex !== -1;
 
         return (
-          <AdvancedMarker
+          <LeadMarker
             key={lead.id}
-            ref={(marker) => setMarkerRef(marker, lead.id)}
-            position={{ lat: lead.lat, lng: lead.lng }}
+            lead={lead}
             title={lead.is_manual ? `${name} (manually entered)` : name}
+            color={disposition?.color ?? DEFAULT_COLOR}
+            isSelected={isSelected}
+            selectionIndex={selectionIndex}
+            onRef={setMarkerRef}
             onClick={() => (selectMode ? onTogglePin(lead.id) : onSelectLead(lead.id))}
-          >
-            {isSelected ? (
-              <div className="flex h-7 w-7 items-center justify-center rounded-full border-2 border-white bg-black text-xs font-bold text-white shadow">
-                {selectionIndex + 1}
-              </div>
-            ) : (
-              <div
-                className="h-[26px] w-[26px] rounded-full shadow"
-                style={{
-                  backgroundColor: disposition?.color ?? DEFAULT_COLOR,
-                  border: lead.is_manual ? "2.5px dashed #000000" : "2.5px solid #ffffff",
-                }}
-              />
-            )}
-          </AdvancedMarker>
+          />
         );
       })}
     </>
+  );
+}
+
+// Split out specifically so its ref callback can be memoized per-marker
+// via useCallback (stable as long as onRef/lead.id don't change, which
+// they don't across re-renders of the same list item). Passing an inline
+// `ref={(marker) => ...}` arrow straight on <AdvancedMarker> — a new
+// function every render — made React detach and reattach the ref on
+// every single render (old identity -> null, new identity -> marker
+// again), which fed setMarkerRefs in a loop and threw React error #185
+// (max update depth exceeded).
+function LeadMarker({
+  lead,
+  title,
+  color,
+  isSelected,
+  selectionIndex,
+  onRef,
+  onClick,
+}: {
+  lead: LocatedLead;
+  title: string;
+  color: string;
+  isSelected: boolean;
+  selectionIndex: number;
+  onRef: (marker: google.maps.marker.AdvancedMarkerElement | null, leadId: string) => void;
+  onClick: () => void;
+}) {
+  const ref = useCallback(
+    (marker: google.maps.marker.AdvancedMarkerElement | null) => onRef(marker, lead.id),
+    [onRef, lead.id]
+  );
+
+  return (
+    <AdvancedMarker
+      ref={ref}
+      position={{ lat: lead.lat, lng: lead.lng }}
+      title={title}
+      onClick={onClick}
+    >
+      {isSelected ? (
+        <div className="flex h-7 w-7 items-center justify-center rounded-full border-2 border-white bg-black text-xs font-bold text-white shadow">
+          {selectionIndex + 1}
+        </div>
+      ) : (
+        <div
+          className="h-[26px] w-[26px] rounded-full shadow"
+          style={{
+            backgroundColor: color,
+            border: lead.is_manual ? "2.5px dashed #000000" : "2.5px solid #ffffff",
+          }}
+        />
+      )}
+    </AdvancedMarker>
   );
 }
