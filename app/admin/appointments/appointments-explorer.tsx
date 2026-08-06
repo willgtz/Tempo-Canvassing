@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useState, useTransition } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { AppointmentDetailPanel } from "./appointment-detail-panel";
 import type {
   ActiveProfile,
@@ -32,32 +32,190 @@ export function AppointmentsExplorer({
   initialNotes: AppointmentNote[];
   activeProfiles: ActiveProfile[];
 }) {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const [appointments, setAppointments] = useState(initialAppointments);
   const [assignments, setAssignments] = useState(initialAssignments);
   const [notes, setNotes] = useState(initialNotes);
   const [leadsState, setLeadsState] = useState(leads);
+  const [isRefreshing, startRefresh] = useTransition();
   // Supports deep-linking from a notification ("View appointment") via
   // /admin/appointments?appointment=<id> — see notifications-list.tsx.
   const [selectedId, setSelectedId] = useState<string | null>(searchParams.get("appointment"));
+  const [searchText, setSearchText] = useState("");
+  const [selectedStatusIds, setSelectedStatusIds] = useState<Set<string>>(new Set());
+  const [scheduledFrom, setScheduledFrom] = useState("");
+  const [scheduledTo, setScheduledTo] = useState("");
+
+  // router.refresh() re-runs page.tsx's server-side fetch and passes fresh
+  // props down, but doesn't remount this component — its useState wouldn't
+  // pick up the new data on its own without adjusting it here. This is
+  // React's recommended "adjust state during render" idiom for exactly this
+  // case (https://react.dev/learn/you-might-not-need-an-effect) rather than
+  // a useEffect, which the lint config here specifically flags — doing it
+  // in an effect would mean an extra unnecessary render each time.
+  // (statuses/formFields/activeProfiles are read straight from props
+  // elsewhere below, so they don't need this.)
+  const [prevInitialAppointments, setPrevInitialAppointments] = useState(initialAppointments);
+  if (initialAppointments !== prevInitialAppointments) {
+    setPrevInitialAppointments(initialAppointments);
+    setAppointments(initialAppointments);
+  }
+  const [prevInitialAssignments, setPrevInitialAssignments] = useState(initialAssignments);
+  if (initialAssignments !== prevInitialAssignments) {
+    setPrevInitialAssignments(initialAssignments);
+    setAssignments(initialAssignments);
+  }
+  const [prevInitialNotes, setPrevInitialNotes] = useState(initialNotes);
+  if (initialNotes !== prevInitialNotes) {
+    setPrevInitialNotes(initialNotes);
+    setNotes(initialNotes);
+  }
+  const [prevLeads, setPrevLeads] = useState(leads);
+  if (leads !== prevLeads) {
+    setPrevLeads(leads);
+    setLeadsState(leads);
+  }
 
   const leadById = new Map(leadsState.map((l) => [l.id, l]));
+
+  // Empty selectedStatusIds means "show all" — same convention the iOS
+  // AppointmentsScreen filter uses.
+  const query = searchText.trim().toLowerCase();
+  const fromDate = scheduledFrom ? new Date(scheduledFrom) : null;
+  const toDate = scheduledTo ? new Date(scheduledTo) : null;
+  const visibleAppointments = appointments.filter((a) => {
+    if (selectedStatusIds.size > 0 && !selectedStatusIds.has(a.status_id)) return false;
+    const scheduledAt = new Date(a.scheduled_at);
+    if (fromDate && scheduledAt < fromDate) return false;
+    if (toDate && scheduledAt > toDate) return false;
+    if (query) {
+      const lead = leadById.get(a.lead_id);
+      const haystack = `${lead?.first_name ?? ""} ${lead?.last_name ?? ""} ${lead?.address_line ?? ""}`.toLowerCase();
+      if (!haystack.includes(query)) return false;
+    }
+    return true;
+  });
 
   const groupedByStatus = statuses
     .map((status) => ({
       status,
-      appointments: appointments
+      appointments: visibleAppointments
         .filter((a) => a.status_id === status.id)
         .sort((a, b) => a.scheduled_at.localeCompare(b.scheduled_at)),
     }))
     .filter((g) => g.appointments.length > 0);
 
+  function toggleStatus(statusId: string) {
+    setSelectedStatusIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(statusId)) next.delete(statusId);
+      else next.add(statusId);
+      return next;
+    });
+  }
+
   const selected = appointments.find((a) => a.id === selectedId) ?? null;
 
   return (
     <div className="space-y-6">
+      <div className="flex justify-end">
+        <button
+          onClick={() => startRefresh(() => router.refresh())}
+          disabled={isRefreshing}
+          className="flex items-center gap-1.5 rounded border border-black/15 px-2.5 py-1 text-xs font-medium disabled:opacity-50 dark:border-white/20"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={2}
+            className={`h-3.5 w-3.5 ${isRefreshing ? "animate-spin" : ""}`}
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99"
+            />
+          </svg>
+          {isRefreshing ? "Refreshing…" : "Refresh"}
+        </button>
+      </div>
+
+      <div className="space-y-3 rounded-lg border border-black/10 p-4 dark:border-white/10">
+        <input
+          value={searchText}
+          onChange={(e) => setSearchText(e.target.value)}
+          placeholder="Search name or address…"
+          className="w-full rounded border border-black/15 px-2 py-1.5 text-sm dark:border-white/20 dark:bg-transparent"
+        />
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={() => setSelectedStatusIds(new Set())}
+            className={`rounded-full border px-3 py-1 text-xs font-medium ${
+              selectedStatusIds.size === 0
+                ? "border-black bg-black text-white dark:border-white dark:bg-white dark:text-black"
+                : "border-black/15 dark:border-white/20"
+            }`}
+          >
+            All
+          </button>
+          {statuses.map((status) => (
+            <button
+              key={status.id}
+              onClick={() => toggleStatus(status.id)}
+              className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium ${
+                selectedStatusIds.has(status.id)
+                  ? "border-black bg-black text-white dark:border-white dark:bg-white dark:text-black"
+                  : "border-black/15 dark:border-white/20"
+              }`}
+            >
+              <span className="inline-block h-2 w-2 rounded-full" style={{ backgroundColor: status.color }} />
+              {status.name}
+            </button>
+          ))}
+        </div>
+        <div className="flex flex-wrap items-center gap-3 text-xs">
+          <label className="flex items-center gap-1.5">
+            Scheduled from
+            <input
+              type="date"
+              value={scheduledFrom}
+              onChange={(e) => setScheduledFrom(e.target.value)}
+              className="rounded border border-black/15 px-2 py-1 dark:border-white/20 dark:bg-transparent"
+            />
+          </label>
+          <label className="flex items-center gap-1.5">
+            to
+            <input
+              type="date"
+              value={scheduledTo}
+              onChange={(e) => setScheduledTo(e.target.value)}
+              className="rounded border border-black/15 px-2 py-1 dark:border-white/20 dark:bg-transparent"
+            />
+          </label>
+          {(searchText || selectedStatusIds.size > 0 || scheduledFrom || scheduledTo) && (
+            <button
+              onClick={() => {
+                setSearchText("");
+                setSelectedStatusIds(new Set());
+                setScheduledFrom("");
+                setScheduledTo("");
+              }}
+              className="text-black/50 hover:text-black dark:text-white/50 dark:hover:text-white"
+            >
+              Clear filters
+            </button>
+          )}
+        </div>
+      </div>
+
       {appointments.length === 0 && (
         <p className="text-sm italic text-black/50 dark:text-white/50">No appointments yet.</p>
+      )}
+      {appointments.length > 0 && visibleAppointments.length === 0 && (
+        <p className="text-sm italic text-black/50 dark:text-white/50">No appointments match your search/filters.</p>
       )}
 
       {groupedByStatus.map((group) => (

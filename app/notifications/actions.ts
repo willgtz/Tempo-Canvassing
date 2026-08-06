@@ -25,3 +25,35 @@ export async function markNotificationRead(notificationId: string): Promise<Acti
   revalidatePath("/notifications");
   return { ok: true };
 }
+
+// notifications_delete_own RLS (schema.sql) already restricts this to the
+// caller's own rows — same .eq belt-and-suspenders as markNotificationRead.
+export async function deleteNotification(notificationId: string): Promise<ActionResult> {
+  const session = await getSession();
+  if (!session) return { ok: false, error: "Unauthorized" };
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("notifications")
+    .delete()
+    .eq("id", notificationId)
+    .eq("user_id", session.userId);
+
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath("/notifications");
+  return { ok: true };
+}
+
+export async function clearAllNotifications(): Promise<ActionResult> {
+  const session = await getSession();
+  if (!session) return { ok: false, error: "Unauthorized" };
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("notifications").delete().eq("user_id", session.userId);
+
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath("/notifications");
+  return { ok: true };
+}
