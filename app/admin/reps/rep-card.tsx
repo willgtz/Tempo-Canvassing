@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { assignZip, unassignZip, updateUser, sendPasswordReset, type UserRole } from "./actions";
+import { Badge } from "@/components/ui/badge";
 
 export type ManagedUser = {
   id: string;
@@ -13,6 +14,12 @@ export type ManagedUser = {
   manager_id: string | null;
   can_view_company_leaderboard: boolean;
   excluded_from_leaderboard: boolean;
+  // Set by the invite-user Edge Function on an email-only invite (iOS
+  // admin panel) — full_name is a placeholder (the email's local part)
+  // until the invited user actually signs in and sets their own name.
+  // Never true for admin-created (addRep) or web-invited (inviteRep)
+  // accounts, which always collect a real name upfront.
+  name_pending: boolean;
 };
 
 type ManagerOption = { id: string; full_name: string; role: string };
@@ -256,13 +263,18 @@ export function RepCard({
       ) : (
         <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="font-medium">
-              {user.full_name}{" "}
+            <p className="flex flex-wrap items-center gap-1.5 font-medium">
+              {user.name_pending ? (
+                <span className="italic text-black/50 dark:text-white/50">Invited, not yet set up</span>
+              ) : (
+                user.full_name
+              )}
               <span className="text-xs font-normal text-black/50 dark:text-white/50">
                 ({user.role}
                 {!user.active ? ", inactive" : ""}
                 {isSelf ? ", you" : ""})
               </span>
+              {user.name_pending && <Badge className="border-amber-500/40 text-amber-700 dark:text-amber-400">Pending Invite</Badge>}
             </p>
             <p className="text-sm text-black/60 dark:text-white/60">{user.email}</p>
             {user.phone && (

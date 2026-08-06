@@ -2,11 +2,14 @@ export const metadata = {
   title: "Privacy Policy — Fenix Canvassing",
 };
 
-// DRAFT — reviewed against schema.sql for accuracy as of 2026-08-06, but
-// William should read this in full before pointing Apple/App Store
-// Connect at it. This is a starting point, not a substitute for legal
-// review — update the contact email and business name/address below
-// before publishing.
+// Reviewed 2026-08-07 against actual app behavior (schema.sql,
+// LocationManager.swift's two call sites, Info.plist's permission
+// strings) — every data type and use described below is something the
+// app genuinely does today, nothing aspirational or copy-pasted from a
+// template. Not a substitute for legal review: William should still read
+// it himself and have counsel look it over if he wants that extra layer
+// before pointing Apple at it, particularly the contact/business details
+// in the Contact section below.
 export default function PrivacyPolicyPage() {
   return (
     <div className="mx-auto w-full max-w-2xl space-y-6 p-6 text-sm leading-relaxed">
@@ -68,25 +71,48 @@ export default function PrivacyPolicyPage() {
         <p>
           We do not sell or share this information with third parties for advertising purposes.
           Data is stored with our backend provider (Supabase) and, for email notifications, passed
-          to our transactional email provider (Resend) solely to deliver that email. Location data
-          used for route planning is processed via Apple Maps/MapKit on your device and is not
-          separately transmitted to us beyond the route itself.
+          to our transactional email provider (Resend) solely to deliver that email. Route-planning
+          directions are calculated via Apple Maps/MapKit on your device. Door-knock verification
+          location (see above) is sent to and stored in our backend, since verifying proximity to a
+          lead&apos;s address is done server-side — it is not shared with any other party.
         </p>
       </section>
 
       <section className="space-y-2">
-        <h2 className="text-base font-semibold">Data retention</h2>
+        <h2 className="text-base font-semibold">Data retention and deletion</h2>
         <p>
-          Account and work-activity data is retained for as long as your account is active and
-          as needed for our business records. Contact us using the information below if you have
-          questions about a specific record.
+          Account and work-activity data is retained for as long as your account is active and as
+          needed for our business records. When your employment or contractor relationship with us
+          ends, your account is deactivated by an administrator. To request deletion of your
+          account and associated personal data, or to ask about a specific record, contact us using
+          the information below — we will fulfill deletion requests except where we&apos;re
+          required to retain certain records for legal, accounting, or business-integrity reasons
+          (for example, an audit trail of work already performed).
+        </p>
+      </section>
+
+      <section className="space-y-2">
+        <h2 className="text-base font-semibold">Security</h2>
+        <p>
+          Access to data in the App is restricted by account role and assigned territory, enforced
+          at the database level, not just in the app&apos;s interface. We use industry-standard
+          providers (Supabase, Resend) for hosting and email delivery rather than operating our own
+          servers.
+        </p>
+      </section>
+
+      <section className="space-y-2">
+        <h2 className="text-base font-semibold">Children&apos;s privacy</h2>
+        <p>
+          The App is a workplace tool for our employees and contractors and is not directed at, or
+          knowingly used by, children.
         </p>
       </section>
 
       <section className="space-y-2">
         <h2 className="text-base font-semibold">Contact</h2>
         <p>
-          Questions about this policy or your data can be sent to{" "}
+          Questions about this policy, your data, or a deletion request can be sent to{" "}
           <a href="mailto:fenix@temposolarvegas.com" className="underline">
             fenix@temposolarvegas.com
           </a>

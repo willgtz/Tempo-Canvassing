@@ -14,7 +14,7 @@ export default async function ManageRepsPage() {
     supabase
       .from("profiles")
       .select(
-        "id, full_name, email, phone, role, active, manager_id, can_view_company_leaderboard, excluded_from_leaderboard"
+        "id, full_name, email, phone, role, active, manager_id, can_view_company_leaderboard, excluded_from_leaderboard, name_pending"
       )
       .order("full_name"),
     supabase
