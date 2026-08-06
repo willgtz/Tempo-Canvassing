@@ -123,7 +123,7 @@ async function buildEmailBody(supabase: any, notification: NotificationRow): Pro
 
   const { data: appointment } = await supabase
     .from("appointments")
-    .select("scheduled_at, lead_id, custom_field_responses")
+    .select("scheduled_at, lead_id, created_by, custom_field_responses")
     .eq("id", notification.appointment_id)
     .single();
 
@@ -135,6 +135,12 @@ async function buildEmailBody(supabase: any, notification: NotificationRow): Pro
     .from("leads")
     .select("first_name, last_name, address_line, city, state, zipcode")
     .eq("id", appointment.lead_id)
+    .single();
+
+  const { data: opener } = await supabase
+    .from("profiles")
+    .select("full_name")
+    .eq("id", appointment.created_by)
     .single();
 
   const { data: formFields } = await supabase
@@ -165,11 +171,27 @@ async function buildEmailBody(supabase: any, notification: NotificationRow): Pro
     `Customer: ${customerName}`,
     `Address: ${address}`,
     `Scheduled: ${scheduledAt}`,
+    `Opener: ${opener?.full_name ?? "Unknown"}`,
   ];
 
   const responses = (appointment.custom_field_responses ?? {}) as Record<string, string>;
   // deno-lint-ignore no-explicit-any
-  for (const field of (formFields ?? []) as any[]) {
+  const fields = (formFields ?? []) as any[];
+
+  // The submission-form "Notes" field gets its own guaranteed, clearly
+  // labeled line right after the core details, same distinction iOS
+  // (AppointmentDetailScreen's submissionNoteText) and the web admin panel
+  // already make — matched by label containing "notes", same convention
+  // both of those use, rather than relying on sort_order happening to put
+  // it first.
+  const notesField = fields.find((f) => f.label.toLowerCase().includes("notes"));
+  if (notesField) {
+    const raw = responses[notesField.id]?.trim();
+    if (raw) lines.push(`Notes: ${raw}`);
+  }
+
+  for (const field of fields) {
+    if (field.id === notesField?.id) continue;
     const raw = responses[field.id]?.trim();
     if (!raw) continue;
     const value = field.field_type === "checkbox" ? (raw === "true" ? "Yes" : "No") : raw;
