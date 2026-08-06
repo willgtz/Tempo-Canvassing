@@ -351,6 +351,29 @@ export async function updateDoorKnockRadius(feet: number): Promise<UpdateRadiusR
   return { ok: true };
 }
 
+export type SendPasswordResetResult = { ok: true } | { ok: false; error: string };
+
+// resetPasswordForEmail is a public, non-privileged call by design (it
+// doesn't check who's calling or require the caller to already be that
+// user or an admin, so it can't be used to enumerate which emails have
+// accounts) — the getAdminSession() check below is a UX affordance
+// (only admins see this button), not what actually secures this call.
+export async function sendPasswordReset(email: string): Promise<SendPasswordResetResult> {
+  const session = await getAdminSession();
+  if (!session) return { ok: false, error: "Unauthorized" };
+
+  const supabase = await createClient();
+  const siteUrl = await getSiteUrl();
+  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: `${siteUrl}/reset-password`,
+  });
+
+  if (error) {
+    return { ok: false, error: error.message };
+  }
+  return { ok: true };
+}
+
 export async function unassignZip(assignmentId: string): Promise<UnassignZipResult> {
   const session = await getAdminSession();
   if (!session) return { ok: false, error: "Unauthorized" };

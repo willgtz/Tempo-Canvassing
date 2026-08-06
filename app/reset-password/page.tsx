@@ -4,11 +4,16 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
-export default function InvitePage() {
+// Separate from /invite, not shared — /invite's "finish setting up your
+// account" copy reads wrong for an existing user, and /invite also
+// conditionally shows a name field (name_pending flow) that has no
+// business appearing here. Reached via resetPasswordForEmail's
+// redirectTo, both from an admin resetting someone else's password
+// (AdminUserDetailScreen.swift, rep-card.tsx) and a rep's own "forgot
+// password" (iOS login screen) — same recovery-link mechanism either way.
+export default function ResetPasswordPage() {
   const [ready, setReady] = useState(false);
   const [hasSession, setHasSession] = useState(false);
-  const [namePending, setNamePending] = useState(false);
-  const [fullName, setFullName] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -17,26 +22,8 @@ export default function InvitePage() {
 
   useEffect(() => {
     const supabase = createClient();
-    // The invite link's tokens are in the URL when this page first loads;
-    // the client library picks them up and establishes a session
-    // automatically (detectSessionInUrl, on by default) before this
-    // resolves.
-    supabase.auth.getSession().then(async ({ data }) => {
-      const session = data.session;
-      setHasSession(Boolean(session));
-      if (session) {
-        // Email-only invites (invite-user Edge Function, used by the iOS
-        // admin panel) create the profile row with name_pending: true and
-        // a placeholder name — this is what tells us to still ask for a
-        // real one here. Invites sent from the web (inviteRep) already
-        // collect the name upfront, so name_pending is false for those.
-        const { data: profile } = await supabase
-          .from("profiles")
-          .select("name_pending")
-          .eq("id", session.user.id)
-          .single();
-        setNamePending(Boolean(profile?.name_pending));
-      }
+    supabase.auth.getSession().then(({ data }) => {
+      setHasSession(Boolean(data.session));
       setReady(true);
     });
   }, []);
@@ -45,10 +32,6 @@ export default function InvitePage() {
     e.preventDefault();
     setError(null);
 
-    if (namePending && !fullName.trim()) {
-      setError("Enter your name.");
-      return;
-    }
     if (password.length < 8) {
       setError("Password must be at least 8 characters.");
       return;
@@ -60,30 +43,14 @@ export default function InvitePage() {
 
     setIsSubmitting(true);
     const supabase = createClient();
-    const { data: userData, error: updateError } = await supabase.auth.updateUser({ password });
+    const { error: updateError } = await supabase.auth.updateUser({ password });
+    setIsSubmitting(false);
 
     if (updateError) {
-      setIsSubmitting(false);
       setError(updateError.message);
       return;
     }
 
-    if (namePending && userData.user) {
-      // Self-update — profiles_update_admin's RLS (schema.sql) allows
-      // id = auth.uid() on top of the admin path, so this needs no
-      // elevated access.
-      const { error: profileError } = await supabase
-        .from("profiles")
-        .update({ full_name: fullName.trim(), name_pending: false })
-        .eq("id", userData.user.id);
-      if (profileError) {
-        setIsSubmitting(false);
-        setError(profileError.message);
-        return;
-      }
-    }
-
-    setIsSubmitting(false);
     router.push("/dashboard");
   }
 
@@ -95,8 +62,8 @@ export default function InvitePage() {
     return (
       <div className="flex flex-1 items-center justify-center px-4">
         <p className="max-w-sm text-center text-sm text-red-600 dark:text-red-400">
-          This invite link is invalid or has expired. Ask your admin to send
-          a new one.
+          This reset link is invalid or has expired. Request a new one from
+          your admin, or use &quot;Forgot password?&quot; again.
         </p>
       </div>
     );
@@ -109,36 +76,15 @@ export default function InvitePage() {
         className="w-full max-w-sm space-y-4 rounded-lg border border-black/10 p-6 dark:border-white/10"
       >
         <div>
-          <h1 className="text-lg font-semibold">
-            {namePending ? "Welcome — let's finish setting up" : "Set your password"}
-          </h1>
+          <h1 className="text-lg font-semibold">Reset your password</h1>
           <p className="mt-1 text-sm text-black/60 dark:text-white/60">
-            {namePending
-              ? "Tell us your name and choose a password."
-              : "Choose a password to finish setting up your account."}
+            Choose a new password for your account.
           </p>
         </div>
 
-        {namePending && (
-          <div className="space-y-1">
-            <label htmlFor="fullName" className="text-sm font-medium">
-              Your name
-            </label>
-            <input
-              id="fullName"
-              type="text"
-              value={fullName}
-              onChange={(e) => setFullName(e.target.value)}
-              required
-              autoComplete="name"
-              className="w-full rounded border border-black/15 px-3 py-2 text-sm dark:border-white/20 dark:bg-transparent"
-            />
-          </div>
-        )}
-
         <div className="space-y-1">
           <label htmlFor="password" className="text-sm font-medium">
-            Password
+            New password
           </label>
           <input
             id="password"
@@ -154,7 +100,7 @@ export default function InvitePage() {
 
         <div className="space-y-1">
           <label htmlFor="confirmPassword" className="text-sm font-medium">
-            Confirm password
+            Confirm new password
           </label>
           <input
             id="confirmPassword"
@@ -179,7 +125,7 @@ export default function InvitePage() {
           disabled={isSubmitting}
           className="w-full rounded bg-black px-3 py-2 text-sm font-medium text-white disabled:opacity-50 dark:bg-white dark:text-black"
         >
-          {isSubmitting ? "Saving…" : "Set Password & Continue"}
+          {isSubmitting ? "Saving…" : "Reset Password"}
         </button>
       </form>
     </div>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { assignZip, unassignZip, updateUser, type UserRole } from "./actions";
+import { assignZip, unassignZip, updateUser, sendPasswordReset, type UserRole } from "./actions";
 
 export type ManagedUser = {
   id: string;
@@ -64,6 +64,17 @@ export function RepCard({
   const [zipInput, setZipInput] = useState("");
   const [zipError, setZipError] = useState<string | null>(null);
   const [isSavingZip, startZipSave] = useTransition();
+
+  const [resetMessage, setResetMessage] = useState<string | null>(null);
+  const [isSendingReset, startResetSend] = useTransition();
+
+  function handleSendReset() {
+    setResetMessage(null);
+    startResetSend(async () => {
+      const result = await sendPasswordReset(user.email);
+      setResetMessage(result.ok ? `Reset email sent to ${user.email}.` : result.error);
+    });
+  }
 
   function handleCancel() {
     setFullName(user.full_name);
@@ -266,12 +277,28 @@ export function RepCard({
               Can&apos;t edit your own account
             </span>
           ) : (
-            <button
-              onClick={() => setEditing(true)}
-              className="shrink-0 rounded border border-black/15 px-2 py-1 text-xs dark:border-white/20"
-            >
-              Edit
-            </button>
+            <div className="flex shrink-0 flex-col items-end gap-1">
+              <div className="flex gap-2">
+                <button
+                  onClick={handleSendReset}
+                  disabled={isSendingReset}
+                  className="rounded border border-black/15 px-2 py-1 text-xs disabled:opacity-50 dark:border-white/20"
+                >
+                  {isSendingReset ? "Sending…" : "Reset Password"}
+                </button>
+                <button
+                  onClick={() => setEditing(true)}
+                  className="rounded border border-black/15 px-2 py-1 text-xs dark:border-white/20"
+                >
+                  Edit
+                </button>
+              </div>
+              {resetMessage && (
+                <span className="max-w-[200px] text-right text-xs text-black/50 dark:text-white/50">
+                  {resetMessage}
+                </span>
+              )}
+            </div>
           )}
         </div>
       )}
