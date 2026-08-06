@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 const TABS = [
   { href: "/admin/reps/manage", label: "Manage" },
   { href: "/admin/reps/add", label: "Add Rep" },
+  { href: "/admin/reps/settings", label: "Door-Knock Settings" },
 ];
 
 export function RepsSubnav() {

@@ -281,7 +281,7 @@ export async function assignZip(userId: string, zipcode: string): Promise<Assign
 }
 
 export type GrantVisibilityResult =
-  | { ok: true; grant: { id: string; granteeId: string; targetId: string } }
+  | { ok: true; grants: { id: string; granteeId: string; targetId: string }[] }
   | { ok: false; error: string };
 
 export type RevokeVisibilityResult = { ok: true } | { ok: false; error: string };
@@ -290,27 +290,44 @@ export type RevokeVisibilityResult = { ok: true } | { ok: false; error: string }
 // visibility into Ryan's count doesn't give Ryan visibility into Ricky's.
 // RLS (dkvg_admin_write) independently enforces the admin-only write here
 // too; this check just produces a clean error instead of a raw DB one.
+//
+// Takes multiple targets in one call (one grantee can be given visibility
+// into several other reps at once from the settings UI) — upsert with
+// ignoreDuplicates so re-adding a grant that already exists is a silent
+// no-op instead of a unique-constraint error aborting the whole batch.
 export async function grantDoorKnockVisibility(
   granteeId: string,
-  targetId: string
+  targetIds: string[]
 ): Promise<GrantVisibilityResult> {
   const session = await getAdminSession();
   if (!session) return { ok: false, error: "Unauthorized" };
-  if (granteeId === targetId) return { ok: false, error: "Can't grant a user visibility into their own count." };
+  const filteredTargetIds = targetIds.filter((id) => id !== granteeId);
+  if (filteredTargetIds.length === 0) {
+    return { ok: false, error: "Pick at least one target other than the grantee." };
+  }
 
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("door_knock_visibility_grants")
-    .insert({ grantee_id: granteeId, target_id: targetId, granted_by: session.userId })
-    .select("id, grantee_id, target_id")
-    .single();
+    .upsert(
+      filteredTargetIds.map((targetId) => ({
+        grantee_id: granteeId,
+        target_id: targetId,
+        granted_by: session.userId,
+      })),
+      { onConflict: "grantee_id,target_id", ignoreDuplicates: true }
+    )
+    .select("id, grantee_id, target_id");
 
   if (error || !data) {
-    return { ok: false, error: error?.message ?? "Failed to add grant." };
+    return { ok: false, error: error?.message ?? "Failed to add grants." };
   }
 
-  revalidatePath("/admin/settings");
-  return { ok: true, grant: { id: data.id, granteeId: data.grantee_id, targetId: data.target_id } };
+  revalidatePath("/admin/reps/settings");
+  return {
+    ok: true,
+    grants: data.map((g) => ({ id: g.id, granteeId: g.grantee_id, targetId: g.target_id })),
+  };
 }
 
 export async function revokeDoorKnockVisibility(grantId: string): Promise<RevokeVisibilityResult> {
