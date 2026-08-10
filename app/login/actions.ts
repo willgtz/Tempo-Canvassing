@@ -49,3 +49,9 @@ export async function login(
   }
   redirect("/dashboard");
 }
+
+export async function logout(): Promise<void> {
+  const supabase = await createClient();
+  await supabase.auth.signOut();
+  redirect("/login");
+}

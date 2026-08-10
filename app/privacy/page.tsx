@@ -1,5 +1,5 @@
 export const metadata = {
-  title: "Privacy Policy — Fenix Canvassing",
+  title: "Privacy Policy",
 };
 
 // Reviewed 2026-08-07 against actual app behavior (schema.sql,

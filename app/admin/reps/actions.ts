@@ -391,6 +391,36 @@ export async function sendPasswordReset(email: string): Promise<SendPasswordRese
   return { ok: true };
 }
 
+export type SetUserPasswordResult = { ok: true } | { ok: false; error: string };
+
+// Unlike sendPasswordReset (an email link the user completes themselves),
+// this sets the password directly and immediately — genuinely privileged,
+// requires the service-role Admin API (adminClient), not a plain RLS-
+// checked table write. Real admin auth boundary is getAdminSession() below
+// combined with the service-role key never being exposed client-side; RLS
+// doesn't apply to auth.users at all.
+export async function setUserPassword(
+  userId: string,
+  newPassword: string
+): Promise<SetUserPasswordResult> {
+  const session = await getAdminSession();
+  if (!session) return { ok: false, error: "Unauthorized" };
+
+  if (newPassword.length < 8) {
+    return { ok: false, error: "Password must be at least 8 characters." };
+  }
+
+  const adminClient = createAdminClient();
+  const { error } = await adminClient.auth.admin.updateUserById(userId, {
+    password: newPassword,
+  });
+
+  if (error) {
+    return { ok: false, error: error.message };
+  }
+  return { ok: true };
+}
+
 export async function unassignZip(assignmentId: string): Promise<UnassignZipResult> {
   const session = await getAdminSession();
   if (!session) return { ok: false, error: "Unauthorized" };

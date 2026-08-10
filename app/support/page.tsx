@@ -1,5 +1,5 @@
 export const metadata = {
-  title: "Support — Fenix Canvassing",
+  title: "Support",
 };
 
 // App Store Connect requires a Support URL for every app listing —

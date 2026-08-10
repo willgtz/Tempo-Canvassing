@@ -1,8 +1,17 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { assignZip, unassignZip, updateUser, sendPasswordReset, type UserRole } from "./actions";
+import {
+  assignZip,
+  unassignZip,
+  updateUser,
+  sendPasswordReset,
+  setUserPassword,
+  type UserRole,
+} from "./actions";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 export type ManagedUser = {
   id: string;
@@ -80,6 +89,29 @@ export function RepCard({
     startResetSend(async () => {
       const result = await sendPasswordReset(user.email);
       setResetMessage(result.ok ? `Reset email sent to ${user.email}.` : result.error);
+    });
+  }
+
+  // Separate from handleSendReset — that one emails the user a link they
+  // complete themselves; this sets a password directly and immediately
+  // (e.g. for handing someone their login on the spot, or an Apple review
+  // test account where an email round-trip isn't practical).
+  const [showManualPassword, setShowManualPassword] = useState(false);
+  const [manualPassword, setManualPassword] = useState("");
+  const [manualPasswordMessage, setManualPasswordMessage] = useState<string | null>(null);
+  const [isSettingPassword, startSetPassword] = useTransition();
+
+  function handleSetPassword(e: React.FormEvent) {
+    e.preventDefault();
+    setManualPasswordMessage(null);
+    startSetPassword(async () => {
+      const result = await setUserPassword(user.id, manualPassword);
+      if (!result.ok) {
+        setManualPasswordMessage(result.error);
+        return;
+      }
+      setManualPasswordMessage("Password updated.");
+      setManualPassword("");
     });
   }
 
@@ -291,23 +323,47 @@ export function RepCard({
           ) : (
             <div className="flex shrink-0 flex-col items-end gap-1">
               <div className="flex gap-2">
-                <button
-                  onClick={handleSendReset}
-                  disabled={isSendingReset}
-                  className="rounded border border-black/15 px-2 py-1 text-xs disabled:opacity-50 dark:border-white/20"
+                <Button variant="secondary" size="sm" onClick={handleSendReset} disabled={isSendingReset}>
+                  {isSendingReset ? "Sending…" : "Email Reset Link"}
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => {
+                    setShowManualPassword((v) => !v);
+                    setManualPasswordMessage(null);
+                  }}
                 >
-                  {isSendingReset ? "Sending…" : "Reset Password"}
-                </button>
-                <button
-                  onClick={() => setEditing(true)}
-                  className="rounded border border-black/15 px-2 py-1 text-xs dark:border-white/20"
-                >
+                  Set Password
+                </Button>
+                <Button variant="secondary" size="sm" onClick={() => setEditing(true)}>
                   Edit
-                </button>
+                </Button>
               </div>
               {resetMessage && (
-                <span className="max-w-[200px] text-right text-xs text-black/50 dark:text-white/50">
+                <span className="max-w-[220px] text-right text-xs text-black/50 dark:text-white/50">
                   {resetMessage}
+                </span>
+              )}
+              {showManualPassword && (
+                <form onSubmit={handleSetPassword} className="mt-1 flex items-center gap-2">
+                  <Input
+                    type="password"
+                    value={manualPassword}
+                    onChange={(e) => setManualPassword(e.target.value)}
+                    placeholder="New password (min 8 chars)"
+                    minLength={8}
+                    required
+                    className="w-44"
+                  />
+                  <Button type="submit" size="sm" disabled={isSettingPassword}>
+                    {isSettingPassword ? "Saving…" : "Save"}
+                  </Button>
+                </form>
+              )}
+              {manualPasswordMessage && (
+                <span className="max-w-[220px] text-right text-xs text-black/50 dark:text-white/50">
+                  {manualPasswordMessage}
                 </span>
               )}
             </div>

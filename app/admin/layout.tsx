@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { requireAdmin } from "@/lib/auth/admin";
 import { NotificationsBell } from "@/components/notifications-bell";
+import { SignOutButton } from "@/components/sign-out-button";
 
 const NAV_LINKS = [
   { href: "/admin/dashboard", label: "Dashboard" },
@@ -22,15 +23,22 @@ export default async function AdminLayout({
 
   return (
     <div className="flex flex-1 flex-col">
-      <nav className="flex items-center justify-between gap-4 border-b border-black/10 px-6 py-3 text-sm dark:border-white/10">
-        <div className="flex gap-4">
+      <nav className="flex flex-wrap items-center justify-between gap-3 border-b border-black/10 px-6 py-3 dark:border-white/10">
+        <div className="flex flex-wrap gap-2">
           {NAV_LINKS.map((link) => (
-            <Link key={link.href} href={link.href} className="hover:underline">
+            <Link
+              key={link.href}
+              href={link.href}
+              className="rounded-full border border-black/15 px-3 py-1.5 text-sm font-medium text-black hover:bg-black/5 dark:border-white/20 dark:text-white dark:hover:bg-white/10"
+            >
               {link.label}
             </Link>
           ))}
         </div>
-        <NotificationsBell userId={session.userId} />
+        <div className="flex items-center gap-3">
+          <NotificationsBell userId={session.userId} />
+          <SignOutButton />
+        </div>
       </nav>
       {children}
     </div>
