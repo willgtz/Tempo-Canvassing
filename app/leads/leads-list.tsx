@@ -58,7 +58,7 @@ export function LeadsList({
           <div key={group.id}>
             <button
               onClick={() => toggleCollapsed(group.id)}
-              className="mb-2 flex w-full max-w-[720px] items-center gap-2 text-sm font-medium"
+              className="mb-2 flex w-full min-w-[720px] items-center gap-2 text-sm font-medium"
             >
               <span className="inline-block h-2 w-2 rounded-full" style={{ backgroundColor: group.color }} />
               {group.name}

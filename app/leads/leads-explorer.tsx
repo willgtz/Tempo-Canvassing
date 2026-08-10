@@ -187,60 +187,48 @@ export function LeadsExplorer({
 
   return (
     <div className="flex flex-1 flex-col">
-      <div className="flex flex-wrap items-end gap-3 border-b border-black/10 px-6 py-3 dark:border-white/10">
-        <div className="space-y-1">
-          <label className="text-xs font-medium">Disposition</label>
-          <Select value={dispositionFilter} onChange={(e) => setDispositionFilter(e.target.value)} className="block">
-            <option value="all">All</option>
-            {dispositions.map((d) => (
-              <option key={d.id} value={d.id}>
-                {d.name}
-              </option>
-            ))}
-          </Select>
-        </div>
-
-        {canFilterByRep && (
+      <div className="border-b border-black/10 px-6 py-3 dark:border-white/10">
+        <div className="flex flex-wrap items-end gap-3">
           <div className="space-y-1">
-            <label className="text-xs font-medium">Rep</label>
-            <Select
-              value={repFilter}
-              onChange={(e) => {
-                setRepFilter(e.target.value);
-                setZipFilter([]);
-              }}
-              className="block"
-            >
-              <option value="all">All reps</option>
-              {repOptions.map((r) => (
-                <option key={r.id} value={r.id}>
-                  {r.id === currentUserId ? `${r.name} (me)` : r.name}
+            <label className="text-xs font-medium">Disposition</label>
+            <Select value={dispositionFilter} onChange={(e) => setDispositionFilter(e.target.value)} className="block">
+              <option value="all">All</option>
+              {dispositions.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.name}
                 </option>
               ))}
             </Select>
-            {/* This list is built from who currently has an active zip
-                assignment (subordinate_zip_assignments RPC) — a rep with
-                no zips assigned yet won't appear here at all. Not an
-                error state, just an easy thing to mistake for one. */}
-            {repOptions.length === 0 && (
-              <p className="text-xs text-black/40 dark:text-white/40">
-                No reps have assigned zips yet — assign one in{" "}
-                <a href="/admin/reps/manage" className="underline">
-                  Manage Reps
-                </a>{" "}
-                to filter by them here.
-              </p>
-            )}
           </div>
-        )}
 
-        <SearchableMultiSelect
-          label="Zip"
-          options={zipOptions}
-          selected={zipFilter}
-          onChange={setZipFilter}
-          emptyMessage="No zips assigned yet"
-        />
+          {canFilterByRep && (
+            <div className="space-y-1">
+              <label className="text-xs font-medium">Rep</label>
+              <Select
+                value={repFilter}
+                onChange={(e) => {
+                  setRepFilter(e.target.value);
+                  setZipFilter([]);
+                }}
+                className="block"
+              >
+                <option value="all">All reps</option>
+                {repOptions.map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {r.id === currentUserId ? `${r.name} (me)` : r.name}
+                  </option>
+                ))}
+              </Select>
+            </div>
+          )}
+
+          <SearchableMultiSelect
+            label="Zip"
+            options={zipOptions}
+            selected={zipFilter}
+            onChange={setZipFilter}
+            emptyMessage="No zips assigned yet"
+          />
 
         <div className="space-y-1">
           <label className="text-xs font-medium">From</label>
@@ -335,6 +323,20 @@ export function LeadsExplorer({
             </button>
           </div>
         </div>
+      </div>
+      {/* Its own line below the whole filter row (not nested inside the
+          Rep filter item) so it can't throw off items-end alignment for
+          every other filter in that row the way it did when nested
+          inside the Rep field's own flex item. */}
+      {canFilterByRep && repOptions.length === 0 && (
+        <p className="mt-2 text-xs text-black/40 dark:text-white/40">
+          No reps have assigned zips yet — assign one in{" "}
+          <a href="/admin/reps/manage" className="underline">
+            Manage Reps
+          </a>{" "}
+          to filter by them here.
+        </p>
+      )}
       </div>
 
       <div className="flex-1">
