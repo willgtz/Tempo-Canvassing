@@ -75,7 +75,21 @@ export function LeadsList({
               </svg>
             </button>
             {!isCollapsed && (
-              <table className="w-full min-w-[720px] text-left text-sm">
+              // table-fixed + explicit column widths, identical across
+              // every group's table — plain table-layout: auto (the
+              // default) sizes each <table>'s columns independently based
+              // on only that group's own content, so "Address" (etc.)
+              // would land at a different width in every group and drift
+              // out of alignment scrolling down the page. Widths below
+              // are shared by every group, so columns always line up.
+              <table className="w-full min-w-[720px] table-fixed text-left text-sm">
+                <colgroup>
+                  <col className="w-[20%]" />
+                  <col className="w-[32%]" />
+                  <col className="w-[10%]" />
+                  <col className="w-[20%]" />
+                  <col className="w-[18%]" />
+                </colgroup>
                 <thead className="bg-black/5 dark:bg-white/5">
                   <tr>
                     <th className="px-3 py-2 font-medium">Name</th>
