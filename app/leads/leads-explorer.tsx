@@ -75,6 +75,7 @@ export function LeadsExplorer({
   const [routeError, setRouteError] = useState<string | null>(null);
   const [isRouting, startRouting] = useTransition();
   const [showMobileFilters, setShowMobileFilters] = useState(false);
+  const [showMobileSearch, setShowMobileSearch] = useState(false);
 
   const dispositionById = useMemo(
     () => new Map(dispositions.map((d) => [d.id, d])),
@@ -218,9 +219,10 @@ export function LeadsExplorer({
               Cancel
             </Button>
           </>
-        ) : (
+        ) : showMobileSearch ? (
           <>
             <Input
+              autoFocus
               value={addressQuery}
               onChange={(e) => setAddressQuery(e.target.value)}
               onKeyDown={(e) => {
@@ -228,10 +230,48 @@ export function LeadsExplorer({
                   e.preventDefault();
                   setAppliedAddressQuery(addressQuery);
                 }
+                if (e.key === "Escape") {
+                  e.preventDefault();
+                  setShowMobileSearch(false);
+                }
               }}
               placeholder="Search address"
               className="min-w-0 flex-1 rounded-full"
             />
+            <button
+              onClick={() => {
+                setShowMobileSearch(false);
+                setAddressQuery("");
+                setAppliedAddressQuery("");
+              }}
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-black/15 active:bg-black/10 dark:border-white/20 dark:active:bg-white/20"
+              aria-label="Close search"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="h-4.5 w-4.5">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 6l12 12M18 6L6 18" />
+              </svg>
+            </button>
+          </>
+        ) : (
+          <>
+            {/* Collapsed to an icon by default — a full-width search
+                input was eating almost as much of the compact bar as
+                the old desktop filter block did, working against the
+                whole point of this row (max space for the map). Expands
+                in place when tapped instead of always being open. */}
+            <button
+              onClick={() => setShowMobileSearch(true)}
+              className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-black/15 active:bg-black/10 dark:border-white/20 dark:active:bg-white/20"
+              aria-label="Search address"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="h-4.5 w-4.5">
+                <circle cx="11" cy="11" r="7" />
+                <path strokeLinecap="round" d="M21 21l-4.3-4.3" />
+              </svg>
+              {appliedAddressQuery && (
+                <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-blue-600" />
+              )}
+            </button>
             <button
               onClick={() => setShowMobileFilters(true)}
               className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-black/15 active:bg-black/10 dark:border-white/20 dark:active:bg-white/20"
