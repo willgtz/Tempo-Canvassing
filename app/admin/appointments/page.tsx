@@ -114,10 +114,10 @@ export default async function AppointmentsPage() {
   }));
 
   return (
-    <div className="mx-auto w-full max-w-5xl space-y-6 p-6">
+    <div className="mx-auto w-full max-w-5xl space-y-4 p-4 md:space-y-6 md:p-6">
       <div>
         <h1 className="text-xl font-semibold">Appointments</h1>
-        <p className="text-sm text-black/60 dark:text-white/60">
+        <p className="hidden text-sm text-black/60 md:block dark:text-white/60">
           Grouped by status. Click an appointment to assign openers/closers, update its status or
           date, and add notes.
         </p>

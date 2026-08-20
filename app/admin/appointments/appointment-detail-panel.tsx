@@ -475,7 +475,7 @@ export function AppointmentDetailPanel({
             onChange={(e) => setNewNoteText(e.target.value)}
             rows={3}
             placeholder="Add a note…"
-            className="w-full rounded border border-black/15 px-2 py-1 text-sm dark:border-white/20 dark:bg-transparent"
+            className="w-full rounded border border-black/15 px-2 py-1 text-base md:text-sm dark:border-white/20 dark:bg-transparent"
           />
           <div className="flex items-center gap-2">
             <button
