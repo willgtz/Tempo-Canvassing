@@ -21,6 +21,7 @@ import type { AppointmentFormField } from "@/app/leads/types";
 // Grouped-by-status list, same idea as iOS's AppointmentsListView (List
 // mode) — one section per status, ordered by each status's own sort_order.
 export function AppointmentsExplorer({
+  title,
   initialAppointments,
   statuses,
   formFields,
@@ -30,6 +31,7 @@ export function AppointmentsExplorer({
   activeProfiles,
   sectionOrder,
 }: {
+  title: string;
   initialAppointments: Appointment[];
   statuses: AppointmentStatus[];
   formFields: AppointmentFormField[];
@@ -183,7 +185,8 @@ export function AppointmentsExplorer({
           controls, and an icon view toggle — instead of the full
           three-row Card, which ate most of the screen on a phone. Mirrors
           the same compaction done on the Leads page. */}
-      <div className="flex shrink-0 items-center gap-2 md:hidden">
+      <div className="flex shrink-0 items-center justify-between gap-2 md:hidden">
+        {!showMobileSearch && <h1 className="shrink-0 text-lg font-semibold">{title}</h1>}
         {showMobileSearch ? (
           <>
             <Input
@@ -213,10 +216,10 @@ export function AppointmentsExplorer({
             </button>
           </>
         ) : (
-          <>
-            {/* Collapsed to an icon by default — same treatment as the
-                Leads page mobile bar, so the calendar/list gets the
-                space back instead of an always-open search input. */}
+          // Wrapped in one div (not a bare fragment) so justify-between
+          // on the parent puts exactly one gap between the title and this
+          // whole cluster, rather than spreading each icon apart too.
+          <div className="flex shrink-0 items-center gap-2">
             <button
               onClick={() => setShowMobileSearch(true)}
               className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-black/15 active:bg-black/10 dark:border-white/20 dark:active:bg-white/20"
@@ -264,7 +267,7 @@ export function AppointmentsExplorer({
                 </svg>
               </button>
             </div>
-          </>
+          </div>
         )}
       </div>
 

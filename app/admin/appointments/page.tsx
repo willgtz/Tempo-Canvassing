@@ -119,15 +119,19 @@ export default async function AppointmentsPage() {
     // page: the calendar needs a real height to fill instead of the page
     // just growing to fit 24 hour rows.
     <div className="mx-auto flex min-h-0 w-full max-w-5xl flex-1 flex-col gap-4 overflow-hidden p-4 md:gap-6 md:p-6">
-      <div className="shrink-0">
+      {/* Hidden on mobile — AppointmentsExplorer renders this same title
+          inline with its own compact search/filter/toggle row instead,
+          to save a whole row of vertical space. */}
+      <div className="hidden shrink-0 md:block">
         <h1 className="text-xl font-semibold">Appointments</h1>
-        <p className="hidden text-sm text-black/60 md:block dark:text-white/60">
+        <p className="text-sm text-black/60 dark:text-white/60">
           Grouped by status. Click an appointment to assign openers/closers, update its status or
           date, and add notes.
         </p>
       </div>
 
       <AppointmentsExplorer
+        title="Appointments"
         initialAppointments={(appointments ?? []) as Appointment[]}
         statuses={(statuses ?? []) as AppointmentStatus[]}
         formFields={(formFields ?? []) as AppointmentFormField[]}

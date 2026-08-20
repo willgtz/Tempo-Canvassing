@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useTransition, type ReactNode } from "react";
+import { useSlideIn } from "@/lib/use-slide-in";
+import { cn } from "@/components/ui/cn";
 import {
   addAppointmentNote,
   markDealSubmitted,
@@ -71,6 +73,7 @@ export function AppointmentDetailPanel({
   onNoteAdded: (note: AppointmentNote) => void;
   onLeadNameUpdated: (leadId: string, firstName: string | null, lastName: string | null) => void;
 }) {
+  const visible = useSlideIn();
   const originalName = [lead?.first_name, lead?.last_name].filter(Boolean).join(" ");
   const [nameDraft, setNameDraft] = useState(originalName);
   const [isSavingName, startNameSave] = useTransition();
@@ -525,8 +528,19 @@ export function AppointmentDetailPanel({
 
   return (
     <>
-      <div className="fixed inset-0 z-20 bg-black/30 backdrop-blur-sm" onClick={onClose} />
-      <div className="fixed right-0 top-0 z-30 h-full w-full max-w-md overflow-y-auto border-l border-black/10 bg-white p-6 shadow-xl dark:border-white/10 dark:bg-neutral-950">
+      <div
+        className={cn(
+          "fixed inset-0 z-20 bg-black/30 backdrop-blur-sm transition-opacity duration-200",
+          visible ? "opacity-100" : "opacity-0"
+        )}
+        onClick={onClose}
+      />
+      <div
+        className={cn(
+          "fixed right-0 top-0 z-30 h-full w-full max-w-md overflow-y-auto border-l border-black/10 bg-white p-6 shadow-xl transition-transform duration-200 ease-out dark:border-white/10 dark:bg-neutral-950",
+          visible ? "translate-x-0" : "translate-x-full"
+        )}
+      >
         <div className="flex justify-end">
           <button
             onClick={onClose}
@@ -536,8 +550,17 @@ export function AppointmentDetailPanel({
           </button>
         </div>
 
-        {sectionOrder.map((key) => (
-          <div key={key} className="mt-4">
+        {sectionOrder.map((key, i) => (
+          <div
+            key={key}
+            className={cn(
+              "mt-4",
+              // First section sits right under the name/close row — a
+              // divider there would look like a stray line, not an
+              // actual boundary between two data groups.
+              i > 0 && "mt-6 border-t border-black/10 pt-4 dark:border-white/10"
+            )}
+          >
             {sectionContent[key] ?? null}
           </div>
         ))}

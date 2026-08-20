@@ -5,6 +5,8 @@ import { updateMyAppointmentStatus, addMyAppointmentNote } from "./actions";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { useSlideIn } from "@/lib/use-slide-in";
+import { cn } from "@/components/ui/cn";
 import type {
   Appointment,
   AppointmentAssignment,
@@ -46,6 +48,7 @@ export function RepAppointmentDetail({
   const closers = assignments.filter((a) => a.role === "closer");
   const currentStatus = statuses.find((s) => s.id === appointment.status_id);
 
+  const visible = useSlideIn();
   const [statusId, setStatusId] = useState(appointment.status_id);
   const [statusError, setStatusError] = useState<string | null>(null);
   const [isSavingStatus, startStatusSave] = useTransition();
@@ -84,8 +87,19 @@ export function RepAppointmentDetail({
 
   return (
     <>
-      <div className="fixed inset-0 z-30 bg-black/30 backdrop-blur-sm" onClick={onClose} />
-      <div className="fixed inset-x-0 bottom-0 z-40 max-h-[85vh] overflow-y-auto rounded-t-2xl border-t border-black/10 bg-white/90 p-5 shadow-xl backdrop-blur-xl sm:inset-x-auto sm:right-6 sm:bottom-6 sm:w-full sm:max-w-md sm:rounded-2xl sm:border dark:border-white/10 dark:bg-neutral-950/90">
+      <div
+        className={cn(
+          "fixed inset-0 z-30 bg-black/30 backdrop-blur-sm transition-opacity duration-200",
+          visible ? "opacity-100" : "opacity-0"
+        )}
+        onClick={onClose}
+      />
+      <div
+        className={cn(
+          "fixed inset-x-0 bottom-0 z-40 max-h-[85vh] overflow-y-auto rounded-t-2xl border-t border-black/10 bg-white/90 p-5 shadow-xl backdrop-blur-xl transition-all duration-200 ease-out sm:inset-x-auto sm:right-6 sm:bottom-6 sm:w-full sm:max-w-md sm:rounded-2xl sm:border dark:border-white/10 dark:bg-neutral-950/90",
+          visible ? "translate-y-0 sm:translate-y-0 sm:opacity-100" : "translate-y-full sm:translate-y-4 sm:opacity-0"
+        )}
+      >
         <div className="flex items-start justify-between gap-4">
           <div>
             <h2 className="text-lg font-semibold">
@@ -100,21 +114,21 @@ export function RepAppointmentDetail({
           </Button>
         </div>
 
-        <p className="mt-3 text-sm">
+        <p className="mt-4 border-t border-black/10 pt-4 text-sm dark:border-white/10">
           {new Date(appointment.scheduled_at).toLocaleString(undefined, {
             dateStyle: "medium",
             timeStyle: "short",
           })}
         </p>
 
-        <div className="mt-4 space-y-1">
+        <div className="mt-4 space-y-1 border-t border-black/10 pt-4 dark:border-white/10">
           <p className="text-xs font-medium text-black/50 dark:text-white/50">Opener{openers.length === 1 ? "" : "s"}</p>
           <p className="text-sm">{openers.map((a) => a.full_name).join(", ") || "—"}</p>
           <p className="mt-2 text-xs font-medium text-black/50 dark:text-white/50">Closer{closers.length === 1 ? "" : "s"}</p>
           <p className="text-sm">{closers.map((a) => a.full_name).join(", ") || "Unassigned"}</p>
         </div>
 
-        <div className="mt-4 space-y-1">
+        <div className="mt-4 space-y-1 border-t border-black/10 pt-4 dark:border-white/10">
           <p className="text-xs font-medium text-black/50 dark:text-white/50">Status</p>
           {isMyCloseJob ? (
             <Select value={statusId} onChange={(e) => handleStatusChange(e.target.value)} disabled={isSavingStatus}>

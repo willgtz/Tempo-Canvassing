@@ -4,6 +4,8 @@ import { useEffect, useState, useTransition } from "react";
 import { updateLeadDisposition, updateLeadPriorSaleDate, addLeadNote } from "./actions";
 import { SetAppointmentModal } from "./set-appointment-modal";
 import { getCurrentLocation, distanceFeet } from "@/lib/geo";
+import { useSlideIn } from "@/lib/use-slide-in";
+import { cn } from "@/components/ui/cn";
 import type { AppointmentFormField, Disposition, Lead } from "./types";
 
 type Note = {
@@ -43,6 +45,7 @@ export function LeadDetailPanel({
   onPriorSaleDateSaved: (leadId: string, priorSaleDate: string | null) => void;
   onLeadUpdated: (lead: Lead) => void;
 }) {
+  const visible = useSlideIn();
   const [showSetAppointment, setShowSetAppointment] = useState(false);
   const [dispositionId, setDispositionId] = useState(lead.disposition_id ?? "");
   const [dispositionError, setDispositionError] = useState<string | null>(null);
@@ -178,7 +181,13 @@ export function LeadDetailPanel({
 
   return (
     <>
-      <div className="fixed inset-0 z-20 bg-black/30 backdrop-blur-sm" onClick={onClose} />
+      <div
+        className={cn(
+          "fixed inset-0 z-20 bg-black/30 backdrop-blur-sm transition-opacity duration-200",
+          visible ? "opacity-100" : "opacity-0"
+        )}
+        onClick={onClose}
+      />
       {doorKnockNotice && (
         <div className="fixed inset-x-0 bottom-4 z-50 flex justify-center px-4">
           <div className="rounded-full bg-black/90 px-4 py-2 text-center text-sm text-white shadow-lg dark:bg-white/90 dark:text-black">
@@ -186,7 +195,12 @@ export function LeadDetailPanel({
           </div>
         </div>
       )}
-      <div className="fixed right-0 top-0 z-30 h-full w-full max-w-md overflow-y-auto border-l border-black/10 bg-white p-6 shadow-xl dark:border-white/10 dark:bg-neutral-950">
+      <div
+        className={cn(
+          "fixed right-0 top-0 z-30 h-full w-full max-w-md overflow-y-auto border-l border-black/10 bg-white p-6 shadow-xl transition-transform duration-200 ease-out dark:border-white/10 dark:bg-neutral-950",
+          visible ? "translate-x-0" : "translate-x-full"
+        )}
+      >
         <div className="flex items-start justify-between gap-4">
           <h2 className="text-lg font-semibold">
             {[lead.first_name, lead.last_name].filter(Boolean).join(" ") || "Lead"}
@@ -220,7 +234,7 @@ export function LeadDetailPanel({
         </button>
 
         {isAdmin ? (
-          <div className="mt-4 space-y-2">
+          <div className="mt-6 space-y-2 border-t border-black/10 pt-4 dark:border-white/10">
             <label className="text-xs font-medium">Sold Date</label>
             <div className="flex items-center gap-2">
               <input
@@ -249,7 +263,7 @@ export function LeadDetailPanel({
           )
         )}
 
-        <div className="mt-6 space-y-2">
+        <div className="mt-6 space-y-2 border-t border-black/10 pt-4 dark:border-white/10">
           <label className="text-xs font-medium">Disposition</label>
           <div className="flex items-center gap-2">
             <select
@@ -277,7 +291,7 @@ export function LeadDetailPanel({
           )}
         </div>
 
-        <div className="mt-8 space-y-3">
+        <div className="mt-6 space-y-3 border-t border-black/10 pt-4 dark:border-white/10">
           <h3 className="text-sm font-medium">Notes</h3>
 
           <div className="space-y-1">
@@ -324,9 +338,9 @@ export function LeadDetailPanel({
           </div>
         </div>
 
-        <details className="mt-8">
+        <details className="mt-6 border-t border-black/10 pt-4 dark:border-white/10">
           <summary className="cursor-pointer select-none text-sm font-medium">History</summary>
-          <div className="mt-3 space-y-3 border-t border-black/10 pt-3 dark:border-white/10">
+          <div className="mt-3 space-y-3">
             {historyError && <p className="text-xs text-red-600 dark:text-red-400">{historyError}</p>}
             {history === null && !historyError && (
               <p className="text-xs text-black/50 dark:text-white/50">Loading history…</p>

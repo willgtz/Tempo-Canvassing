@@ -10,6 +10,7 @@ import { RouteResultPanel } from "./route-result-panel";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
 import { cn } from "@/components/ui/cn";
+import { MobileTabBarSpacer } from "@/components/mobile-tab-bar";
 import { getCurrentLocation } from "@/lib/geo";
 import type { AppointmentFormField, Disposition, Lead, RouteStop, TeamZip } from "./types";
 
@@ -187,7 +188,7 @@ export function LeadsExplorer({
           search/filter in a small floating capsule rather than a full
           inline form. Full filter set (Disposition/Rep/Zip/dates) moved
           into a bottom sheet opened via the filter icon, not removed. */}
-      <div className="flex items-center gap-2 border-b border-black/10 px-3 py-2 md:hidden dark:border-white/10">
+      <div className="flex items-center justify-end gap-2 border-b border-black/10 px-3 py-2 md:hidden dark:border-white/10">
         {selectMode ? (
           <>
             <span className="flex-1 text-sm">
@@ -279,6 +280,23 @@ export function LeadsExplorer({
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 5v14M5 12h14" />
               </svg>
             </button>
+            {/* Route-building was only reachable buried inside the
+                filter sheet — pulled it out to its own icon here since
+                it's a primary map action, not a filter. Map-only: select
+                mode picks pins on the map, nothing to select in List. */}
+            {viewMode === "map" && (
+              <button
+                onClick={() => setSelectMode(true)}
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-black/15 active:bg-black/10 dark:border-white/20 dark:active:bg-white/20"
+                aria-label="Select leads for route"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="h-4.5 w-4.5">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 19c3-6 5-3 7-8s3-6 9-6" strokeDasharray="2.5 2.5" />
+                  <circle cx="4" cy="19" r="1.6" fill="currentColor" stroke="none" />
+                  <circle cx="20" cy="5" r="1.6" fill="currentColor" stroke="none" />
+                </svg>
+              </button>
+            )}
             <div className="flex shrink-0 overflow-hidden rounded-full border border-black/15 dark:border-white/20">
               <button
                 onClick={() => setViewMode("map")}
@@ -367,17 +385,6 @@ export function LeadsExplorer({
             </div>
 
             <div className="flex gap-2 border-t border-black/10 pt-4 dark:border-white/10">
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={() => {
-                  setSelectMode(true);
-                  setShowMobileFilters(false);
-                }}
-                className="flex-1"
-              >
-                Select Leads
-              </Button>
               <Button type="button" variant="secondary" onClick={handleClearFilters} className="flex-1">
                 Clear Filters
               </Button>
@@ -566,6 +573,12 @@ export function LeadsExplorer({
           />
         )}
       </div>
+
+      {/* Only in List mode — Map mode deliberately has no spacer (the map
+          bleeds edge-to-edge under the fixed tab bar on purpose), but
+          List is a normal scrolling flow and its last card was getting
+          hidden behind the tab bar with nothing reserving space for it. */}
+      {viewMode === "list" && <MobileTabBarSpacer />}
 
       {selectedLead && (
         <LeadDetailPanel

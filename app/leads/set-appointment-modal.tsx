@@ -2,6 +2,8 @@
 
 import { useState, useTransition } from "react";
 import { submitAppointment } from "./actions";
+import { useSlideIn } from "@/lib/use-slide-in";
+import { cn } from "@/components/ui/cn";
 import type { AppointmentFormField, Lead } from "./types";
 
 // Mirrors NewAppointmentSheet.swift: name/address pulled from the lead
@@ -22,6 +24,7 @@ export function SetAppointmentModal({
   onClose: () => void;
   onSubmitted: (updatedLead: Lead) => void;
 }) {
+  const visible = useSlideIn();
   const originalName = [lead.first_name, lead.last_name].filter(Boolean).join(" ");
   const [nameDraft, setNameDraft] = useState(originalName);
   const [scheduledAt, setScheduledAt] = useState(() => {
@@ -70,8 +73,19 @@ export function SetAppointmentModal({
 
   return (
     <>
-      <div className="fixed inset-0 z-20 bg-black/30 backdrop-blur-sm" onClick={onClose} />
-      <div className="fixed left-1/2 top-1/2 z-30 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-lg border border-black/10 bg-white p-6 shadow-xl dark:border-white/10 dark:bg-neutral-950">
+      <div
+        className={cn(
+          "fixed inset-0 z-20 bg-black/30 backdrop-blur-sm transition-opacity duration-200",
+          visible ? "opacity-100" : "opacity-0"
+        )}
+        onClick={onClose}
+      />
+      <div
+        className={cn(
+          "fixed left-1/2 top-1/2 z-30 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-lg border border-black/10 bg-white p-6 shadow-xl transition-all duration-200 ease-out dark:border-white/10 dark:bg-neutral-950",
+          visible ? "scale-100 opacity-100" : "scale-95 opacity-0"
+        )}
+      >
         <div className="flex items-start justify-between gap-4">
           <h2 className="text-lg font-semibold">Set Appointment</h2>
           <button

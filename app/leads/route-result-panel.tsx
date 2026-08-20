@@ -1,5 +1,7 @@
 "use client";
 
+import { useSlideIn } from "@/lib/use-slide-in";
+import { cn } from "@/components/ui/cn";
 import type { RouteStop } from "./types";
 
 function buildGoogleMapsUrl(stops: RouteStop[]): string {
@@ -53,11 +55,23 @@ export function RouteResultPanel({
   onClose: () => void;
 }) {
   const mapsUrl = buildGoogleMapsUrl(stops);
+  const visible = useSlideIn();
 
   return (
     <>
-      <div className="fixed inset-0 z-20 bg-black/30 backdrop-blur-sm" onClick={onClose} />
-      <div className="fixed right-0 top-0 z-30 h-full w-full max-w-md overflow-y-auto border-l border-black/10 bg-white p-6 shadow-xl dark:border-white/10 dark:bg-neutral-950">
+      <div
+        className={cn(
+          "fixed inset-0 z-20 bg-black/30 backdrop-blur-sm transition-opacity duration-200",
+          visible ? "opacity-100" : "opacity-0"
+        )}
+        onClick={onClose}
+      />
+      <div
+        className={cn(
+          "fixed right-0 top-0 z-30 h-full w-full max-w-md overflow-y-auto border-l border-black/10 bg-white p-6 shadow-xl transition-transform duration-200 ease-out dark:border-white/10 dark:bg-neutral-950",
+          visible ? "translate-x-0" : "translate-x-full"
+        )}
+      >
         <div className="flex items-start justify-between gap-4">
           <h2 className="text-lg font-semibold">Optimized Route</h2>
           <button

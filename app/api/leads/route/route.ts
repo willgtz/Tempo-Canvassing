@@ -122,5 +122,18 @@ export async function POST(request: Request) {
     };
   });
 
+  // Logged for Route History (routes table, schema.sql — already existed
+  // unused: nothing ever wrote to it before this). Best-effort: a failure
+  // here shouldn't fail the route the rep is actually waiting on.
+  const orderedLeadIds = stops.map((s) => s.leadId).filter((id): id is string => id !== null);
+  const { error: historyError } = await supabase.from("routes").insert({
+    user_id: session.userId,
+    lead_ids: leadIds,
+    ordered_lead_ids: orderedLeadIds,
+  });
+  if (historyError) {
+    console.error("Failed to save route history:", historyError.message);
+  }
+
   return NextResponse.json({ stops, skippedCount });
 }
