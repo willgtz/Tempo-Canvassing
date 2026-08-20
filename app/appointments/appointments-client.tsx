@@ -41,8 +41,8 @@ export function AppointmentsClient({
   const selected = appointmentsState.find((a) => a.id === selectedId) ?? null;
 
   return (
-    <div className="mx-auto w-full max-w-5xl space-y-4 p-4 md:p-6">
-      <div className="flex items-center justify-between gap-4">
+    <div className="mx-auto flex min-h-0 w-full max-w-5xl flex-1 flex-col gap-4 overflow-hidden p-4 md:gap-6 md:p-6">
+      <div className="flex shrink-0 items-center justify-between gap-4">
         <h1 className="text-xl font-semibold">Appointments</h1>
         <div className="flex shrink-0 overflow-hidden rounded-full border border-black/15 dark:border-white/20">
           {(["calendar", "list"] as const).map((mode) => (
@@ -66,18 +66,21 @@ export function AppointmentsClient({
         </p>
       ) : viewMode === "calendar" ? (
         <AppointmentsCalendar
+          className="min-h-0 flex-1"
           appointments={appointmentsState}
           statuses={statuses}
           leadById={leadById}
           onSelect={setSelectedId}
         />
       ) : (
-        <AppointmentsList
-          appointments={appointmentsState}
-          statuses={statuses}
-          leadById={leadById}
-          onSelect={setSelectedId}
-        />
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <AppointmentsList
+            appointments={appointmentsState}
+            statuses={statuses}
+            leadById={leadById}
+            onSelect={setSelectedId}
+          />
+        </div>
       )}
 
       {selected && (

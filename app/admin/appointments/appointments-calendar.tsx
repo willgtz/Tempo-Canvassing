@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { cn } from "@/components/ui/cn";
 import type { Appointment, AppointmentLead, AppointmentStatus } from "./types";
 
 // Mirrors AppointmentsCalendarView.swift's exact three sub-modes and
@@ -45,11 +46,13 @@ export function AppointmentsCalendar({
   statuses,
   leadById,
   onSelect,
+  className,
 }: {
   appointments: Appointment[];
   statuses: AppointmentStatus[];
   leadById: Map<string, AppointmentLead>;
   onSelect: (appointmentId: string) => void;
+  className?: string;
 }) {
   const [subMode, setSubMode] = useState<SubMode>("day");
   const [referenceDate, setReferenceDate] = useState(() => new Date());
@@ -79,8 +82,12 @@ export function AppointmentsCalendar({
   }
 
   return (
-    <div className="rounded-lg border border-black/10 dark:border-white/10">
-      <div className="flex gap-1 border-b border-black/10 p-2 dark:border-white/10">
+    // flex-col + min-h-0 (not just a plain box) so this can genuinely
+    // participate in a flex-grow height chain from callers that need the
+    // calendar to fill available space with its own internal scroll —
+    // see the className usage on the rep Appointments page.
+    <div className={cn("flex min-h-0 flex-col rounded-lg border border-black/10 dark:border-white/10", className)}>
+      <div className="flex shrink-0 gap-1 border-b border-black/10 p-2 dark:border-white/10">
         {(["day", "week", "month"] as const).map((mode) => (
           <button
             key={mode}
@@ -96,7 +103,7 @@ export function AppointmentsCalendar({
         ))}
       </div>
 
-      <div className="flex items-center justify-between border-b border-black/10 px-3 py-2 dark:border-white/10">
+      <div className="flex shrink-0 items-center justify-between border-b border-black/10 px-3 py-2 dark:border-white/10">
         <button onClick={() => step(-1)} className="p-1 text-black/50 hover:text-black dark:text-white/50 dark:hover:text-white" aria-label="Previous">
           ‹
         </button>
@@ -150,7 +157,7 @@ function MonthGrid({
   const days = Array.from({ length: 42 }, (_, i) => addDays(gridStart, i));
 
   return (
-    <div className="grid grid-cols-7 gap-0.5 p-2">
+    <div className="grid min-h-0 max-h-[85vh] flex-1 auto-rows-min grid-cols-7 gap-0.5 overflow-y-auto p-2">
       {WEEKDAY_LABELS.map((label, i) => (
         <div key={i} className="py-1 text-center text-xs font-semibold text-black/40 dark:text-white/40">
           {label}
@@ -207,7 +214,7 @@ function WeekGrid({
   const days = Array.from({ length: 7 }, (_, i) => addDays(start, i));
 
   return (
-    <div className="grid grid-cols-7 gap-1 p-2">
+    <div className="grid min-h-0 max-h-[85vh] flex-1 auto-rows-min grid-cols-7 gap-1 overflow-y-auto p-2">
       {days.map((day) => {
         const dayAppointments = appointments
           .filter((a) => isSameDay(new Date(a.scheduled_at), day))
@@ -270,7 +277,7 @@ function DayGrid({
   }
 
   return (
-    <div className="max-h-[600px] overflow-y-auto p-2">
+    <div className="min-h-0 max-h-[85vh] flex-1 overflow-y-auto p-2">
       {hours.map((hour) => {
         const inHour = dayAppointments.filter((a) => new Date(a.scheduled_at).getHours() === hour);
         return (

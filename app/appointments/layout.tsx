@@ -12,7 +12,13 @@ export default async function AppointmentsLayout({
   const session = await requireSession();
 
   return (
-    <div className="flex flex-1 flex-col">
+    // h-dvh + overflow-hidden locks this route to exactly the viewport
+    // height instead of growing with content — the calendar's day view
+    // needs its own internal scroll (see appointments-calendar.tsx),
+    // not a second, outer page-level scroll on top of it. h-dvh (not
+    // h-screen) tracks mobile Safari's dynamic toolbar so this doesn't
+    // over/under-shoot when the address bar shows or hides.
+    <div className="flex h-dvh flex-col overflow-hidden">
       <nav className="hidden flex-wrap items-center justify-between gap-3 border-b border-black/10 px-6 py-3 md:flex dark:border-white/10">
         <span className="text-sm font-medium">{session.fullName}</span>
         <div className="flex flex-wrap items-center gap-2">
@@ -40,7 +46,14 @@ export default async function AppointmentsLayout({
           <SignOutButton />
         </div>
       </nav>
-      {children}
+      {/* flex-1 + min-h-0 (not h-full) so this genuinely participates in
+          the flex-grow chain above instead of relying on percentage
+          height, which doesn't reliably resolve against a flex-item
+          ancestor's flex-computed height (min-h-0 is what lets it shrink
+          below its content's natural height so the overflow inside
+          AppointmentsCalendar actually engages instead of this div just
+          growing to fit). */}
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">{children}</div>
       <MobileTabBarSpacer />
       <MobileTabBar isAdmin={session.role === "admin" || session.role === "super_admin"} />
     </div>
