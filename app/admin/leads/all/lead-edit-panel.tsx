@@ -65,7 +65,7 @@ export function LeadEditPanel({
 
   return (
     <>
-      <div className="fixed inset-0 z-20 bg-black/30" onClick={onClose} />
+      <div className="fixed inset-0 z-20 bg-black/30 backdrop-blur-sm" onClick={onClose} />
       <div className="fixed right-0 top-0 z-30 h-full w-full max-w-md overflow-y-auto border-l border-black/10 bg-white p-6 shadow-xl dark:border-white/10 dark:bg-neutral-950">
         <div className="flex items-start justify-between gap-4">
           <h2 className="text-lg font-semibold">Edit Lead</h2>

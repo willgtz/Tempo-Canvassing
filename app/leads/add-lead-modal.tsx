@@ -46,7 +46,7 @@ export function AddLeadModal({
 
   return (
     <>
-      <div className="fixed inset-0 z-20 bg-black/30" onClick={onClose} />
+      <div className="fixed inset-0 z-20 bg-black/30 backdrop-blur-sm" onClick={onClose} />
       <div className="fixed left-1/2 top-1/2 z-30 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-lg border border-black/10 bg-white p-6 shadow-xl dark:border-white/10 dark:bg-neutral-950">
         <div className="flex items-start justify-between gap-4">
           <h2 className="text-lg font-semibold">Add Lead</h2>

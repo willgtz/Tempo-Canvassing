@@ -178,7 +178,7 @@ export function LeadDetailPanel({
 
   return (
     <>
-      <div className="fixed inset-0 z-20 bg-black/30" onClick={onClose} />
+      <div className="fixed inset-0 z-20 bg-black/30 backdrop-blur-sm" onClick={onClose} />
       {doorKnockNotice && (
         <div className="fixed inset-x-0 bottom-4 z-50 flex justify-center px-4">
           <div className="rounded-full bg-black/90 px-4 py-2 text-center text-sm text-white shadow-lg dark:bg-white/90 dark:text-black">

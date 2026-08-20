@@ -270,8 +270,8 @@ export function AppointmentsExplorer({
 
       {showMobileFilters && (
         <>
-          <div className="fixed inset-0 z-30 bg-black/30 md:hidden" onClick={() => setShowMobileFilters(false)} />
-          <div className="fixed inset-x-0 bottom-0 z-40 max-h-[80vh] space-y-4 overflow-y-auto rounded-t-2xl border-t border-black/10 bg-white p-5 md:hidden dark:border-white/10 dark:bg-neutral-950">
+          <div className="fixed inset-0 z-30 bg-black/30 backdrop-blur-sm md:hidden" onClick={() => setShowMobileFilters(false)} />
+          <div className="fixed inset-x-0 bottom-0 z-40 max-h-[80vh] space-y-4 overflow-y-auto rounded-t-2xl border-t border-black/10 bg-white/90 p-5 backdrop-blur-xl md:hidden dark:border-white/10 dark:bg-neutral-950/90">
             <div className="flex items-center justify-between">
               <h2 className="text-base font-semibold">Filters</h2>
               <Button variant="ghost" size="sm" onClick={() => setShowMobileFilters(false)}>

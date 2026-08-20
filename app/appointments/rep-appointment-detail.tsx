@@ -84,8 +84,8 @@ export function RepAppointmentDetail({
 
   return (
     <>
-      <div className="fixed inset-0 z-30 bg-black/30" onClick={onClose} />
-      <div className="fixed inset-x-0 bottom-0 z-40 max-h-[85vh] overflow-y-auto rounded-t-2xl border-t border-black/10 bg-white p-5 shadow-xl sm:inset-x-auto sm:right-6 sm:bottom-6 sm:w-full sm:max-w-md sm:rounded-2xl sm:border dark:border-white/10 dark:bg-neutral-950">
+      <div className="fixed inset-0 z-30 bg-black/30 backdrop-blur-sm" onClick={onClose} />
+      <div className="fixed inset-x-0 bottom-0 z-40 max-h-[85vh] overflow-y-auto rounded-t-2xl border-t border-black/10 bg-white/90 p-5 shadow-xl backdrop-blur-xl sm:inset-x-auto sm:right-6 sm:bottom-6 sm:w-full sm:max-w-md sm:rounded-2xl sm:border dark:border-white/10 dark:bg-neutral-950/90">
         <div className="flex items-start justify-between gap-4">
           <div>
             <h2 className="text-lg font-semibold">
