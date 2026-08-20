@@ -211,7 +211,13 @@ export function LeadsMap({
   }
 
   return (
-    <div className="relative h-full w-full">
+    // absolute + inset-0 (not h-full/w-full) — the parent (leads-explorer's
+    // "relative flex-1" div) has a real flex-computed height, but a plain
+    // block child's height:100% doesn't reliably resolve against that (see
+    // the note at that call site). Absolute positioning sizes directly off
+    // the containing block's actual box, sidestepping the issue — this is
+    // what was silently collapsing the whole map to 0 height.
+    <div className="absolute inset-0">
       {mapError && (
         <div className="absolute inset-x-0 top-0 z-10 bg-red-600 px-3 py-1.5 text-center text-xs font-medium text-white">
           Map error: {mapError}

@@ -514,7 +514,15 @@ export function LeadsExplorer({
       )}
       </div>
 
-      <div className="flex-1">
+      {/* relative + LeadsMap's absolute-inset-0 wrapper is deliberate, not
+          h-full/w-full — a plain block div's height:100% doesn't reliably
+          resolve against a flex-1 ancestor's flex-computed height (it's
+          "definite" for flex layout purposes but not for percentage
+          resolution on non-flex descendants), which was silently
+          collapsing the map's real container to 0 height. Absolute
+          positioning sizes directly off this containing block regardless
+          of that quirk. */}
+      <div className="relative flex-1">
         {viewMode === "map" ? (
           <LeadsMap
             leads={filteredLeads}
