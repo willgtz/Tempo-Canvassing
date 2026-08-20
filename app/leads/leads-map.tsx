@@ -1,9 +1,10 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Map, { Source, Layer, Marker, type MapRef, type MapMouseEvent } from "react-map-gl/mapbox";
 import type { CircleLayerSpecification, SymbolLayerSpecification, GeoJSONSource } from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
+import { Button } from "@/components/ui/button";
 import type { Disposition, Lead } from "./types";
 
 const DEFAULT_COLOR = "#6B7280";
@@ -89,6 +90,34 @@ export function LeadsMap({
   // nothing in the UI explaining why — this surfaces whatever Mapbox
   // itself reports instead of leaving that a total mystery next time.
   const [mapError, setMapError] = useState<string | null>(null);
+  // Every page mounts inside template.tsx's page-fade-in wrapper (a CSS
+  // opacity keyframe animation on the page's outer container, added this
+  // session). Safari has a known bug where a WebGL canvas created while
+  // an ancestor's opacity is still animating can composite as
+  // permanently blank afterward — no JS/network error, since it's a
+  // paint bug, not something Mapbox's own error events would ever see.
+  // Delaying Map creation until just after that 0.18s animation finishes
+  // sidesteps it entirely.
+  const [readyToMount, setReadyToMount] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setReadyToMount(true), 220);
+    return () => clearTimeout(t);
+  }, []);
+
+  // Backstop for any other way the map can end up permanently blank with
+  // no error (stuck WebGL context, a swallowed failure, whatever the
+  // fade-in isn't) — if 'load' hasn't fired a few seconds after mounting,
+  // offer a retry that fully remounts the Map via a fresh key, rather
+  // than leaving a dead end with no way to recover short of reloading
+  // the whole page.
+  const [loaded, setLoaded] = useState(false);
+  const [stuck, setStuck] = useState(false);
+  const [remountKey, setRemountKey] = useState(0);
+  useEffect(() => {
+    if (!readyToMount || loaded) return;
+    const t = setTimeout(() => setStuck(true), 6000);
+    return () => clearTimeout(t);
+  }, [readyToMount, loaded, remountKey]);
 
   const locatedLeads = useMemo(
     () => leads.filter((l): l is LocatedLead => l.lat != null && l.lng != null),
@@ -170,6 +199,17 @@ export function LeadsMap({
     );
   }
 
+  if (!readyToMount) {
+    return <div className="h-full w-full animate-pulse bg-black/5 dark:bg-white/5" />;
+  }
+
+  function retryMap() {
+    setMapError(null);
+    setLoaded(false);
+    setStuck(false);
+    setRemountKey((k) => k + 1);
+  }
+
   return (
     <div className="relative h-full w-full">
       {mapError && (
@@ -177,7 +217,38 @@ export function LeadsMap({
           Map error: {mapError}
         </div>
       )}
+      {stuck && !loaded && (
+        <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-white/95 p-6 text-center dark:bg-neutral-950/95">
+          <p className="text-sm text-black/70 dark:text-white/70">
+            Map didn&apos;t finish loading{mapError ? "" : " — no error was reported"}.
+          </p>
+          <Button type="button" size="sm" onClick={retryMap}>
+            Retry
+          </Button>
+        </div>
+      )}
+      {/* 'load' firing doesn't guarantee the canvas actually painted
+          anything visible — confirmed in testing that a WebGL canvas can
+          fire 'load' while rendering nothing, so the stuck-timeout above
+          can't catch every blank-map case. This is an always-available
+          manual escape hatch for exactly that: a fully loaded-but-blank
+          map with nothing else prompting a retry. */}
+      <button
+        onClick={retryMap}
+        className="absolute right-2 top-2 z-10 flex h-8 w-8 items-center justify-center rounded-full border border-black/10 bg-white/90 text-black/60 shadow active:bg-black/10 dark:border-white/10 dark:bg-neutral-950/90 dark:text-white/60 dark:active:bg-white/20"
+        aria-label="Reload map"
+        title="Reload map"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-4 w-4">
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99"
+          />
+        </svg>
+      </button>
       <Map
+      key={remountKey}
       ref={mapRef}
       mapboxAccessToken={apiKey}
       initialViewState={{
@@ -194,6 +265,7 @@ export function LeadsMap({
       // obscured for centering/control-placement purposes. Harmless on
       // desktop too, where there's no tab bar to worry about.
       padding={{ top: 0, bottom: 80, left: 0, right: 0 }}
+      onLoad={() => setLoaded(true)}
       interactiveLayerIds={selectMode ? [] : ["clusters", "unclustered-point"]}
       onClick={selectMode ? undefined : handleClick}
       onError={(e) => {

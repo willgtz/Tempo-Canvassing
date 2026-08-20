@@ -42,13 +42,8 @@ export function AppointmentsClient({
 
   return (
     <div className="mx-auto w-full max-w-5xl space-y-4 p-4 md:p-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-semibold">Appointments</h1>
-          <p className="text-sm text-black/60 dark:text-white/60">
-            Your assigned appointments — as opener or closer.
-          </p>
-        </div>
+      <div className="flex items-center justify-between gap-4">
+        <h1 className="text-xl font-semibold">Appointments</h1>
         <div className="flex shrink-0 overflow-hidden rounded-full border border-black/15 dark:border-white/20">
           {(["calendar", "list"] as const).map((mode) => (
             <button
