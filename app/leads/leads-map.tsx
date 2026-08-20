@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useRef } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import Map, { Source, Layer, Marker, type MapRef, type MapMouseEvent } from "react-map-gl/mapbox";
 import type { CircleLayerSpecification, SymbolLayerSpecification, GeoJSONSource } from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
@@ -84,6 +84,11 @@ export function LeadsMap({
   onTogglePin: (leadId: string) => void;
 }) {
   const mapRef = useRef<MapRef>(null);
+  // Mapbox failures (bad token, network/adblock-blocked tile requests,
+  // WebGL context loss) otherwise fail silently into a blank canvas with
+  // nothing in the UI explaining why — this surfaces whatever Mapbox
+  // itself reports instead of leaving that a total mystery next time.
+  const [mapError, setMapError] = useState<string | null>(null);
 
   const locatedLeads = useMemo(
     () => leads.filter((l): l is LocatedLead => l.lat != null && l.lng != null),
@@ -166,7 +171,13 @@ export function LeadsMap({
   }
 
   return (
-    <Map
+    <div className="relative h-full w-full">
+      {mapError && (
+        <div className="absolute inset-x-0 top-0 z-10 bg-red-600 px-3 py-1.5 text-center text-xs font-medium text-white">
+          Map error: {mapError}
+        </div>
+      )}
+      <Map
       ref={mapRef}
       mapboxAccessToken={apiKey}
       initialViewState={{
@@ -185,6 +196,10 @@ export function LeadsMap({
       padding={{ top: 0, bottom: 80, left: 0, right: 0 }}
       interactiveLayerIds={selectMode ? [] : ["clusters", "unclustered-point"]}
       onClick={selectMode ? undefined : handleClick}
+      onError={(e) => {
+        console.error("Mapbox error:", e.error);
+        setMapError(e.error?.message ?? "unknown error — check console");
+      }}
     >
       {!selectMode && (
         <Source
@@ -237,6 +252,7 @@ export function LeadsMap({
             </Marker>
           );
         })}
-    </Map>
+      </Map>
+    </div>
   );
 }

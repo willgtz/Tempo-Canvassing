@@ -31,18 +31,32 @@ const MOCK_LEADS: Lead[] = [
 
 const MOCK_DISPOSITIONS: Disposition[] = [];
 
+// Mimics the real ancestor chain (body -> template.tsx -> leads/layout.tsx
+// -> LeadsExplorer's own wrapper -> map container) instead of a hardcoded
+// 100vh box, since a flex height-cascade bug wouldn't show up in an
+// artificially-sized wrapper.
 export default function DebugMapPage() {
   return (
-    <div style={{ height: "100vh", width: "100vw" }}>
-      <LeadsMap
-        leads={MOCK_LEADS}
-        dispositionById={new Map(MOCK_DISPOSITIONS.map((d) => [d.id, d]))}
-        apiKey={process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN ?? ""}
-        selectMode={false}
-        selectedLeadIds={[]}
-        onSelectLead={() => {}}
-        onTogglePin={() => {}}
-      />
+    <div className="flex flex-1 flex-col">
+      <nav className="hidden flex-wrap items-center justify-between gap-3 border-b border-black/10 px-6 py-3 md:flex dark:border-white/10">
+        <span className="font-medium text-sm">Fake Nav</span>
+      </nav>
+      <div className="flex flex-1 flex-col">
+        <div className="flex items-center gap-2 border-b border-black/10 px-3 py-2 md:hidden dark:border-white/10">
+          <span className="text-sm">Fake mobile filter row</span>
+        </div>
+        <div className="flex-1">
+          <LeadsMap
+            leads={MOCK_LEADS}
+            dispositionById={new Map(MOCK_DISPOSITIONS.map((d) => [d.id, d]))}
+            apiKey={process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN ?? ""}
+            selectMode={false}
+            selectedLeadIds={[]}
+            onSelectLead={() => {}}
+            onTogglePin={() => {}}
+          />
+        </div>
+      </div>
     </div>
   );
 }
