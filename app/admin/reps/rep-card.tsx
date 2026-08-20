@@ -272,7 +272,7 @@ export function RepCard({
             </p>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <button
               onClick={handleCancel}
               disabled={isSavingProfile}
@@ -293,7 +293,7 @@ export function RepCard({
           </div>
         </div>
       ) : (
-        <div className="flex items-start justify-between gap-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
           <div>
             <p className="flex flex-wrap items-center gap-1.5 font-medium">
               {user.name_pending ? (
@@ -321,8 +321,8 @@ export function RepCard({
               Can&apos;t edit your own account
             </span>
           ) : (
-            <div className="flex shrink-0 flex-col items-end gap-1">
-              <div className="flex gap-2">
+            <div className="flex shrink-0 flex-col items-start gap-1 sm:items-end">
+              <div className="flex flex-wrap gap-2">
                 <Button variant="secondary" size="sm" onClick={handleSendReset} disabled={isSendingReset}>
                   {isSendingReset ? "Sending…" : "Email Reset Link"}
                 </Button>
@@ -341,12 +341,12 @@ export function RepCard({
                 </Button>
               </div>
               {resetMessage && (
-                <span className="max-w-[220px] text-right text-xs text-black/50 dark:text-white/50">
+                <span className="text-xs text-black/50 sm:max-w-[220px] sm:text-right dark:text-white/50">
                   {resetMessage}
                 </span>
               )}
               {showManualPassword && (
-                <form onSubmit={handleSetPassword} className="mt-1 flex items-center gap-2">
+                <form onSubmit={handleSetPassword} className="mt-1 flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
                   <Input
                     type="password"
                     value={manualPassword}
@@ -354,7 +354,7 @@ export function RepCard({
                     placeholder="New password (min 8 chars)"
                     minLength={8}
                     required
-                    className="w-44"
+                    className="w-full sm:w-44"
                   />
                   <Button type="submit" size="sm" disabled={isSettingPassword}>
                     {isSettingPassword ? "Saving…" : "Save"}
@@ -362,7 +362,7 @@ export function RepCard({
                 </form>
               )}
               {manualPasswordMessage && (
-                <span className="max-w-[220px] text-right text-xs text-black/50 dark:text-white/50">
+                <span className="text-xs text-black/50 sm:max-w-[220px] sm:text-right dark:text-white/50">
                   {manualPasswordMessage}
                 </span>
               )}
@@ -391,7 +391,7 @@ export function RepCard({
         ))}
       </div>
 
-      <form onSubmit={handleAssignZip} className="mt-3 flex items-center gap-2">
+      <form onSubmit={handleAssignZip} className="mt-3 flex flex-wrap items-center gap-2">
         <input
           value={zipInput}
           onChange={(e) => setZipInput(e.target.value)}

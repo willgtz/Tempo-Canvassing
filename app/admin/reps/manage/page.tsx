@@ -78,7 +78,7 @@ export default async function ManageRepsPage() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-4xl space-y-3 p-6">
+    <div className="mx-auto w-full max-w-4xl space-y-3 p-4 md:p-6">
       <div>
         <h1 className="text-xl font-semibold">Manage Reps</h1>
         <p className="text-sm text-black/60 dark:text-white/60">

@@ -5,7 +5,12 @@ import Map, { Source, Layer, Marker, type MapRef, type MapMouseEvent } from "rea
 import type { CircleLayerSpecification, SymbolLayerSpecification, GeoJSONSource } from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/components/ui/cn";
+import { getCurrentLocation } from "@/lib/geo";
 import type { Disposition, Lead } from "./types";
+
+const STREETS_STYLE = "mapbox://styles/mapbox/streets-v12";
+const SATELLITE_STYLE = "mapbox://styles/mapbox/satellite-streets-v12";
 
 const DEFAULT_COLOR = "#6B7280";
 const FALLBACK_CENTER = { lat: 39.8283, lng: -98.5795 }; // center of contiguous US
@@ -140,6 +145,9 @@ export function LeadsMap({
   const [loaded, setLoaded] = useState(false);
   const [stuck, setStuck] = useState(false);
   const [remountKey, setRemountKey] = useState(0);
+  const [satellite, setSatellite] = useState(false);
+  const [myLocation, setMyLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [locating, setLocating] = useState(false);
   useEffect(() => {
     if (!readyToMount || loaded) return;
     const t = setTimeout(() => setStuck(true), 6000);
@@ -238,6 +246,23 @@ export function LeadsMap({
     setRemountKey((k) => k + 1);
   }
 
+  // Matches the iOS app's "center on me" map control — flies to the
+  // rep's current position and drops a marker there, same as MapKit's
+  // built-in blue-dot user location, since Mapbox GL doesn't have a
+  // built-in equivalent of its own to just turn on.
+  async function handleLocateMe() {
+    setLocating(true);
+    try {
+      const loc = await getCurrentLocation();
+      setMyLocation(loc);
+      mapRef.current?.getMap().flyTo({ center: [loc.lng, loc.lat], zoom: 15, duration: 800 });
+    } catch (err) {
+      setMapError(err instanceof Error ? err.message : "Couldn't get your location.");
+    } finally {
+      setLocating(false);
+    }
+  }
+
   return (
     // absolute + inset-0 (not h-full/w-full) — the parent (leads-explorer's
     // "relative flex-1" div) has a real flex-computed height, but a plain
@@ -267,20 +292,50 @@ export function LeadsMap({
           can't catch every blank-map case. This is an always-available
           manual escape hatch for exactly that: a fully loaded-but-blank
           map with nothing else prompting a retry. */}
-      <button
-        onClick={retryMap}
-        className="absolute right-2 top-2 z-10 flex h-8 w-8 items-center justify-center rounded-full border border-black/10 bg-white/90 text-black/60 shadow active:bg-black/10 dark:border-white/10 dark:bg-neutral-950/90 dark:text-white/60 dark:active:bg-white/20"
-        aria-label="Reload map"
-        title="Reload map"
-      >
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-4 w-4">
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99"
-          />
-        </svg>
-      </button>
+      <div className="absolute right-2 top-2 z-10 flex flex-col gap-2">
+        <button
+          onClick={retryMap}
+          className="flex h-8 w-8 items-center justify-center rounded-full border border-black/10 bg-white/90 text-black/60 shadow active:bg-black/10 dark:border-white/10 dark:bg-neutral-950/90 dark:text-white/60 dark:active:bg-white/20"
+          aria-label="Reload map"
+          title="Reload map"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-4 w-4">
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99"
+            />
+          </svg>
+        </button>
+        <button
+          onClick={() => setSatellite((s) => !s)}
+          className={cn(
+            "flex h-8 w-8 items-center justify-center rounded-full border shadow",
+            satellite
+              ? "border-blue-600 bg-blue-600 text-white"
+              : "border-black/10 bg-white/90 text-black/60 active:bg-black/10 dark:border-white/10 dark:bg-neutral-950/90 dark:text-white/60 dark:active:bg-white/20"
+          )}
+          aria-label={satellite ? "Switch to streets view" : "Switch to satellite view"}
+          title={satellite ? "Streets view" : "Satellite view"}
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="h-4 w-4">
+            <path strokeLinecap="round" strokeLinejoin="round" d="m12 2 9 4.5-9 4.5-9-4.5Z" />
+            <path strokeLinecap="round" strokeLinejoin="round" d="m3 11.5 9 4.5 9-4.5M3 16.5l9 4.5 9-4.5" />
+          </svg>
+        </button>
+        <button
+          onClick={handleLocateMe}
+          disabled={locating}
+          className="flex h-8 w-8 items-center justify-center rounded-full border border-black/10 bg-white/90 text-black/60 shadow active:bg-black/10 disabled:opacity-50 dark:border-white/10 dark:bg-neutral-950/90 dark:text-white/60 dark:active:bg-white/20"
+          aria-label="Center on my location"
+          title="Center on my location"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className={cn("h-4 w-4", locating && "animate-pulse")}>
+            <circle cx="12" cy="12" r="3" />
+            <path strokeLinecap="round" d="M12 2v3M12 19v3M2 12h3M19 12h3" />
+          </svg>
+        </button>
+      </div>
       <Map
       key={remountKey}
       ref={mapRef}
@@ -290,7 +345,7 @@ export function LeadsMap({
         latitude: center.lat,
         zoom: locatedLeads.length > 0 ? 11 : 3.5,
       }}
-      mapStyle="mapbox://styles/mapbox/streets-v12"
+      mapStyle={satellite ? SATELLITE_STYLE : STREETS_STYLE}
       style={{ width: "100%", height: "100%" }}
       // Bottom padding keeps pins/controls from being hidden under the
       // fixed mobile tab bar (~4rem + safe-area) without shrinking the
@@ -321,6 +376,17 @@ export function LeadsMap({
           <Layer {...UNCLUSTERED_LAYER} />
           <Layer {...UNCLUSTERED_LABEL_LAYER} />
         </Source>
+      )}
+
+      {/* Same blue-dot treatment as MapKit's built-in user location —
+          Mapbox GL has no built-in equivalent, so this is a plain marker
+          instead, dropped/updated only when "center on me" is tapped
+          (no continuous location watching, to avoid burning battery for
+          a marker most reps won't look at twice). */}
+      {myLocation && (
+        <Marker longitude={myLocation.lng} latitude={myLocation.lat}>
+          <div className="h-4 w-4 rounded-full border-2 border-white bg-blue-600 shadow-[0_0_0_4px_rgba(37,99,235,0.3)]" />
+        </Marker>
       )}
 
       {/* Select mode (route building) skips clustering entirely — picking

@@ -75,7 +75,7 @@ export function SetAppointmentModal({
     <>
       <div
         className={cn(
-          "fixed inset-0 z-20 bg-black/30 backdrop-blur-sm transition-opacity duration-200",
+          "fixed inset-0 z-20 bg-black/40 backdrop-blur-md transition-opacity duration-200",
           visible ? "opacity-100" : "opacity-0"
         )}
         onClick={onClose}
