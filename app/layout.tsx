@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
@@ -18,6 +18,19 @@ export const metadata: Metadata = {
     template: "%s — Fenix",
   },
   description: "Fenix Canvassing — lead, appointment, and route management for Tempo Solar.",
+  // capable + statusBarStyle is what makes "Add to Home Screen" launch
+  // without Safari's chrome (address bar, tab switcher) — matching the
+  // native app's full-screen feel instead of just a bookmarked tab.
+  // manifest.ts (app/manifest.ts) covers the Android/Chrome equivalent.
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "Fenix",
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#2563eb",
 };
 
 export default function RootLayout({
