@@ -176,6 +176,13 @@ export function LeadsMap({
       }}
       mapStyle="mapbox://styles/mapbox/streets-v12"
       style={{ width: "100%", height: "100%" }}
+      // Bottom padding keeps pins/controls from being hidden under the
+      // fixed mobile tab bar (~4rem + safe-area) without shrinking the
+      // map's actual rendered area — the map still bleeds full-bleed
+      // behind the bar, this just tells Mapbox to treat that strip as
+      // obscured for centering/control-placement purposes. Harmless on
+      // desktop too, where there's no tab bar to worry about.
+      padding={{ top: 0, bottom: 80, left: 0, right: 0 }}
       interactiveLayerIds={selectMode ? [] : ["clusters", "unclustered-point"]}
       onClick={selectMode ? undefined : handleClick}
     >

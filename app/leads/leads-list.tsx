@@ -51,14 +51,14 @@ export function LeadsList({
   }
 
   return (
-    <div className="space-y-4 overflow-x-auto p-6">
+    <div className="space-y-4 p-4 md:overflow-x-auto md:p-6">
       {groups.map((group) => {
         const isCollapsed = collapsedIds.has(group.id);
         return (
           <div key={group.id}>
             <button
               onClick={() => toggleCollapsed(group.id)}
-              className="mb-2 flex w-full min-w-[720px] items-center gap-2 text-sm font-medium"
+              className="mb-2 flex w-full items-center gap-2 text-sm font-medium md:min-w-[720px]"
             >
               <span className="inline-block h-2 w-2 rounded-full" style={{ backgroundColor: group.color }} />
               {group.name}
@@ -75,61 +75,102 @@ export function LeadsList({
               </svg>
             </button>
             {!isCollapsed && (
-              // table-fixed + explicit column widths, identical across
-              // every group's table — plain table-layout: auto (the
-              // default) sizes each <table>'s columns independently based
-              // on only that group's own content, so "Address" (etc.)
-              // would land at a different width in every group and drift
-              // out of alignment scrolling down the page. Widths below
-              // are shared by every group, so columns always line up.
-              <table className="w-full min-w-[720px] table-fixed text-left text-sm">
-                <colgroup>
-                  <col className="w-[20%]" />
-                  <col className="w-[32%]" />
-                  <col className="w-[10%]" />
-                  <col className="w-[20%]" />
-                  <col className="w-[18%]" />
-                </colgroup>
-                <thead className="bg-black/5 dark:bg-white/5">
-                  <tr>
-                    <th className="px-3 py-2 font-medium">Name</th>
-                    <th className="px-3 py-2 font-medium">Address</th>
-                    <th className="px-3 py-2 font-medium">Zip</th>
-                    <th className="px-3 py-2 font-medium">Disposition</th>
-                    <th className="px-3 py-2 font-medium">Added</th>
-                  </tr>
-                </thead>
-                <tbody>
+              <>
+                {/* Mobile: stacked cards — a horizontally-scrolling table
+                    is a real usability problem on a phone, not just a
+                    cosmetic one, so this isn't the same table squeezed
+                    smaller, it's a different layout entirely below md. */}
+                <div className="space-y-2 md:hidden">
                   {group.leads.map((lead) => {
                     const disposition = lead.disposition_id ? dispositionById.get(lead.disposition_id) : undefined;
                     return (
-                      <tr
+                      <button
                         key={lead.id}
                         onClick={() => onSelectLead(lead.id)}
-                        className="cursor-pointer border-t border-black/5 hover:bg-black/5 dark:border-white/10 dark:hover:bg-white/5"
+                        className="flex w-full flex-col gap-1 rounded-xl border border-black/10 p-3 text-left transition-colors active:bg-black/5 dark:border-white/10 dark:active:bg-white/10"
                       >
-                        <td className="px-3 py-2">
-                          {[lead.first_name, lead.last_name].filter(Boolean).join(" ") || "—"}
-                          {lead.is_manual && (
-                            <Badge className="ml-2 text-[10px] uppercase tracking-wide">Manual</Badge>
-                          )}
-                        </td>
-                        <td className="px-3 py-2">
-                          {lead.address_line}
+                        <div className="flex items-start justify-between gap-2">
+                          <span className="font-medium">
+                            {[lead.first_name, lead.last_name].filter(Boolean).join(" ") || "—"}
+                            {lead.is_manual && (
+                              <Badge className="ml-2 text-[10px] uppercase tracking-wide">Manual</Badge>
+                            )}
+                          </span>
+                          <Badge color={disposition?.color ?? DEFAULT_COLOR} className="shrink-0">
+                            {disposition?.name ?? "—"}
+                          </Badge>
+                        </div>
+                        <span className="text-sm text-black/60 dark:text-white/60">
+                          {lead.address_line}, {lead.zipcode}
                           {lead.lat == null && (
-                            <span className="ml-2 text-xs text-black/40 dark:text-white/40">(no location)</span>
+                            <span className="ml-1 text-black/40 dark:text-white/40">(no location)</span>
                           )}
-                        </td>
-                        <td className="px-3 py-2">{lead.zipcode}</td>
-                        <td className="px-3 py-2">
-                          <Badge color={disposition?.color ?? DEFAULT_COLOR}>{disposition?.name ?? "—"}</Badge>
-                        </td>
-                        <td className="px-3 py-2">{new Date(lead.created_at).toLocaleDateString()}</td>
-                      </tr>
+                        </span>
+                        <span className="text-xs text-black/40 dark:text-white/40">
+                          Added {new Date(lead.created_at).toLocaleDateString()}
+                        </span>
+                      </button>
                     );
                   })}
-                </tbody>
-              </table>
+                </div>
+
+                {/* Desktop: the full table, unchanged. table-fixed +
+                    explicit column widths, identical across every group's
+                    table — plain table-layout: auto (the default) sizes
+                    each <table>'s columns independently based on only
+                    that group's own content, so "Address" (etc.) would
+                    land at a different width in every group and drift
+                    out of alignment scrolling down the page. Widths below
+                    are shared by every group, so columns always line up. */}
+                <table className="hidden w-full min-w-[720px] table-fixed text-left text-sm md:table">
+                  <colgroup>
+                    <col className="w-[20%]" />
+                    <col className="w-[32%]" />
+                    <col className="w-[10%]" />
+                    <col className="w-[20%]" />
+                    <col className="w-[18%]" />
+                  </colgroup>
+                  <thead className="bg-black/5 dark:bg-white/5">
+                    <tr>
+                      <th className="px-3 py-2 font-medium">Name</th>
+                      <th className="px-3 py-2 font-medium">Address</th>
+                      <th className="px-3 py-2 font-medium">Zip</th>
+                      <th className="px-3 py-2 font-medium">Disposition</th>
+                      <th className="px-3 py-2 font-medium">Added</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {group.leads.map((lead) => {
+                      const disposition = lead.disposition_id ? dispositionById.get(lead.disposition_id) : undefined;
+                      return (
+                        <tr
+                          key={lead.id}
+                          onClick={() => onSelectLead(lead.id)}
+                          className="cursor-pointer border-t border-black/5 hover:bg-black/5 dark:border-white/10 dark:hover:bg-white/5"
+                        >
+                          <td className="px-3 py-2">
+                            {[lead.first_name, lead.last_name].filter(Boolean).join(" ") || "—"}
+                            {lead.is_manual && (
+                              <Badge className="ml-2 text-[10px] uppercase tracking-wide">Manual</Badge>
+                            )}
+                          </td>
+                          <td className="px-3 py-2">
+                            {lead.address_line}
+                            {lead.lat == null && (
+                              <span className="ml-2 text-xs text-black/40 dark:text-white/40">(no location)</span>
+                            )}
+                          </td>
+                          <td className="px-3 py-2">{lead.zipcode}</td>
+                          <td className="px-3 py-2">
+                            <Badge color={disposition?.color ?? DEFAULT_COLOR}>{disposition?.name ?? "—"}</Badge>
+                          </td>
+                          <td className="px-3 py-2">{new Date(lead.created_at).toLocaleDateString()}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </>
             )}
           </div>
         );

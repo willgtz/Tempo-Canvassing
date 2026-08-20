@@ -36,7 +36,7 @@ export function RepDashboardClient({ stats }: { stats: Stats }) {
   const { isVisible, toggle } = useWidgetVisibility("rep-dashboard-hidden-widgets");
 
   return (
-    <div className="mx-auto w-full max-w-5xl space-y-6 p-6">
+    <div className="mx-auto w-full max-w-5xl space-y-6 p-4 md:p-6">
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-xl font-semibold">Dashboard</h1>
