@@ -57,6 +57,7 @@ export function AppointmentsExplorer({
   const [collapsedStatusIds, setCollapsedStatusIds] = useState<Set<string>>(new Set());
   const [viewMode, setViewMode] = useState<"list" | "calendar">("calendar");
   const [showMobileFilters, setShowMobileFilters] = useState(false);
+  const [showMobileSearch, setShowMobileSearch] = useState(false);
 
   // router.refresh() re-runs page.tsx's server-side fetch and passes fresh
   // props down, but doesn't remount this component — its useState wouldn't
@@ -183,46 +184,88 @@ export function AppointmentsExplorer({
           three-row Card, which ate most of the screen on a phone. Mirrors
           the same compaction done on the Leads page. */}
       <div className="flex shrink-0 items-center gap-2 md:hidden">
-        <Input
-          value={searchText}
-          onChange={(e) => setSearchText(e.target.value)}
-          placeholder="Search name or address…"
-          className="min-w-0 flex-1 rounded-full"
-        />
-        <button
-          onClick={() => setShowMobileFilters(true)}
-          className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-black/15 active:bg-black/10 dark:border-white/20 dark:active:bg-white/20"
-          aria-label="Filters"
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="h-4.5 w-4.5">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M7 12h10M10 18h4" />
-          </svg>
-          {activeFilterCount > 0 && (
-            <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-blue-600 text-[10px] font-bold text-white">
-              {activeFilterCount}
-            </span>
-          )}
-        </button>
-        <div className="flex shrink-0 overflow-hidden rounded-full border border-black/15 dark:border-white/20">
-          <button
-            onClick={() => setViewMode("calendar")}
-            className={cn("flex h-9 w-9 items-center justify-center", viewMode === "calendar" ? "bg-blue-600 text-white dark:bg-blue-500" : "")}
-            aria-label="Calendar view"
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="h-4.5 w-4.5">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M8 2v4m8-4v4M3.5 8h17M5 4h14a1.5 1.5 0 0 1 1.5 1.5V19a1.5 1.5 0 0 1-1.5 1.5H5A1.5 1.5 0 0 1 3.5 19V5.5A1.5 1.5 0 0 1 5 4Z" />
-            </svg>
-          </button>
-          <button
-            onClick={() => setViewMode("list")}
-            className={cn("flex h-9 w-9 items-center justify-center", viewMode === "list" ? "bg-blue-600 text-white dark:bg-blue-500" : "")}
-            aria-label="List view"
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="h-4.5 w-4.5">
-              <path strokeLinecap="round" d="M4 6h16M4 12h16M4 18h16" />
-            </svg>
-          </button>
-        </div>
+        {showMobileSearch ? (
+          <>
+            <Input
+              autoFocus
+              value={searchText}
+              onChange={(e) => setSearchText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") {
+                  e.preventDefault();
+                  setShowMobileSearch(false);
+                }
+              }}
+              placeholder="Search name or address…"
+              className="min-w-0 flex-1 rounded-full"
+            />
+            <button
+              onClick={() => {
+                setShowMobileSearch(false);
+                setSearchText("");
+              }}
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-black/15 active:bg-black/10 dark:border-white/20 dark:active:bg-white/20"
+              aria-label="Close search"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="h-4.5 w-4.5">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 6l12 12M18 6L6 18" />
+              </svg>
+            </button>
+          </>
+        ) : (
+          <>
+            {/* Collapsed to an icon by default — same treatment as the
+                Leads page mobile bar, so the calendar/list gets the
+                space back instead of an always-open search input. */}
+            <button
+              onClick={() => setShowMobileSearch(true)}
+              className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-black/15 active:bg-black/10 dark:border-white/20 dark:active:bg-white/20"
+              aria-label="Search appointments"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="h-4.5 w-4.5">
+                <circle cx="11" cy="11" r="7" />
+                <path strokeLinecap="round" d="M21 21l-4.3-4.3" />
+              </svg>
+              {searchText && (
+                <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-blue-600" />
+              )}
+            </button>
+            <button
+              onClick={() => setShowMobileFilters(true)}
+              className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-black/15 active:bg-black/10 dark:border-white/20 dark:active:bg-white/20"
+              aria-label="Filters"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="h-4.5 w-4.5">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M7 12h10M10 18h4" />
+              </svg>
+              {activeFilterCount > 0 && (
+                <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-blue-600 text-[10px] font-bold text-white">
+                  {activeFilterCount}
+                </span>
+              )}
+            </button>
+            <div className="flex shrink-0 overflow-hidden rounded-full border border-black/15 dark:border-white/20">
+              <button
+                onClick={() => setViewMode("calendar")}
+                className={cn("flex h-9 w-9 items-center justify-center", viewMode === "calendar" ? "bg-blue-600 text-white dark:bg-blue-500" : "")}
+                aria-label="Calendar view"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="h-4.5 w-4.5">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M8 2v4m8-4v4M3.5 8h17M5 4h14a1.5 1.5 0 0 1 1.5 1.5V19a1.5 1.5 0 0 1-1.5 1.5H5A1.5 1.5 0 0 1 3.5 19V5.5A1.5 1.5 0 0 1 5 4Z" />
+                </svg>
+              </button>
+              <button
+                onClick={() => setViewMode("list")}
+                className={cn("flex h-9 w-9 items-center justify-center", viewMode === "list" ? "bg-blue-600 text-white dark:bg-blue-500" : "")}
+                aria-label="List view"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="h-4.5 w-4.5">
+                  <path strokeLinecap="round" d="M4 6h16M4 12h16M4 18h16" />
+                </svg>
+              </button>
+            </div>
+          </>
+        )}
       </div>
 
       {showMobileFilters && (
