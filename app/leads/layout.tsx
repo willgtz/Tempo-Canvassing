@@ -2,6 +2,7 @@ import Link from "next/link";
 import { requireSession } from "@/lib/auth/session";
 import { NotificationsBell } from "@/components/notifications-bell";
 import { SignOutButton } from "@/components/sign-out-button";
+import { MobileTabBar } from "@/components/mobile-tab-bar";
 
 export default async function LeadsLayout({
   children,
@@ -14,7 +15,7 @@ export default async function LeadsLayout({
 
   return (
     <div className="flex flex-1 flex-col">
-      <nav className="flex flex-wrap items-center justify-between gap-3 border-b border-black/10 px-6 py-3 dark:border-white/10">
+      <nav className="hidden flex-wrap items-center justify-between gap-3 border-b border-black/10 px-6 py-3 md:flex dark:border-white/10">
         <span className="font-medium text-sm">{session.fullName}</span>
         <div className="flex flex-wrap items-center gap-2">
           <Link
@@ -22,6 +23,12 @@ export default async function LeadsLayout({
             className="rounded-full border border-black/15 px-3 py-1.5 text-sm font-medium text-black transition-transform duration-100 hover:bg-black/5 active:scale-95 active:bg-black/10 dark:border-white/20 dark:text-white dark:hover:bg-white/10 dark:active:bg-white/20"
           >
             Dashboard
+          </Link>
+          <Link
+            href="/appointments"
+            className="rounded-full border border-black/15 px-3 py-1.5 text-sm font-medium text-black transition-transform duration-100 hover:bg-black/5 active:scale-95 active:bg-black/10 dark:border-white/20 dark:text-white dark:hover:bg-white/10 dark:active:bg-white/20"
+          >
+            Appointments
           </Link>
           {(session.role === "admin" || session.role === "super_admin") && (
             <Link
@@ -36,6 +43,11 @@ export default async function LeadsLayout({
         </div>
       </nav>
       {children}
+      {/* No MobileTabBarSpacer here — the leads map deliberately bleeds
+          edge-to-edge on mobile (matches the native app's map treatment);
+          precise height accounting for the fixed tab bar overlapping it is
+          handled in the mobile polish pass, not here. */}
+      <MobileTabBar />
     </div>
   );
 }
