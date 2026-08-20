@@ -34,3 +34,21 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* Applied to every route's content via app/template.tsx — template.tsx
+   (unlike layout.tsx) remounts on every navigation, which is what makes
+   this fade fire freshly each time real content replaces a loading.tsx
+   skeleton, instead of just popping in abruptly. Nav bars/layouts stay
+   stable since they live above template.tsx, not inside it. */
+@keyframes fade-in-content {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.page-fade-in {
+  animation: fade-in-content 0.18s ease-out;
+}
