@@ -10,12 +10,16 @@ type Size = "sm" | "md";
 // before. Blue as the primary color matches iOS's default system accent
 // (this app has no custom AccentColor asset, so that's genuinely what
 // reps see on their phones).
+// active: states fire on touchstart/mousedown, instantly, with zero JS or
+// network round-trip involved — this is what makes a tap feel like it
+// registered immediately even before whatever the button triggers
+// (navigation, a Server Action) has actually resolved.
 const VARIANT_CLASSES: Record<Variant, string> = {
-  primary: "bg-blue-600 text-white hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600",
+  primary: "bg-blue-600 text-white hover:bg-blue-700 active:bg-blue-800 dark:bg-blue-500 dark:hover:bg-blue-600 dark:active:bg-blue-700",
   secondary:
-    "border border-black/15 text-black hover:bg-black/5 dark:border-white/20 dark:text-white dark:hover:bg-white/10",
-  destructive: "bg-red-600 text-white hover:bg-red-700 dark:bg-red-500 dark:hover:bg-red-600",
-  ghost: "text-black/70 hover:bg-black/5 dark:text-white/70 dark:hover:bg-white/10",
+    "border border-black/15 text-black hover:bg-black/5 active:bg-black/10 dark:border-white/20 dark:text-white dark:hover:bg-white/10 dark:active:bg-white/20",
+  destructive: "bg-red-600 text-white hover:bg-red-700 active:bg-red-800 dark:bg-red-500 dark:hover:bg-red-600 dark:active:bg-red-700",
+  ghost: "text-black/70 hover:bg-black/5 active:bg-black/10 dark:text-white/70 dark:hover:bg-white/10 dark:active:bg-white/20",
 };
 
 const SIZE_CLASSES: Record<Size, string> = {
@@ -31,7 +35,7 @@ export const Button = forwardRef<
     <button
       ref={ref}
       className={cn(
-        "inline-flex items-center justify-center gap-1.5 rounded-full font-medium transition-colors disabled:pointer-events-none disabled:opacity-50",
+        "inline-flex items-center justify-center gap-1.5 rounded-full font-medium transition-transform duration-100 active:scale-95 disabled:pointer-events-none disabled:opacity-50",
         VARIANT_CLASSES[variant],
         SIZE_CLASSES[size],
         className
