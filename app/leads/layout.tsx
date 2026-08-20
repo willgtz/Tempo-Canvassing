@@ -47,7 +47,7 @@ export default async function LeadsLayout({
           edge-to-edge on mobile (matches the native app's map treatment);
           precise height accounting for the fixed tab bar overlapping it is
           handled in the mobile polish pass, not here. */}
-      <MobileTabBar />
+      <MobileTabBar isAdmin={session.role === "admin" || session.role === "super_admin"} />
     </div>
   );
 }

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { requireAdmin } from "@/lib/auth/admin";
 import { NotificationsBell } from "@/components/notifications-bell";
 import { SignOutButton } from "@/components/sign-out-button";
+import { MobileTabBar, MobileTabBarSpacer } from "@/components/mobile-tab-bar";
 
 const NAV_LINKS = [
   { href: "/admin/dashboard", label: "Dashboard" },
@@ -23,7 +24,7 @@ export default async function AdminLayout({
 
   return (
     <div className="flex flex-1 flex-col">
-      <nav className="flex flex-wrap items-center justify-between gap-3 border-b border-black/10 px-6 py-3 dark:border-white/10">
+      <nav className="hidden flex-wrap items-center justify-between gap-3 border-b border-black/10 px-6 py-3 md:flex dark:border-white/10">
         <div className="flex flex-wrap gap-2">
           {NAV_LINKS.map((link) => (
             <Link
@@ -40,7 +41,22 @@ export default async function AdminLayout({
           <SignOutButton />
         </div>
       </nav>
+      {/* Mobile-only compact header — the full NAV_LINKS list (5 items,
+          several admin-config-specific) doesn't map cleanly to a 3-tab
+          bottom bar, so mobile gets the same Dashboard/Leads/Appointments
+          tabs reps get (pointed at the admin equivalents) plus a minimal
+          top strip for sign-out/notifications, rather than trying to
+          cram every admin nav item into the tab bar. */}
+      <div className="flex items-center justify-between gap-3 border-b border-black/10 px-4 py-2 md:hidden dark:border-white/10">
+        <span className="text-sm font-medium">Admin</span>
+        <div className="flex items-center gap-3">
+          <NotificationsBell userId={session.userId} />
+          <SignOutButton />
+        </div>
+      </div>
       {children}
+      <MobileTabBarSpacer />
+      <MobileTabBar isAdmin />
     </div>
   );
 }

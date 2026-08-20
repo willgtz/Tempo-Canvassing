@@ -51,7 +51,7 @@ export function AppointmentsCalendar({
   leadById: Map<string, AppointmentLead>;
   onSelect: (appointmentId: string) => void;
 }) {
-  const [subMode, setSubMode] = useState<SubMode>("month");
+  const [subMode, setSubMode] = useState<SubMode>("day");
   const [referenceDate, setReferenceDate] = useState(() => new Date());
 
   function step(direction: number) {

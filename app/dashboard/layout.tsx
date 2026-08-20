@@ -45,7 +45,7 @@ export default async function DashboardLayout({
       </nav>
       {children}
       <MobileTabBarSpacer />
-      <MobileTabBar />
+      <MobileTabBar isAdmin={session.role === "admin" || session.role === "super_admin"} />
     </div>
   );
 }

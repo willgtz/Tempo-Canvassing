@@ -4,40 +4,28 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "./ui/cn";
 
-const TABS = [
-  {
-    href: "/dashboard",
-    label: "Dashboard",
-    icon: (active: boolean) => (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={active ? 2.2 : 1.8} className="h-6 w-6">
-        <rect x="3.5" y="3.5" width="7" height="9" rx="1.5" />
-        <rect x="13.5" y="3.5" width="7" height="5" rx="1.5" />
-        <rect x="13.5" y="11.5" width="7" height="9" rx="1.5" />
-        <rect x="3.5" y="15.5" width="7" height="5" rx="1.5" />
-      </svg>
-    ),
-  },
-  {
-    href: "/leads",
-    label: "Leads",
-    icon: (active: boolean) => (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={active ? 2.2 : 1.8} className="h-6 w-6">
-        <path d="M12 21s-7-5.5-7-11a7 7 0 0 1 14 0c0 5.5-7 11-7 11Z" />
-        <circle cx="12" cy="10" r="2.5" />
-      </svg>
-    ),
-  },
-  {
-    href: "/appointments",
-    label: "Appointments",
-    icon: (active: boolean) => (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={active ? 2.2 : 1.8} className="h-6 w-6">
-        <rect x="3.5" y="4.5" width="17" height="16" rx="2" />
-        <path d="M3.5 9.5h17M8 3v3M16 3v3" />
-      </svg>
-    ),
-  },
-];
+const ICONS = {
+  dashboard: (active: boolean) => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={active ? 2.2 : 1.8} className="h-6 w-6">
+      <rect x="3.5" y="3.5" width="7" height="9" rx="1.5" />
+      <rect x="13.5" y="3.5" width="7" height="5" rx="1.5" />
+      <rect x="13.5" y="11.5" width="7" height="9" rx="1.5" />
+      <rect x="3.5" y="15.5" width="7" height="5" rx="1.5" />
+    </svg>
+  ),
+  leads: (active: boolean) => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={active ? 2.2 : 1.8} className="h-6 w-6">
+      <path d="M12 21s-7-5.5-7-11a7 7 0 0 1 14 0c0 5.5-7 11-7 11Z" />
+      <circle cx="12" cy="10" r="2.5" />
+    </svg>
+  ),
+  appointments: (active: boolean) => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={active ? 2.2 : 1.8} className="h-6 w-6">
+      <rect x="3.5" y="4.5" width="17" height="16" rx="2" />
+      <path d="M3.5 9.5h17M8 3v3M16 3v3" />
+    </svg>
+  ),
+};
 
 // Mobile-only (hidden at md and up, where the existing top nav takes
 // over) — matches the native iOS app's Dashboard/Leads/Appointments tab
@@ -45,8 +33,18 @@ const TABS = [
 // rather than a separate product. Fixed to the bottom with a safe-area
 // inset so it doesn't collide with the home indicator on notched
 // iPhones, same consideration the PWA manifest work will lean on too.
-export function MobileTabBar() {
+//
+// isAdmin swaps Dashboard/Appointments to their /admin equivalents —
+// without this, an admin landing on /admin/dashboard (which has its own
+// separate layout) saw no mobile treatment at all, since this component
+// previously only ever pointed at the rep-facing routes.
+export function MobileTabBar({ isAdmin = false }: { isAdmin?: boolean }) {
   const pathname = usePathname();
+  const TABS = [
+    { href: isAdmin ? "/admin/dashboard" : "/dashboard", label: "Dashboard", icon: ICONS.dashboard },
+    { href: "/leads", label: "Leads", icon: ICONS.leads },
+    { href: isAdmin ? "/admin/appointments" : "/appointments", label: "Appointments", icon: ICONS.appointments },
+  ];
 
   return (
     <nav

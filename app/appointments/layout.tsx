@@ -42,7 +42,7 @@ export default async function AppointmentsLayout({
       </nav>
       {children}
       <MobileTabBarSpacer />
-      <MobileTabBar />
+      <MobileTabBar isAdmin={session.role === "admin" || session.role === "super_admin"} />
     </div>
   );
 }
