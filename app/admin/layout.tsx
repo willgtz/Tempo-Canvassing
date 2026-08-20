@@ -23,7 +23,15 @@ export default async function AdminLayout({
   const session = await requireAdmin();
 
   return (
-    <div className="flex flex-1 flex-col">
+    // h-dvh + overflow-hidden locks the whole admin shell to the
+    // viewport instead of growing with content — pages that need their
+    // own internal scroll (like the Appointments calendar) can now
+    // actually fill available space instead of the body scrolling on
+    // top of an already-scrollable inner region. Ordinary admin pages
+    // are unaffected: the flex-1/min-h-0/overflow-y-auto wrapper below
+    // just moves where the scrollbar lives (from body to this div),
+    // not whether the page scrolls.
+    <div className="flex h-dvh flex-col overflow-hidden">
       <nav className="hidden flex-wrap items-center justify-between gap-3 border-b border-black/10 px-6 py-3 md:flex dark:border-white/10">
         <div className="flex flex-wrap gap-2">
           {NAV_LINKS.map((link) => (
@@ -54,7 +62,7 @@ export default async function AdminLayout({
           <SignOutButton />
         </div>
       </div>
-      {children}
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">{children}</div>
       <MobileTabBarSpacer />
       <MobileTabBar isAdmin />
     </div>

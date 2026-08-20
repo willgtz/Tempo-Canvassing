@@ -10,7 +10,7 @@ export default function AppointmentsLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex flex-1 flex-col">
+    <div className="flex min-h-0 flex-1 flex-col">
       <AppointmentsSubnav />
       {children}
     </div>

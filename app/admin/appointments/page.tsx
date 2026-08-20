@@ -114,8 +114,12 @@ export default async function AppointmentsPage() {
   }));
 
   return (
-    <div className="mx-auto w-full max-w-5xl space-y-4 p-4 md:space-y-6 md:p-6">
-      <div>
+    // flex-1 + min-h-0 chain from here down through AppointmentsExplorer
+    // into AppointmentsCalendar — same reasoning as the rep Appointments
+    // page: the calendar needs a real height to fill instead of the page
+    // just growing to fit 24 hour rows.
+    <div className="mx-auto flex min-h-0 w-full max-w-5xl flex-1 flex-col gap-4 overflow-hidden p-4 md:gap-6 md:p-6">
+      <div className="shrink-0">
         <h1 className="text-xl font-semibold">Appointments</h1>
         <p className="hidden text-sm text-black/60 md:block dark:text-white/60">
           Grouped by status. Click an appointment to assign openers/closers, update its status or

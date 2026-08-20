@@ -169,13 +169,20 @@ export function AppointmentsExplorer({
   }
 
   return (
-    <div className="space-y-4 md:space-y-6">
+    // flex-1 + min-h-0 (not h-full) so this genuinely participates in the
+    // flex-grow chain from admin/appointments/layout.tsx + page.tsx
+    // instead of relying on percentage height. The calendar/list content
+    // area below is the only flex-1 child inside this column — everything
+    // else (mobile bar, desktop filter row/card) is shrink-0 chrome, so
+    // it never grows past its own content and the calendar gets whatever
+    // space is actually left.
+    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden md:gap-6">
       {/* Mobile: one slim row — search, a filter icon (badge = active
           count) opening a bottom sheet with the status/date/closer
           controls, and an icon view toggle — instead of the full
           three-row Card, which ate most of the screen on a phone. Mirrors
           the same compaction done on the Leads page. */}
-      <div className="flex items-center gap-2 md:hidden">
+      <div className="flex shrink-0 items-center gap-2 md:hidden">
         <Input
           value={searchText}
           onChange={(e) => setSearchText(e.target.value)}
@@ -304,7 +311,7 @@ export function AppointmentsExplorer({
         </>
       )}
 
-      <div className="hidden items-center justify-between md:flex">
+      <div className="hidden shrink-0 items-center justify-between md:flex">
         <div className="flex gap-1 overflow-hidden rounded-full border border-black/15 p-0.5 dark:border-white/20">
           {(["list", "calendar"] as const).map((mode) => (
             <button
@@ -345,7 +352,7 @@ export function AppointmentsExplorer({
         </Button>
       </div>
 
-      <Card className="hidden space-y-3 p-4 md:block">
+      <Card className="hidden shrink-0 space-y-3 p-4 md:block">
         <Input
           value={searchText}
           onChange={(e) => setSearchText(e.target.value)}
@@ -417,14 +424,17 @@ export function AppointmentsExplorer({
       </Card>
 
       {appointments.length === 0 && (
-        <p className="text-sm italic text-black/50 dark:text-white/50">No appointments yet.</p>
+        <p className="shrink-0 text-sm italic text-black/50 dark:text-white/50">No appointments yet.</p>
       )}
       {appointments.length > 0 && visibleAppointments.length === 0 && (
-        <p className="text-sm italic text-black/50 dark:text-white/50">No appointments match your search/filters.</p>
+        <p className="shrink-0 text-sm italic text-black/50 dark:text-white/50">
+          No appointments match your search/filters.
+        </p>
       )}
 
       {viewMode === "calendar" && visibleAppointments.length > 0 && (
         <AppointmentsCalendar
+          className="min-h-0 flex-1"
           appointments={visibleAppointments}
           statuses={statuses}
           leadById={leadById}
@@ -432,73 +442,77 @@ export function AppointmentsExplorer({
         />
       )}
 
-      {viewMode === "list" && groupedByStatus.map((group) => {
-        const isCollapsed = collapsedStatusIds.has(group.status.id);
-        return (
-          <div key={group.status.id}>
-            <button
-              onClick={() => toggleCollapsed(group.status.id)}
-              className="mb-2 flex w-full items-center gap-2 text-sm font-medium"
-            >
-              <span
-                className="inline-block h-2 w-2 rounded-full"
-                style={{ backgroundColor: group.status.color }}
-              />
-              {group.status.name}
-              <span className="text-black/40 dark:text-white/40">({group.appointments.length})</span>
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth={2}
-                className={`ml-auto h-3.5 w-3.5 transition-transform ${isCollapsed ? "-rotate-90" : ""}`}
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25 12 15.75 4.5 8.25" />
-              </svg>
-            </button>
-            {!isCollapsed && (
-              <div className="overflow-x-auto rounded-xl border border-black/10 dark:border-white/10">
-                <table className="w-full min-w-[640px] text-left text-sm">
-                  <thead className="bg-black/5 dark:bg-white/5">
-                    <tr>
-                      <th className="px-3 py-2 font-medium">Lead</th>
-                      <th className="px-3 py-2 font-medium">Address</th>
-                      <th className="px-3 py-2 font-medium">Date &amp; Time</th>
-                      <th className="px-3 py-2 font-medium">Closer</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {group.appointments.map((a) => {
-                      const lead = leadById.get(a.lead_id);
-                      const closerNames = assignments
-                        .filter((x) => x.appointment_id === a.id && x.role === "closer")
-                        .map((x) => x.full_name)
-                        .join(", ");
-                      return (
-                        <tr
-                          key={a.id}
-                          onClick={() => setSelectedId(a.id)}
-                          className="cursor-pointer border-t border-black/5 hover:bg-black/5 dark:border-white/10 dark:hover:bg-white/5"
-                        >
-                          <td className="px-3 py-2">
-                            {[lead?.first_name, lead?.last_name].filter(Boolean).join(" ") || "Unknown"}
-                          </td>
-                          <td className="px-3 py-2 text-black/70 dark:text-white/70">
-                            {lead?.address_line ?? "—"}
-                          </td>
-                          <td className="px-3 py-2">{new Date(a.scheduled_at).toLocaleString()}</td>
-                          <td className="px-3 py-2">{closerNames || "Unassigned"}</td>
+      {viewMode === "list" && visibleAppointments.length > 0 && (
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto">
+          {groupedByStatus.map((group) => {
+            const isCollapsed = collapsedStatusIds.has(group.status.id);
+            return (
+              <div key={group.status.id}>
+                <button
+                  onClick={() => toggleCollapsed(group.status.id)}
+                  className="mb-2 flex w-full items-center gap-2 text-sm font-medium"
+                >
+                  <span
+                    className="inline-block h-2 w-2 rounded-full"
+                    style={{ backgroundColor: group.status.color }}
+                  />
+                  {group.status.name}
+                  <span className="text-black/40 dark:text-white/40">({group.appointments.length})</span>
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth={2}
+                    className={`ml-auto h-3.5 w-3.5 transition-transform ${isCollapsed ? "-rotate-90" : ""}`}
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25 12 15.75 4.5 8.25" />
+                  </svg>
+                </button>
+                {!isCollapsed && (
+                  <div className="overflow-x-auto rounded-xl border border-black/10 dark:border-white/10">
+                    <table className="w-full min-w-[640px] text-left text-sm">
+                      <thead className="bg-black/5 dark:bg-white/5">
+                        <tr>
+                          <th className="px-3 py-2 font-medium">Lead</th>
+                          <th className="px-3 py-2 font-medium">Address</th>
+                          <th className="px-3 py-2 font-medium">Date &amp; Time</th>
+                          <th className="px-3 py-2 font-medium">Closer</th>
                         </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+                      </thead>
+                      <tbody>
+                        {group.appointments.map((a) => {
+                          const lead = leadById.get(a.lead_id);
+                          const closerNames = assignments
+                            .filter((x) => x.appointment_id === a.id && x.role === "closer")
+                            .map((x) => x.full_name)
+                            .join(", ");
+                          return (
+                            <tr
+                              key={a.id}
+                              onClick={() => setSelectedId(a.id)}
+                              className="cursor-pointer border-t border-black/5 hover:bg-black/5 dark:border-white/10 dark:hover:bg-white/5"
+                            >
+                              <td className="px-3 py-2">
+                                {[lead?.first_name, lead?.last_name].filter(Boolean).join(" ") || "Unknown"}
+                              </td>
+                              <td className="px-3 py-2 text-black/70 dark:text-white/70">
+                                {lead?.address_line ?? "—"}
+                              </td>
+                              <td className="px-3 py-2">{new Date(a.scheduled_at).toLocaleString()}</td>
+                              <td className="px-3 py-2">{closerNames || "Unassigned"}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
-        );
-      })}
+            );
+          })}
+        </div>
+      )}
 
       {selected && (
         <AppointmentDetailPanel

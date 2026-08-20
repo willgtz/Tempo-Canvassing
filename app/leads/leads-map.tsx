@@ -67,6 +67,33 @@ const UNCLUSTERED_LAYER: CircleLayerSpecification = {
   },
 };
 
+// Same filter as UNCLUSTERED_LAYER (only individual, not-yet-clustered
+// pins), so labels only ever show once zoomed in enough that a pin
+// represents exactly one lead — never on a cluster bubble, where a
+// single disposition name wouldn't mean anything. White halo (not a
+// dark-mode variant) since this renders on the map's own tile imagery,
+// not the page's CSS — needs to stay legible against whatever's under it
+// regardless of the site's light/dark theme.
+const UNCLUSTERED_LABEL_LAYER: SymbolLayerSpecification = {
+  id: "unclustered-label",
+  type: "symbol",
+  source: "leads",
+  filter: ["!", ["has", "point_count"]],
+  layout: {
+    "text-field": ["get", "dispositionName"],
+    "text-size": 11,
+    "text-font": ["DIN Pro Medium", "Arial Unicode MS Regular"],
+    "text-offset": [0, 1.3],
+    "text-anchor": "top",
+    "text-max-width": 8,
+  },
+  paint: {
+    "text-color": "#1f2937",
+    "text-halo-color": "#ffffff",
+    "text-halo-width": 1.4,
+  },
+};
+
 export function LeadsMap({
   leads,
   dispositionById,
@@ -144,6 +171,7 @@ export function LeadsMap({
             leadId: lead.id,
             color: disposition?.color ?? DEFAULT_COLOR,
             isManual: lead.is_manual,
+            dispositionName: disposition?.name ?? "No Status",
           },
           geometry: { type: "Point" as const, coordinates: [lead.lng, lead.lat] },
         };
@@ -291,6 +319,7 @@ export function LeadsMap({
           <Layer {...CLUSTER_LAYER} />
           <Layer {...CLUSTER_COUNT_LAYER} />
           <Layer {...UNCLUSTERED_LAYER} />
+          <Layer {...UNCLUSTERED_LABEL_LAYER} />
         </Source>
       )}
 
