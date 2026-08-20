@@ -78,7 +78,7 @@ export default async function LeadsPage() {
       currentUserId={session.userId}
       canFilterByRep={session.role === "team_lead" || session.role === "admin" || session.role === "super_admin"}
       isAdmin={session.role === "admin" || session.role === "super_admin"}
-      googleMapsApiKey={process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? ""}
+      mapboxAccessToken={process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN ?? ""}
     />
   );
 }

@@ -46,7 +46,7 @@ export function LeadsExplorer({
   currentUserId,
   canFilterByRep,
   isAdmin,
-  googleMapsApiKey,
+  mapboxAccessToken,
 }: {
   leads: Lead[];
   dispositions: Disposition[];
@@ -55,7 +55,7 @@ export function LeadsExplorer({
   currentUserId: string;
   canFilterByRep: boolean;
   isAdmin: boolean;
-  googleMapsApiKey: string;
+  mapboxAccessToken: string;
 }) {
   const [viewMode, setViewMode] = useState<ViewMode>("map");
   const [dispositionFilter, setDispositionFilter] = useState("all");
@@ -344,7 +344,7 @@ export function LeadsExplorer({
           <LeadsMap
             leads={filteredLeads}
             dispositionById={dispositionById}
-            apiKey={googleMapsApiKey}
+            apiKey={mapboxAccessToken}
             selectMode={selectMode}
             selectedLeadIds={selectedLeadIds}
             onSelectLead={setSelectedLeadId}
