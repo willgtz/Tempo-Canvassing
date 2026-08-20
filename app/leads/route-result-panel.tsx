@@ -19,6 +19,30 @@ function buildGoogleMapsUrl(stops: RouteStop[]): string {
   return `https://www.google.com/maps/dir/?${params.toString()}`;
 }
 
+// Per-stop turn-by-turn handoff — the whole-route link above is for
+// starting out, but mid-route a rep needs "get me to just this one
+// stop" from wherever they actually are now, not a replay of the whole
+// planned route from the original origin. Omitting an origin param on
+// both is deliberate — both Apple's and Google's directions URLs
+// default to the device's current location when none is given, which is
+// exactly the "from wherever I am right now" behavior wanted here.
+function buildGoogleMapsStopUrl(stop: RouteStop): string {
+  const params = new URLSearchParams({
+    api: "1",
+    destination: `${stop.lat},${stop.lng}`,
+    travelmode: "driving",
+  });
+  return `https://www.google.com/maps/dir/?${params.toString()}`;
+}
+
+function buildAppleMapsStopUrl(stop: RouteStop): string {
+  const params = new URLSearchParams({
+    daddr: `${stop.lat},${stop.lng}`,
+    dirflg: "d",
+  });
+  return `https://maps.apple.com/?${params.toString()}`;
+}
+
 export function RouteResultPanel({
   stops,
   skippedCount,
@@ -71,8 +95,33 @@ export function RouteResultPanel({
               <span className="flex h-6 w-6 flex-none items-center justify-center rounded-full bg-black text-xs font-medium text-white dark:bg-white dark:text-black">
                 {i + 1}
               </span>
-              <div className="text-sm">
-                <p className="font-medium">{stop.name}</p>
+              <div className="flex-1 text-sm">
+                <div className="flex items-start justify-between gap-2">
+                  <p className="font-medium">{stop.name}</p>
+                  {/* No leadId means this is the synthetic "current
+                      location" origin stop — nowhere useful to route
+                      to, so it gets no Go links. */}
+                  {stop.leadId && (
+                    <div className="flex shrink-0 gap-2 text-xs">
+                      <a
+                        href={buildAppleMapsStopUrl(stop)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="rounded-full border border-black/15 px-2 py-0.5 font-medium hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+                      >
+                        Apple Go
+                      </a>
+                      <a
+                        href={buildGoogleMapsStopUrl(stop)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="rounded-full border border-black/15 px-2 py-0.5 font-medium hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+                      >
+                        Google Go
+                      </a>
+                    </div>
+                  )}
+                </div>
                 {stop.addressLine && (
                   <p className="text-black/70 dark:text-white/70">
                     {[stop.addressLine, stop.city, stop.state, stop.zipcode]
