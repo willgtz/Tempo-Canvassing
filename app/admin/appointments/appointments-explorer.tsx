@@ -55,7 +55,8 @@ export function AppointmentsExplorer({
   const [scheduledTo, setScheduledTo] = useState("");
   const [selectedCloserId, setSelectedCloserId] = useState("");
   const [collapsedStatusIds, setCollapsedStatusIds] = useState<Set<string>>(new Set());
-  const [viewMode, setViewMode] = useState<"list" | "calendar">("list");
+  const [viewMode, setViewMode] = useState<"list" | "calendar">("calendar");
+  const [showMobileFilters, setShowMobileFilters] = useState(false);
 
   // router.refresh() re-runs page.tsx's server-side fetch and passes fresh
   // props down, but doesn't remount this component — its useState wouldn't
@@ -152,10 +153,158 @@ export function AppointmentsExplorer({
   }
 
   const selected = appointments.find((a) => a.id === selectedId) ?? null;
+  const activeFilterCount =
+    (selectedStatusIds.size > 0 ? 1 : 0) +
+    (scheduledFrom ? 1 : 0) +
+    (scheduledTo ? 1 : 0) +
+    (selectedCloserId ? 1 : 0);
+  const hasAnyFilter = activeFilterCount > 0 || searchText.length > 0;
+
+  function clearAllFilters() {
+    setSearchText("");
+    setSelectedStatusIds(new Set());
+    setScheduledFrom("");
+    setScheduledTo("");
+    setSelectedCloserId("");
+  }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="space-y-4 md:space-y-6">
+      {/* Mobile: one slim row — search, a filter icon (badge = active
+          count) opening a bottom sheet with the status/date/closer
+          controls, and an icon view toggle — instead of the full
+          three-row Card, which ate most of the screen on a phone. Mirrors
+          the same compaction done on the Leads page. */}
+      <div className="flex items-center gap-2 md:hidden">
+        <Input
+          value={searchText}
+          onChange={(e) => setSearchText(e.target.value)}
+          placeholder="Search name or address…"
+          className="min-w-0 flex-1 rounded-full"
+        />
+        <button
+          onClick={() => setShowMobileFilters(true)}
+          className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-black/15 active:bg-black/10 dark:border-white/20 dark:active:bg-white/20"
+          aria-label="Filters"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="h-4.5 w-4.5">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M7 12h10M10 18h4" />
+          </svg>
+          {activeFilterCount > 0 && (
+            <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-blue-600 text-[10px] font-bold text-white">
+              {activeFilterCount}
+            </span>
+          )}
+        </button>
+        <div className="flex shrink-0 overflow-hidden rounded-full border border-black/15 dark:border-white/20">
+          <button
+            onClick={() => setViewMode("calendar")}
+            className={cn("flex h-9 w-9 items-center justify-center", viewMode === "calendar" ? "bg-blue-600 text-white dark:bg-blue-500" : "")}
+            aria-label="Calendar view"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="h-4.5 w-4.5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M8 2v4m8-4v4M3.5 8h17M5 4h14a1.5 1.5 0 0 1 1.5 1.5V19a1.5 1.5 0 0 1-1.5 1.5H5A1.5 1.5 0 0 1 3.5 19V5.5A1.5 1.5 0 0 1 5 4Z" />
+            </svg>
+          </button>
+          <button
+            onClick={() => setViewMode("list")}
+            className={cn("flex h-9 w-9 items-center justify-center", viewMode === "list" ? "bg-blue-600 text-white dark:bg-blue-500" : "")}
+            aria-label="List view"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="h-4.5 w-4.5">
+              <path strokeLinecap="round" d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      {showMobileFilters && (
+        <>
+          <div className="fixed inset-0 z-30 bg-black/30 md:hidden" onClick={() => setShowMobileFilters(false)} />
+          <div className="fixed inset-x-0 bottom-0 z-40 max-h-[80vh] space-y-4 overflow-y-auto rounded-t-2xl border-t border-black/10 bg-white p-5 md:hidden dark:border-white/10 dark:bg-neutral-950">
+            <div className="flex items-center justify-between">
+              <h2 className="text-base font-semibold">Filters</h2>
+              <Button variant="ghost" size="sm" onClick={() => setShowMobileFilters(false)}>
+                Done
+              </Button>
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-xs font-medium">Status</label>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  onClick={() => setSelectedStatusIds(new Set())}
+                  className={cn(
+                    "rounded-full border px-3 py-1 text-xs font-medium transition-colors",
+                    selectedStatusIds.size === 0
+                      ? "border-blue-600 bg-blue-600 text-white dark:border-blue-500 dark:bg-blue-500"
+                      : "border-black/15 hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+                  )}
+                >
+                  All
+                </button>
+                {statuses.map((status) => (
+                  <button
+                    key={status.id}
+                    onClick={() => toggleStatus(status.id)}
+                    className={cn(
+                      "flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors",
+                      selectedStatusIds.has(status.id)
+                        ? "border-blue-600 bg-blue-600 text-white dark:border-blue-500 dark:bg-blue-500"
+                        : "border-black/15 hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+                    )}
+                  >
+                    <span className="inline-block h-2 w-2 rounded-full" style={{ backgroundColor: status.color }} />
+                    {status.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="text-xs font-medium">From</label>
+                <Input type="date" value={scheduledFrom} onChange={(e) => setScheduledFrom(e.target.value)} className="block w-full" />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium">To</label>
+                <Input type="date" value={scheduledTo} onChange={(e) => setScheduledTo(e.target.value)} className="block w-full" />
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-xs font-medium">Closer</label>
+              <Select value={selectedCloserId} onChange={(e) => setSelectedCloserId(e.target.value)} className="block w-full">
+                <option value="">All</option>
+                {closers.map((c) => (
+                  <option key={c.userId} value={c.userId}>
+                    {c.fullName}
+                  </option>
+                ))}
+              </Select>
+            </div>
+
+            <div className="flex gap-2 border-t border-black/10 pt-4 dark:border-white/10">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => startRefresh(() => router.refresh())}
+                disabled={isRefreshing}
+                className="flex-1"
+              >
+                {isRefreshing ? "Refreshing…" : "Refresh"}
+              </Button>
+              {hasAnyFilter && (
+                <Button type="button" variant="secondary" onClick={clearAllFilters} className="flex-1">
+                  Clear Filters
+                </Button>
+              )}
+            </div>
+          </div>
+        </>
+      )}
+
+      <div className="hidden items-center justify-between md:flex">
         <div className="flex gap-1 overflow-hidden rounded-full border border-black/15 p-0.5 dark:border-white/20">
           {(["list", "calendar"] as const).map((mode) => (
             <button
@@ -196,7 +345,7 @@ export function AppointmentsExplorer({
         </Button>
       </div>
 
-      <Card className="space-y-3 p-4">
+      <Card className="hidden space-y-3 p-4 md:block">
         <Input
           value={searchText}
           onChange={(e) => setSearchText(e.target.value)}
@@ -256,15 +405,9 @@ export function AppointmentsExplorer({
               ))}
             </Select>
           </label>
-          {(searchText || selectedStatusIds.size > 0 || scheduledFrom || scheduledTo || selectedCloserId) && (
+          {hasAnyFilter && (
             <button
-              onClick={() => {
-                setSearchText("");
-                setSelectedStatusIds(new Set());
-                setScheduledFrom("");
-                setScheduledTo("");
-                setSelectedCloserId("");
-              }}
+              onClick={clearAllFilters}
               className="text-black/50 hover:text-black dark:text-white/50 dark:hover:text-white"
             >
               Clear filters
