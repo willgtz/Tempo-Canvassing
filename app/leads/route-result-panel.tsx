@@ -49,9 +49,11 @@ export function RouteResultPanel({
   stops,
   skippedCount,
   onClose,
+  onSelectLead,
 }: {
   stops: RouteStop[];
   skippedCount: number;
+  onSelectLead: (leadId: string) => void;
   onClose: () => void;
 }) {
   const mapsUrl = buildGoogleMapsUrl(stops);
@@ -111,10 +113,23 @@ export function RouteResultPanel({
               </span>
               <div className="flex-1 text-sm">
                 <div className="flex items-start justify-between gap-2">
-                  <p className="font-medium">{stop.name}</p>
-                  {/* No leadId means this is the synthetic "current
-                      location" origin stop — nowhere useful to route
-                      to, so it gets no Go links. */}
+                  {/* Tapping the name opens that lead's own detail panel
+                      (notes/disposition) — the point being able to leave
+                      a note right when arriving at a stop, without
+                      leaving the route view to go find the lead again.
+                      No leadId means this is the synthetic "current
+                      location" origin stop — nothing to open for that. */}
+                  {stop.leadId ? (
+                    <button
+                      type="button"
+                      onClick={() => onSelectLead(stop.leadId as string)}
+                      className="font-medium underline decoration-black/30 underline-offset-2 hover:decoration-black dark:decoration-white/30 dark:hover:decoration-white"
+                    >
+                      {stop.name}
+                    </button>
+                  ) : (
+                    <p className="font-medium">{stop.name}</p>
+                  )}
                   {stop.leadId && (
                     <div className="flex shrink-0 gap-2 text-xs">
                       <a

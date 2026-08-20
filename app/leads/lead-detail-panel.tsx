@@ -183,13 +183,13 @@ export function LeadDetailPanel({
     <>
       <div
         className={cn(
-          "fixed inset-0 z-20 bg-black/30 backdrop-blur-sm transition-opacity duration-200",
+          "fixed inset-0 z-40 bg-black/30 backdrop-blur-sm transition-opacity duration-200",
           visible ? "opacity-100" : "opacity-0"
         )}
         onClick={onClose}
       />
       {doorKnockNotice && (
-        <div className="fixed inset-x-0 bottom-4 z-50 flex justify-center px-4">
+        <div className="fixed inset-x-0 bottom-4 z-[60] flex justify-center px-4">
           <div className="rounded-full bg-black/90 px-4 py-2 text-center text-sm text-white shadow-lg dark:bg-white/90 dark:text-black">
             {doorKnockNotice}
           </div>
@@ -197,7 +197,7 @@ export function LeadDetailPanel({
       )}
       <div
         className={cn(
-          "fixed right-0 top-0 z-30 h-full w-full max-w-md overflow-y-auto border-l border-black/10 bg-white p-6 shadow-xl transition-transform duration-200 ease-out dark:border-white/10 dark:bg-neutral-950",
+          "fixed right-0 top-0 z-50 h-full w-full max-w-md overflow-y-auto border-l border-black/10 bg-white p-6 shadow-xl transition-transform duration-200 ease-out dark:border-white/10 dark:bg-neutral-950",
           visible ? "translate-x-0" : "translate-x-full"
         )}
       >

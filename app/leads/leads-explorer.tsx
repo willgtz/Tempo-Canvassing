@@ -620,6 +620,7 @@ export function LeadsExplorer({
           stops={routeStops}
           skippedCount={routeSkipped}
           onClose={() => setRouteStops(null)}
+          onSelectLead={setSelectedLeadId}
         />
       )}
     </div>
