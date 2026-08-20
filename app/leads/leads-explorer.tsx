@@ -10,6 +10,7 @@ import { RouteResultPanel } from "./route-result-panel";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
 import { cn } from "@/components/ui/cn";
+import { getCurrentLocation } from "@/lib/geo";
 import type { AppointmentFormField, Disposition, Lead, RouteStop, TeamZip } from "./types";
 
 type ViewMode = "map" | "list";
@@ -18,25 +19,6 @@ type ViewMode = "map" | "list";
 // location always takes one of those slots as the route origin, so at
 // most 24 leads can be selected.
 const MAX_ROUTE_STOPS = 24;
-
-function getCurrentLocation(): Promise<{ lat: number; lng: number }> {
-  return new Promise((resolve, reject) => {
-    if (!navigator.geolocation) {
-      reject(new Error("Geolocation isn't supported by this browser."));
-      return;
-    }
-    navigator.geolocation.getCurrentPosition(
-      (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-      (err) =>
-        reject(
-          new Error(
-            err.message || "Couldn't get your location — allow location access and try again."
-          )
-        ),
-      { enableHighAccuracy: true, timeout: 10000 }
-    );
-  });
-}
 
 export function LeadsExplorer({
   leads,
@@ -47,6 +29,7 @@ export function LeadsExplorer({
   canFilterByRep,
   isAdmin,
   mapboxAccessToken,
+  doorKnockRadiusFeet,
 }: {
   leads: Lead[];
   dispositions: Disposition[];
@@ -56,6 +39,7 @@ export function LeadsExplorer({
   canFilterByRep: boolean;
   isAdmin: boolean;
   mapboxAccessToken: string;
+  doorKnockRadiusFeet: number;
 }) {
   const [viewMode, setViewMode] = useState<ViewMode>("map");
   const [dispositionFilter, setDispositionFilter] = useState("all");
@@ -590,6 +574,7 @@ export function LeadsExplorer({
           dispositions={dispositions}
           appointmentFormFields={appointmentFormFields}
           isAdmin={isAdmin}
+          doorKnockRadiusFeet={doorKnockRadiusFeet}
           onClose={() => setSelectedLeadId(null)}
           onDispositionSaved={(leadId, dispositionId) =>
             setLeadsState((prev) =>

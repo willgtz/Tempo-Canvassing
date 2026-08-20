@@ -3,6 +3,7 @@
 import { useEffect, useState, useTransition } from "react";
 import { updateLeadDisposition, updateLeadPriorSaleDate, addLeadNote } from "./actions";
 import { SetAppointmentModal } from "./set-appointment-modal";
+import { getCurrentLocation, distanceFeet } from "@/lib/geo";
 import type { AppointmentFormField, Disposition, Lead } from "./types";
 
 type Note = {
@@ -26,6 +27,7 @@ export function LeadDetailPanel({
   dispositions,
   appointmentFormFields,
   isAdmin,
+  doorKnockRadiusFeet,
   onClose,
   onDispositionSaved,
   onPriorSaleDateSaved,
@@ -35,6 +37,7 @@ export function LeadDetailPanel({
   dispositions: Disposition[];
   appointmentFormFields: AppointmentFormField[];
   isAdmin: boolean;
+  doorKnockRadiusFeet: number;
   onClose: () => void;
   onDispositionSaved: (leadId: string, dispositionId: string | null) => void;
   onPriorSaleDateSaved: (leadId: string, priorSaleDate: string | null) => void;
@@ -44,6 +47,7 @@ export function LeadDetailPanel({
   const [dispositionId, setDispositionId] = useState(lead.disposition_id ?? "");
   const [dispositionError, setDispositionError] = useState<string | null>(null);
   const [isSavingDisposition, startDispositionSave] = useTransition();
+  const [doorKnockNotice, setDoorKnockNotice] = useState<string | null>(null);
 
   const [priorSaleDate, setPriorSaleDate] = useState(lead.prior_sale_date ?? "");
   const [priorSaleDateError, setPriorSaleDateError] = useState<string | null>(null);
@@ -92,6 +96,45 @@ export function LeadDetailPanel({
   const dispositionChanged = (dispositionId || null) !== (lead.disposition_id ?? null);
   const priorSaleDateChanged = (priorSaleDate || null) !== (lead.prior_sale_date ?? null);
 
+  // Auto-dismisses after a few seconds — this is a brief, non-blocking
+  // notice (the door-knock plan's "soft check": the save always happens
+  // regardless), not something that should linger and require dismissal.
+  useEffect(() => {
+    if (!doorKnockNotice) return;
+    const t = setTimeout(() => setDoorKnockNotice(null), 4000);
+    return () => clearTimeout(t);
+  }, [doorKnockNotice]);
+
+  // Best-effort location capture for door-knock verification — a
+  // disposition change or note add always saves either way (this is the
+  // "soft check" from the door-knock plan), this only decides what
+  // (if anything) to tell the rep about it. The DB trigger
+  // (compute_door_knock_verification*, schema.sql) is the actual system
+  // of record and always recomputes verified/distance_ft itself from
+  // the coordinates passed to the server action below.
+  async function captureDoorKnockLocation(): Promise<{ lat?: number; lng?: number }> {
+    let location: { lat: number; lng: number } | null = null;
+    try {
+      location = await getCurrentLocation();
+    } catch {
+      // Falls through to the "can't verify your location" notice below.
+    }
+
+    if (lead.lat == null || lead.lng == null) {
+      setDoorKnockNotice("Can't verify — this lead has no location on file");
+    } else if (!location) {
+      setDoorKnockNotice("Can't verify your location");
+    } else {
+      const distance = distanceFeet(location.lat, location.lng, lead.lat, lead.lng);
+      if (distance > doorKnockRadiusFeet) {
+        setDoorKnockNotice("Too far from lead — won't count toward your door count");
+      }
+      // In range: no notice, silent normal save.
+    }
+
+    return location ? { lat: location.lat, lng: location.lng } : {};
+  }
+
   function handleSavePriorSaleDate() {
     setPriorSaleDateError(null);
     startPriorSaleDateSave(async () => {
@@ -107,7 +150,8 @@ export function LeadDetailPanel({
   function handleSaveDisposition() {
     setDispositionError(null);
     startDispositionSave(async () => {
-      const result = await updateLeadDisposition(lead.id, dispositionId || null);
+      const { lat, lng } = await captureDoorKnockLocation();
+      const result = await updateLeadDisposition(lead.id, dispositionId || null, lat, lng);
       if (!result.ok) {
         setDispositionError(result.error);
         return;
@@ -121,7 +165,8 @@ export function LeadDetailPanel({
     if (!text) return;
     setNoteError(null);
     startNoteSave(async () => {
-      const result = await addLeadNote(lead.id, text);
+      const { lat, lng } = await captureDoorKnockLocation();
+      const result = await addLeadNote(lead.id, text, lat, lng);
       if (!result.ok) {
         setNoteError(result.error);
         return;
@@ -134,6 +179,13 @@ export function LeadDetailPanel({
   return (
     <>
       <div className="fixed inset-0 z-20 bg-black/30" onClick={onClose} />
+      {doorKnockNotice && (
+        <div className="fixed inset-x-0 bottom-4 z-50 flex justify-center px-4">
+          <div className="rounded-full bg-black/90 px-4 py-2 text-center text-sm text-white shadow-lg dark:bg-white/90 dark:text-black">
+            {doorKnockNotice}
+          </div>
+        </div>
+      )}
       <div className="fixed right-0 top-0 z-30 h-full w-full max-w-md overflow-y-auto border-l border-black/10 bg-white p-6 shadow-xl dark:border-white/10 dark:bg-neutral-950">
         <div className="flex items-start justify-between gap-4">
           <h2 className="text-lg font-semibold">

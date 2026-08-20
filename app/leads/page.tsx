@@ -20,6 +20,7 @@ export default async function LeadsPage() {
     { data: dispositions, error: dispositionsError },
     { data: teamZips, error: teamZipsError },
     { data: appointmentFormFields, error: appointmentFormFieldsError },
+    { data: radiusRow, error: radiusError },
   ] = await Promise.all([
     supabase
       .from("leads")
@@ -36,6 +37,12 @@ export default async function LeadsPage() {
       .from("appointment_form_fields")
       .select("id, label, field_type, options, is_required, sort_order")
       .order("sort_order"),
+    // Drives the client-side "too far to count as a door knock" notice —
+    // purely advisory; the DB trigger (compute_door_knock_verification)
+    // is the real system of record and always recomputes server-side
+    // regardless of what the client sends. Same app_settings row the
+    // admin settings page (app/admin/reps/settings) reads/writes.
+    supabase.from("app_settings").select("value").eq("key", "door_knock_radius_feet").single(),
   ]);
 
   if (leadsError || dispositionsError) {
@@ -63,6 +70,12 @@ export default async function LeadsPage() {
   if (appointmentFormFieldsError) {
     console.error("Failed to load appointment_form_fields:", appointmentFormFieldsError.message);
   }
+  // Same non-blocking treatment — worst case the client-side "too far"
+  // notice falls back to the schema's own default (150ft, matching the
+  // row app_settings ships with) rather than taking down the whole page.
+  if (radiusError) {
+    console.error("Failed to load door_knock_radius_feet:", radiusError.message);
+  }
 
   const transformedLeads: Lead[] = ((leads ?? []) as unknown as RawLeadRow[]).map((l) => ({
     ...l,
@@ -75,6 +88,7 @@ export default async function LeadsPage() {
       dispositions={(dispositions ?? []) as Disposition[]}
       teamZips={(teamZips ?? []) as TeamZip[]}
       appointmentFormFields={(appointmentFormFields ?? []) as AppointmentFormField[]}
+      doorKnockRadiusFeet={typeof radiusRow?.value === "number" ? radiusRow.value : 150}
       currentUserId={session.userId}
       canFilterByRep={session.role === "team_lead" || session.role === "admin" || session.role === "super_admin"}
       isAdmin={session.role === "admin" || session.role === "super_admin"}

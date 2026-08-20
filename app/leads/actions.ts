@@ -16,7 +16,15 @@ export type UpdateDispositionResult = { ok: true } | { ok: false; error: string 
 // of a silent no-op update.
 export async function updateLeadDisposition(
   leadId: string,
-  dispositionId: string | null
+  dispositionId: string | null,
+  // Optional door-knock location capture — purely advisory input. The DB
+  // trigger (compute_door_knock_verification_history, schema.sql) is the
+  // real system of record: it always recomputes verified/distance_ft
+  // itself server-side from these coordinates, ignoring anything else a
+  // client might claim, so there's no way to spoof a verified knock by
+  // passing fake values here.
+  eventLat?: number,
+  eventLng?: number
 ): Promise<UpdateDispositionResult> {
   const session = await getSession();
   if (!session) return { ok: false, error: "Unauthorized" };
@@ -70,6 +78,8 @@ export async function updateLeadDisposition(
     field_changed: "disposition",
     old_value: oldValue,
     new_value: newValue,
+    event_lat: eventLat ?? null,
+    event_lng: eventLng ?? null,
   });
 
   if (historyError) {
@@ -290,7 +300,15 @@ export type AddNoteResult =
   | { ok: true; note: { id: string; note: string; created_at: string; author_name: string } }
   | { ok: false; error: string };
 
-export async function addLeadNote(leadId: string, note: string): Promise<AddNoteResult> {
+export async function addLeadNote(
+  leadId: string,
+  note: string,
+  // Same door-knock location capture as updateLeadDisposition — a note
+  // add counts as a door-knock event exactly like a disposition change
+  // does (schema.sql's door_knock_events view unions both).
+  eventLat?: number,
+  eventLng?: number
+): Promise<AddNoteResult> {
   const session = await getSession();
   if (!session) return { ok: false, error: "Unauthorized" };
 
@@ -301,7 +319,13 @@ export async function addLeadNote(leadId: string, note: string): Promise<AddNote
 
   const { data, error } = await supabase
     .from("lead_notes")
-    .insert({ lead_id: leadId, user_id: session.userId, note: text })
+    .insert({
+      lead_id: leadId,
+      user_id: session.userId,
+      note: text,
+      event_lat: eventLat ?? null,
+      event_lng: eventLng ?? null,
+    })
     .select("id, note, created_at")
     .single();
 
