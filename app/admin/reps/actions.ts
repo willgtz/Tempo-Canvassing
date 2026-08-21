@@ -92,55 +92,44 @@ async function getSiteUrl(): Promise<string> {
 }
 
 export type InviteRepInput = {
-  fullName: string;
   email: string;
-  phone: string | null;
-  managerId: string | null;
 };
 
 export type InviteRepResult = { ok: true } | { ok: false; error: string };
 
-// Alternative to addRep: no password set here — Supabase emails the invite,
-// the rep sets their own password on the /invite page. Requires SMTP to be
-// configured on the Supabase project and the redirect URL to be allow-
-// listed (Authentication -> URL Configuration) — neither is verifiable
-// from here, so a silent failure on either usually means one of those.
+// Alternative to addRep: no password set here, and (unlike addRep) no name
+// collected upfront either — the invited person supplies both their own
+// name and password on the /invite page. This is now a thin wrapper
+// around the invite-user Edge Function rather than its own separate
+// implementation: that function is also what the iOS admin panel calls
+// for the exact same "invite by email only" flow, so routing web through
+// it too means there's one branded-email implementation instead of two
+// that could drift apart, and zero risk of this change touching iOS
+// (which is currently under App Store review) — iOS keeps calling the
+// same function the same way regardless of what changes inside it.
 export async function inviteRep(input: InviteRepInput): Promise<InviteRepResult> {
   const session = await getAdminSession();
   if (!session) return { ok: false, error: "Unauthorized" };
 
-  const fullName = input.fullName.trim();
   const email = input.email.trim().toLowerCase();
-  const phone = input.phone?.trim() || null;
-
-  if (!fullName) return { ok: false, error: "Name is required." };
   if (!EMAIL_RE.test(email)) return { ok: false, error: "Enter a valid email." };
 
-  const adminClient = createAdminClient();
-  const siteUrl = await getSiteUrl();
-
-  const { data: authUser, error: authError } = await adminClient.auth.admin.inviteUserByEmail(
-    email,
-    { redirectTo: `${siteUrl}/invite` }
-  );
-
-  if (authError || !authUser.user) {
-    return { ok: false, error: authError?.message ?? "Failed to send invite." };
-  }
-
   const supabase = await createClient();
-  const { error: profileError } = await supabase.from("profiles").insert({
-    id: authUser.user.id,
-    full_name: fullName,
-    email,
-    phone,
-    role: "rep",
-    manager_id: input.managerId,
+  const {
+    data: { session: authSession },
+  } = await supabase.auth.getSession();
+  if (!authSession) return { ok: false, error: "Unauthorized" };
+
+  const { data, error } = await supabase.functions.invoke("invite-user", {
+    body: { email },
+    headers: { Authorization: `Bearer ${authSession.access_token}` },
   });
 
-  if (profileError) {
-    await adminClient.auth.admin.deleteUser(authUser.user.id);
-    return { ok: false, error: profileError.message };
+  if (error) {
+    return { ok: false, error: error.message ?? "Failed to send invite." };
+  }
+  if (data?.emailWarning) {
+    return { ok: false, error: `Account created, but the invite email failed to send: ${data.emailWarning}` };
   }
 
   revalidatePath("/admin/reps/manage");

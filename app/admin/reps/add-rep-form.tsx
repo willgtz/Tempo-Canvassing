@@ -33,12 +33,7 @@ export function AddRepForm({ managerOptions }: { managerOptions: ManagerOption[]
               password,
               managerId: managerId || null,
             })
-          : await inviteRep({
-              fullName,
-              email,
-              phone: phone || null,
-              managerId: managerId || null,
-            });
+          : await inviteRep({ email });
 
       if (!result.ok) {
         setError(result.error);
@@ -81,21 +76,24 @@ export function AddRepForm({ managerOptions }: { managerOptions: ManagerOption[]
       </div>
       {mode === "invite" && (
         <p className="text-xs text-black/50 dark:text-white/50">
-          Requires email delivery to be configured on the Supabase project —
-          if the invite never arrives, that&apos;s the first thing to check.
+          They&apos;ll get a Fenix-branded email and choose their own name and
+          password — same flow as inviting from the iOS app. You can set
+          phone/manager afterward from the Manage page.
         </p>
       )}
 
       <div className="grid gap-3 sm:grid-cols-2">
-        <div className="space-y-1">
-          <label className="text-xs font-medium">Full name</label>
-          <input
-            value={fullName}
-            onChange={(e) => setFullName(e.target.value)}
-            required
-            className="w-full rounded border border-black/15 px-2 py-1 text-sm dark:border-white/20 dark:bg-transparent"
-          />
-        </div>
+        {mode === "password" && (
+          <div className="space-y-1">
+            <label className="text-xs font-medium">Full name</label>
+            <input
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+              required
+              className="w-full rounded border border-black/15 px-2 py-1 text-sm dark:border-white/20 dark:bg-transparent"
+            />
+          </div>
+        )}
         <div className="space-y-1">
           <label className="text-xs font-medium">Email</label>
           <input
@@ -106,42 +104,44 @@ export function AddRepForm({ managerOptions }: { managerOptions: ManagerOption[]
             className="w-full rounded border border-black/15 px-2 py-1 text-sm dark:border-white/20 dark:bg-transparent"
           />
         </div>
-        <div className="space-y-1">
-          <label className="text-xs font-medium">Phone (optional)</label>
-          <input
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-            className="w-full rounded border border-black/15 px-2 py-1 text-sm dark:border-white/20 dark:bg-transparent"
-          />
-        </div>
         {mode === "password" && (
-          <div className="space-y-1">
-            <label className="text-xs font-medium">Initial password</label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              minLength={8}
-              className="w-full rounded border border-black/15 px-2 py-1 text-sm dark:border-white/20 dark:bg-transparent"
-            />
-          </div>
+          <>
+            <div className="space-y-1">
+              <label className="text-xs font-medium">Phone (optional)</label>
+              <input
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                className="w-full rounded border border-black/15 px-2 py-1 text-sm dark:border-white/20 dark:bg-transparent"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium">Initial password</label>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                minLength={8}
+                className="w-full rounded border border-black/15 px-2 py-1 text-sm dark:border-white/20 dark:bg-transparent"
+              />
+            </div>
+            <div className="space-y-1 sm:col-span-2">
+              <label className="text-xs font-medium">Reports to (optional)</label>
+              <select
+                value={managerId}
+                onChange={(e) => setManagerId(e.target.value)}
+                className="w-full rounded border border-black/15 px-2 py-1 text-sm dark:border-white/20 dark:bg-transparent"
+              >
+                <option value="">No manager</option>
+                {managerOptions.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.full_name} ({m.role})
+                  </option>
+                ))}
+              </select>
+            </div>
+          </>
         )}
-        <div className="space-y-1 sm:col-span-2">
-          <label className="text-xs font-medium">Reports to (optional)</label>
-          <select
-            value={managerId}
-            onChange={(e) => setManagerId(e.target.value)}
-            className="w-full rounded border border-black/15 px-2 py-1 text-sm dark:border-white/20 dark:bg-transparent"
-          >
-            <option value="">No manager</option>
-            {managerOptions.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.full_name} ({m.role})
-              </option>
-            ))}
-          </select>
-        </div>
       </div>
 
       <div className="flex items-center gap-3">

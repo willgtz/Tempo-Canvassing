@@ -1,18 +1,25 @@
 // Supabase Edge Function: invite-user
 //
 // Lets an admin invite a new user by email only, from either the web app
-// (which already has this via inviteRep's Server Action + service-role
-// createAdminClient) or the iOS app, which has no server of its own and
-// so can't call the service-role Auth Admin API directly — this function
-// is that missing server. The invited user supplies their own name and
-// password once they open the invite link (see app/invite/page.tsx's
-// name_pending handling).
+// or the iOS app — both call this same function the same way (POST with
+// an admin's bearer token + { email }), so changing what happens inside
+// it never requires a change on either caller. That matters here
+// specifically: iOS calls this unchanged from AdminSettingsScreen's
+// invite flow, and is currently under App Store review, so this function
+// was deliberately changed only internally (how the invite email gets
+// sent) with its request/response contract left byte-for-byte identical.
+// The invited user supplies their own name and password once they open
+// the invite link (see app/invite/page.tsx's name_pending handling).
 //
 // Secrets: SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are already
 // injected automatically into every Edge Function's environment.
 // PUBLIC_SITE_URL must be set by hand (`supabase secrets set
 // PUBLIC_SITE_URL=https://fenixsun.com`) — a Deno function has no
-// request-host of its own to infer it from.
+// request-host of its own to infer it from. RESEND_API_KEY and
+// NOTIFICATION_FROM_EMAIL are the same two secrets send-notification-email
+// already requires (Edge Function secrets are project-wide, not
+// per-function) — if appointment-notification emails already work, these
+// invite emails need no additional setup.
 
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
@@ -85,12 +92,18 @@ Deno.serve(async (req) => {
     return new Response("Server misconfigured", { status: 500 });
   }
 
-  const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.inviteUserByEmail(
+  // generateLink (not inviteUserByEmail) — creates the auth user exactly
+  // like inviteUserByEmail did, but returns the raw action_link instead
+  // of Supabase sending its own generic default-template email. That
+  // link is what lets us send a Fenix Sun-branded email ourselves below
+  // instead of Supabase's plain "You have been invited" template.
+  const { data: linkData, error: authError } = await supabaseAdmin.auth.admin.generateLink({
+    type: "invite",
     email,
-    { redirectTo: `${siteUrl}/invite` }
-  );
-  if (authError || !authUser.user) {
-    return new Response(authError?.message ?? "Failed to send invite", { status: 500 });
+    options: { redirectTo: `${siteUrl}/invite` },
+  });
+  if (authError || !linkData?.user) {
+    return new Response(authError?.message ?? "Failed to create invite", { status: 500 });
   }
 
   // Row created immediately, not deferred until the user finishes
@@ -101,7 +114,7 @@ Deno.serve(async (req) => {
   // email, purely so nothing else in the UI shows a blank name in the
   // meantime.
   const { error: profileError } = await supabaseAdmin.from("profiles").insert({
-    id: authUser.user.id,
+    id: linkData.user.id,
     full_name: email.split("@")[0],
     email,
     role: "rep",
@@ -109,8 +122,22 @@ Deno.serve(async (req) => {
   });
 
   if (profileError) {
-    await supabaseAdmin.auth.admin.deleteUser(authUser.user.id);
+    await supabaseAdmin.auth.admin.deleteUser(linkData.user.id);
     return new Response(profileError.message, { status: 500 });
+  }
+
+  const emailError = await sendInviteEmail(email, linkData.properties.action_link);
+  if (emailError) {
+    // The account already exists and the link is valid at this point —
+    // failing the whole request here would leave a user with no way to
+    // find out an account was created for them, which is worse than
+    // just surfacing the send failure and letting the admin resend/share
+    // the link manually if needed. Not rolled back.
+    console.error("invite-user: failed to send branded invite email", emailError);
+    return new Response(JSON.stringify({ ok: true, emailWarning: emailError }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
   }
 
   return new Response(JSON.stringify({ ok: true }), {
@@ -118,3 +145,75 @@ Deno.serve(async (req) => {
     headers: { "Content-Type": "application/json" },
   });
 });
+
+// Table-based layout + inline styles throughout — the usual constraints
+// for HTML email, where most clients (Outlook especially) don't support
+// flexbox/grid or external/embedded <style> reliably.
+async function sendInviteEmail(email: string, actionLink: string): Promise<string | null> {
+  const resendApiKey = Deno.env.get("RESEND_API_KEY");
+  const fromEmail = Deno.env.get("NOTIFICATION_FROM_EMAIL");
+  if (!resendApiKey || !fromEmail) {
+    return "RESEND_API_KEY or NOTIFICATION_FROM_EMAIL not set";
+  }
+
+  const html = `<!doctype html>
+<html>
+  <body style="margin:0;padding:0;background-color:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f5;padding:40px 16px;">
+      <tr>
+        <td align="center">
+          <table role="presentation" width="100%" style="max-width:440px;background-color:#ffffff;border-radius:16px;overflow:hidden;">
+            <tr>
+              <td style="background-color:#2563eb;padding:32px;text-align:center;">
+                <span style="color:#ffffff;font-size:28px;font-weight:700;letter-spacing:-0.5px;">Fenix</span>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:32px;">
+                <h1 style="margin:0 0 12px;font-size:20px;line-height:1.3;color:#111827;">You're invited to join the team</h1>
+                <p style="margin:0 0 24px;font-size:15px;line-height:1.5;color:#4b5563;">
+                  Set up your Fenix account to get started — you'll choose your name and password on the next page.
+                </p>
+                <table role="presentation" cellpadding="0" cellspacing="0">
+                  <tr>
+                    <td style="border-radius:999px;background-color:#2563eb;">
+                      <a href="${actionLink}" style="display:inline-block;padding:12px 28px;font-size:15px;font-weight:600;color:#ffffff;text-decoration:none;border-radius:999px;">
+                        Set Up Your Account
+                      </a>
+                    </td>
+                  </tr>
+                </table>
+                <p style="margin:28px 0 0;font-size:13px;line-height:1.5;color:#9ca3af;">
+                  If you weren't expecting this invite, you can safely ignore this email.
+                </p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>`;
+
+  const text = `You're invited to join the Fenix team.\n\nSet up your account: ${actionLink}\n\nIf you weren't expecting this invite, you can safely ignore this email.`;
+
+  const emailResponse = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${resendApiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      from: fromEmail,
+      to: email,
+      subject: "You're invited to join Fenix",
+      html,
+      text,
+    }),
+  });
+
+  if (!emailResponse.ok) {
+    return `Resend request failed: ${emailResponse.status} ${await emailResponse.text()}`;
+  }
+  return null;
+}
