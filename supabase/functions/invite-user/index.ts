@@ -137,7 +137,20 @@ Deno.serve(async (req) => {
     }
   }
 
-  const emailError = await sendInviteEmail(email, linkData.properties.action_link);
+  // Our own page's URL with the raw token, not Supabase's action_link
+  // (which points at <project>.supabase.co/auth/v1/verify and consumes
+  // the one-time token via a plain server-side redirect). Email security
+  // scanners (Outlook Safe Links, Gmail's own link-safety prefetching,
+  // corporate spam gateways) routinely fetch links in incoming mail to
+  // check them before the recipient ever clicks — a bare GET is enough
+  // to burn a one-time verify token, which is exactly what
+  // otp_expired/access_denied on a just-received invite means. A link to
+  // our own domain is just a normal webpage to a scanner; only a real
+  // browser running /invite's JS actually calls verifyOtp and consumes
+  // the token, so a non-JS prefetch can't burn it.
+  const inviteLink = `${siteUrl}/invite?token_hash=${linkData.properties.hashed_token}&type=invite`;
+
+  const emailError = await sendInviteEmail(email, inviteLink);
   if (emailError) {
     // The account already exists and the link is valid at this point —
     // failing the whole request here would leave a user with no way to

@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 export default function InvitePage() {
   const [ready, setReady] = useState(false);
   const [hasSession, setHasSession] = useState(false);
+  const [linkError, setLinkError] = useState<string | null>(null);
   const [namePending, setNamePending] = useState(false);
   const [fullName, setFullName] = useState("");
   const [password, setPassword] = useState("");
@@ -17,19 +18,54 @@ export default function InvitePage() {
 
   useEffect(() => {
     const supabase = createClient();
-    // The invite link's tokens are in the URL when this page first loads;
-    // the client library picks them up and establishes a session
-    // automatically (detectSessionInUrl, on by default) before this
-    // resolves.
-    supabase.auth.getSession().then(async ({ data }) => {
+
+    async function init() {
+      // Supabase's own auth server reports a burned/expired invite token
+      // via a #error=...&error_description=... hash fragment on this
+      // exact page, regardless of what link format sent them here. Checked
+      // first and unconditionally — if this browser also happens to have
+      // an unrelated active session (e.g. the admin who sent the invite,
+      // testing it while still logged into their own account), that must
+      // never be mistaken for a freshly-established invite session, or
+      // this silently falls through to "you're signed in, just set a
+      // password" for the WRONG account instead of surfacing the real
+      // expired-link error.
+      const hashParams = new URLSearchParams(window.location.hash.slice(1));
+      const hashError = hashParams.get("error_description") || hashParams.get("error");
+      if (hashError) {
+        setLinkError(hashError.replace(/\+/g, " "));
+        setReady(true);
+        return;
+      }
+
+      // New-style link (invite-user Edge Function): a token_hash in the
+      // query string, exchanged here explicitly rather than relying on
+      // detectSessionInUrl's implicit hash-token pickup — see the Edge
+      // Function's comment on why the link points here instead of
+      // straight at Supabase's own verify endpoint.
+      const params = new URLSearchParams(window.location.search);
+      const tokenHash = params.get("token_hash");
+      const type = params.get("type");
+      if (tokenHash && type) {
+        const { error: verifyError } = await supabase.auth.verifyOtp({
+          token_hash: tokenHash,
+          type: type as "invite" | "recovery" | "email" | "signup" | "email_change" | "magiclink",
+        });
+        if (verifyError) {
+          setLinkError(verifyError.message);
+          setReady(true);
+          return;
+        }
+      }
+
+      const { data } = await supabase.auth.getSession();
       const session = data.session;
       setHasSession(Boolean(session));
       if (session) {
-        // Email-only invites (invite-user Edge Function, used by the iOS
-        // admin panel) create the profile row with name_pending: true and
-        // a placeholder name — this is what tells us to still ask for a
-        // real one here. Invites sent from the web (inviteRep) already
-        // collect the name upfront, so name_pending is false for those.
+        // Email-only invites (invite-user Edge Function, used by both the
+        // web and iOS admin panels) create the profile row with
+        // name_pending: true and a placeholder name — this is what tells
+        // us to still ask for a real one here.
         const { data: profile } = await supabase
           .from("profiles")
           .select("name_pending")
@@ -38,7 +74,9 @@ export default function InvitePage() {
         setNamePending(Boolean(profile?.name_pending));
       }
       setReady(true);
-    });
+    }
+
+    init();
   }, []);
 
   async function handleSubmit(e: React.FormEvent) {
@@ -95,8 +133,10 @@ export default function InvitePage() {
     return (
       <div className="flex flex-1 items-center justify-center px-4">
         <p className="max-w-sm text-center text-sm text-red-600 dark:text-red-400">
-          This invite link is invalid or has expired. Ask your admin to send
-          a new one.
+          {linkError && !linkError.toLowerCase().includes("expired") && !linkError.toLowerCase().includes("invalid")
+            ? linkError
+            : "This invite link is invalid or has expired."}{" "}
+          Ask your admin to resend it.
         </p>
       </div>
     );
