@@ -52,6 +52,8 @@ export type AppointmentLead = {
   city: string | null;
   state: string | null;
   zipcode: string;
+  lat: number | null;
+  lng: number | null;
 };
 
 export type ActiveProfile = {

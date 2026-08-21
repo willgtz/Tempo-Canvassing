@@ -107,6 +107,7 @@ export function LeadsMap({
   selectedLeadIds,
   onSelectLead,
   onTogglePin,
+  focusLeadId,
 }: {
   leads: Lead[];
   dispositionById: Map<string, Disposition>;
@@ -115,6 +116,9 @@ export function LeadsMap({
   selectedLeadIds: string[];
   onSelectLead: (leadId: string) => void;
   onTogglePin: (leadId: string) => void;
+  // Deep-link support ("Go to Lead" from an appointment) — flies the map
+  // to this lead once, instead of the default center-of-all-leads view.
+  focusLeadId?: string | null;
 }) {
   const mapRef = useRef<MapRef>(null);
   // Mapbox failures (bad token, network/adblock-blocked tile requests,
@@ -158,6 +162,19 @@ export function LeadsMap({
     () => leads.filter((l): l is LocatedLead => l.lat != null && l.lng != null),
     [leads]
   );
+
+  // Fly to a deep-linked lead exactly once, after the map has actually
+  // loaded (mapRef.current is null before then). A ref (not state) tracks
+  // which id we've already flown to, so this doesn't refire on every
+  // unrelated re-render/data refresh while the same lead stays focused.
+  const flownToFocusRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!loaded || !focusLeadId || flownToFocusRef.current === focusLeadId) return;
+    const target = locatedLeads.find((l) => l.id === focusLeadId);
+    if (!target) return;
+    flownToFocusRef.current = focusLeadId;
+    mapRef.current?.getMap().flyTo({ center: [target.lng, target.lat], zoom: 15, duration: 800 });
+  }, [loaded, focusLeadId, locatedLeads]);
 
   const center = useMemo(() => {
     if (locatedLeads.length === 0) return FALLBACK_CENTER;

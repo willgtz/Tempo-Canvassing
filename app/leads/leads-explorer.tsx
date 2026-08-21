@@ -2,6 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { LeadsMap } from "./leads-map";
 import { LeadsList } from "./leads-list";
 import { SearchableMultiSelect } from "./searchable-multi-select";
@@ -55,7 +56,13 @@ export function LeadsExplorer({
   const [addressQuery, setAddressQuery] = useState("");
   const [appliedAddressQuery, setAppliedAddressQuery] = useState("");
   const [leadsState, setLeadsState] = useState(leads);
-  const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
+  // Deep-link support for "Go to Lead" (appointment detail panels) —
+  // /leads?lead=<id> opens straight to that lead's detail panel and
+  // (in map view) flies the map to it, instead of landing on the
+  // unfocused default view.
+  const searchParams = useSearchParams();
+  const focusLeadId = searchParams.get("lead");
+  const [selectedLeadId, setSelectedLeadId] = useState<string | null>(focusLeadId);
   const [showAddLead, setShowAddLead] = useState(false);
   const [selectMode, setSelectMode] = useState(false);
   const [selectedLeadIds, setSelectedLeadIds] = useState<string[]>([]);
@@ -639,6 +646,7 @@ export function LeadsExplorer({
             selectedLeadIds={selectedLeadIds}
             onSelectLead={setSelectedLeadId}
             onTogglePin={handleTogglePin}
+            focusLeadId={focusLeadId}
           />
         ) : (
           <LeadsList

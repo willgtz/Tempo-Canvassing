@@ -22,6 +22,24 @@ export function getCurrentLocation(): Promise<{ lat: number; lng: number }> {
   });
 }
 
+// Same URL shape as the per-stop turn-by-turn handoff in
+// route-result-panel.tsx (destination-only, no origin — both Apple's and
+// Google's directions URLs default to the device's current location when
+// none is given). Generalized here so any address (not just a route
+// stop) can build the same links. Falls back to a free-text address
+// string when a lead hasn't been geocoded yet — both Apple and Google's
+// URL schemes accept either a "lat,lng" pair or a plain address for
+// their destination param.
+export function buildAppleMapsUrl(destination: string): string {
+  const params = new URLSearchParams({ daddr: destination, dirflg: "d" });
+  return `https://maps.apple.com/?${params.toString()}`;
+}
+
+export function buildGoogleMapsUrl(destination: string): string {
+  const params = new URLSearchParams({ api: "1", destination, travelmode: "driving" });
+  return `https://www.google.com/maps/dir/?${params.toString()}`;
+}
+
 // Haversine, in feet — mirrors the server-side compute_door_knock_verification
 // trigger's own formula exactly (schema.sql) so the client-side "too far"
 // toast and the server's authoritative verified/distance_ft agree. This is

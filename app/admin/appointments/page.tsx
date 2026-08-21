@@ -77,7 +77,7 @@ export default async function AppointmentsPage() {
     leadIds.length
       ? supabase
           .from("leads")
-          .select("id, first_name, last_name, address_line, city, state, zipcode")
+          .select("id, first_name, last_name, address_line, city, state, zipcode, lat, lng")
           .in("id", leadIds)
       : Promise.resolve({ data: [] as AppointmentLead[] }),
     appointmentIds.length

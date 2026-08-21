@@ -1,8 +1,10 @@
 "use client";
 
 import { useState, useTransition, type ReactNode } from "react";
+import Link from "next/link";
 import { useSlideIn } from "@/lib/use-slide-in";
 import { cn } from "@/components/ui/cn";
+import { AddressActionsMenu } from "@/components/address-actions-menu";
 import {
   addAppointmentNote,
   markDealSubmitted,
@@ -316,11 +318,23 @@ export function AppointmentDetailPanel({
         </div>
         {nameError && <p className="text-xs text-red-600 dark:text-red-400">{nameError}</p>}
         {lead && (
-          <p className="mt-1 text-sm text-black/70 dark:text-white/70">
-            {lead.address_line}
-            <br />
-            {[lead.city, lead.state, lead.zipcode].filter(Boolean).join(", ")}
-          </p>
+          <div className="mt-1 flex items-start justify-between gap-2">
+            <AddressActionsMenu
+              addressLine={lead.address_line}
+              city={lead.city}
+              state={lead.state}
+              zipcode={lead.zipcode}
+              lat={lead.lat}
+              lng={lead.lng}
+              className="text-left text-sm text-black/70 underline decoration-black/30 underline-offset-2 hover:decoration-black dark:text-white/70 dark:decoration-white/30 dark:hover:decoration-white"
+            />
+            <Link
+              href={`/leads?lead=${lead.id}`}
+              className="shrink-0 rounded-full border border-black/15 px-2.5 py-1 text-xs font-medium hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+            >
+              Go to Lead
+            </Link>
+          </div>
         )}
       </div>
     ),

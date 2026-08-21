@@ -237,6 +237,8 @@ export type AddManualAppointmentResult =
         city: string | null;
         state: string | null;
         zipcode: string;
+        lat: number | null;
+        lng: number | null;
       };
     }
   | { ok: false; error: string };
@@ -297,7 +299,7 @@ export async function addManualAppointment(
       is_manual: true,
       entered_by: session.userId,
     })
-    .select("id, first_name, last_name, address_line, city, state, zipcode")
+    .select("id, first_name, last_name, address_line, city, state, zipcode, lat, lng")
     .single();
 
   if (leadError || !lead) {

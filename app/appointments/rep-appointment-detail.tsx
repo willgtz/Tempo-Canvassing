@@ -1,10 +1,12 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import Link from "next/link";
 import { updateMyAppointmentStatus, addMyAppointmentNote } from "./actions";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { AddressActionsMenu } from "@/components/address-actions-menu";
 import { useSlideIn } from "@/lib/use-slide-in";
 import { cn } from "@/components/ui/cn";
 import type {
@@ -105,9 +107,28 @@ export function RepAppointmentDetail({
             <h2 className="text-lg font-semibold">
               {[lead?.first_name, lead?.last_name].filter(Boolean).join(" ") || "Unknown lead"}
             </h2>
-            <p className="text-sm text-black/60 dark:text-white/60">
-              {lead ? `${lead.address_line}, ${[lead.city, lead.state, lead.zipcode].filter(Boolean).join(", ")}` : "—"}
-            </p>
+            {lead ? (
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                <AddressActionsMenu
+                  addressLine={lead.address_line}
+                  city={lead.city}
+                  state={lead.state}
+                  zipcode={lead.zipcode}
+                  lat={lead.lat}
+                  lng={lead.lng}
+                  singleLine
+                  className="text-left text-sm text-black/60 underline decoration-black/30 underline-offset-2 hover:decoration-black dark:text-white/60 dark:decoration-white/30 dark:hover:decoration-white"
+                />
+                <Link
+                  href={`/leads?lead=${lead.id}`}
+                  className="shrink-0 rounded-full border border-black/15 px-2 py-0.5 text-xs font-medium hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+                >
+                  Go to Lead
+                </Link>
+              </div>
+            ) : (
+              <p className="text-sm text-black/60 dark:text-white/60">—</p>
+            )}
           </div>
           <Button variant="ghost" size="sm" onClick={onClose}>
             Close
