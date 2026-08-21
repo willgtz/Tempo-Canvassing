@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { getAdminSession } from "@/lib/auth/admin";
 import { createClient } from "@/lib/supabase/server";
+import { geocodeAddress } from "@/lib/geocode/google";
 import type { AppointmentRole } from "./types";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
@@ -196,6 +197,141 @@ export async function markDealSubmitted(appointmentId: string): Promise<ActionRe
 
   revalidatePath("/admin/appointments");
   return { ok: true };
+}
+
+const ZIP_RE = /^\d{5}$/;
+
+export type AddManualAppointmentInput = {
+  firstName: string | null;
+  lastName: string | null;
+  addressLine: string;
+  city: string | null;
+  state: string | null;
+  zipcode: string;
+  scheduledAt: string; // ISO 8601
+};
+
+export type AddManualAppointmentResult =
+  | {
+      ok: true;
+      appointment: {
+        id: string;
+        lead_id: string;
+        scheduled_at: string;
+        status_id: string;
+        custom_field_responses: Record<string, string>;
+        created_by: string;
+        created_at: string;
+        updated_at: string;
+        deal_submitted_at: string | null;
+      };
+      lead: {
+        id: string;
+        first_name: string | null;
+        last_name: string | null;
+        address_line: string;
+        city: string | null;
+        state: string | null;
+        zipcode: string;
+      };
+    }
+  | { ok: false; error: string };
+
+// For an appointment that didn't come from a rep knocking a door in the
+// Leads flow — e.g. a design request phoned/emailed in directly. Every
+// appointment still needs a lead_id (not nullable, schema.sql), so this
+// creates a manual lead first (identical to addManualLead in
+// app/leads/actions.ts — is_manual: true, same geocode-best-effort
+// behavior), then an appointment against it. That manual lead shows up in
+// the normal Leads list/map afterward with the same manual marker actual
+// cold-knock manual leads get — not a separate code path, just reusing it.
+export async function addManualAppointment(
+  input: AddManualAppointmentInput
+): Promise<AddManualAppointmentResult> {
+  const session = await getAdminSession();
+  if (!session) return { ok: false, error: "Unauthorized" };
+
+  const addressLine = input.addressLine.trim();
+  const zipcode = input.zipcode.trim();
+  if (!addressLine) return { ok: false, error: "Address is required." };
+  if (!ZIP_RE.test(zipcode)) return { ok: false, error: "Zip must be exactly 5 digits." };
+
+  const city = input.city?.trim() || null;
+  const state = input.state?.trim() || null;
+
+  let lat: number | null = null;
+  let lng: number | null = null;
+  let precision: string | null = null;
+  try {
+    const fullAddress = [addressLine, city, [state, zipcode].filter(Boolean).join(" ")]
+      .filter(Boolean)
+      .join(", ");
+    const result = await geocodeAddress(fullAddress);
+    lat = result.lat;
+    lng = result.lng;
+    precision = result.precision;
+  } catch {
+    // Same fallback as the rep-facing manual lead entry — insert with no
+    // coordinates rather than blocking the appointment from being logged.
+  }
+
+  const supabase = await createClient();
+
+  const { data: lead, error: leadError } = await supabase
+    .from("leads")
+    .insert({
+      first_name: input.firstName?.trim() || null,
+      last_name: input.lastName?.trim() || null,
+      address_line: addressLine,
+      city,
+      state,
+      zipcode,
+      lat,
+      lng,
+      geocode_precision: precision,
+      geocoded_at: new Date().toISOString(),
+      is_manual: true,
+      entered_by: session.userId,
+    })
+    .select("id, first_name, last_name, address_line, city, state, zipcode")
+    .single();
+
+  if (leadError || !lead) {
+    return { ok: false, error: leadError?.message ?? "Failed to create lead for appointment." };
+  }
+
+  const { data: defaultStatus, error: statusError } = await supabase
+    .from("appointment_statuses")
+    .select("id")
+    .eq("is_default", true)
+    .single();
+
+  if (statusError || !defaultStatus) {
+    return {
+      ok: false,
+      error: statusError?.message ?? "No default appointment status is configured.",
+    };
+  }
+
+  const { data: appointment, error: apptError } = await supabase
+    .from("appointments")
+    .insert({
+      lead_id: lead.id,
+      scheduled_at: input.scheduledAt,
+      status_id: defaultStatus.id,
+      custom_field_responses: {},
+      created_by: session.userId,
+    })
+    .select("id, lead_id, scheduled_at, status_id, custom_field_responses, created_by, created_at, updated_at, deal_submitted_at")
+    .single();
+
+  if (apptError || !appointment) {
+    return { ok: false, error: apptError?.message ?? "Failed to create appointment." };
+  }
+
+  revalidatePath("/admin/appointments");
+  revalidatePath("/leads");
+  return { ok: true, appointment, lead };
 }
 
 // Goes through the same update_lead_name_for_appointment RPC iOS and the

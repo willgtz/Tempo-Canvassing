@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { AppointmentDetailPanel } from "./appointment-detail-panel";
 import { AppointmentsCalendar } from "./appointments-calendar";
+import { AddManualAppointmentModal } from "./add-manual-appointment-modal";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
@@ -60,6 +61,7 @@ export function AppointmentsExplorer({
   const [viewMode, setViewMode] = useState<"list" | "calendar">("calendar");
   const [showMobileFilters, setShowMobileFilters] = useState(false);
   const [showMobileSearch, setShowMobileSearch] = useState(false);
+  const [showAddAppointment, setShowAddAppointment] = useState(false);
 
   // router.refresh() re-runs page.tsx's server-side fetch and passes fresh
   // props down, but doesn't remount this component — its useState wouldn't
@@ -247,6 +249,15 @@ export function AppointmentsExplorer({
                 </span>
               )}
             </button>
+            <button
+              onClick={() => setShowAddAppointment(true)}
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-black/15 active:bg-black/10 dark:border-white/20 dark:active:bg-white/20"
+              aria-label="New appointment"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="h-4.5 w-4.5">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 5v14M5 12h14" />
+              </svg>
+            </button>
             <div className="flex shrink-0 overflow-hidden rounded-full border border-black/15 dark:border-white/20">
               <button
                 onClick={() => setViewMode("calendar")}
@@ -374,28 +385,33 @@ export function AppointmentsExplorer({
             </button>
           ))}
         </div>
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={() => startRefresh(() => router.refresh())}
-          disabled={isRefreshing}
-        >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth={2}
-            className={`h-3.5 w-3.5 ${isRefreshing ? "animate-spin" : ""}`}
+        <div className="flex items-center gap-2">
+          <Button variant="secondary" size="sm" onClick={() => setShowAddAppointment(true)}>
+            + New Appointment
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => startRefresh(() => router.refresh())}
+            disabled={isRefreshing}
           >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99"
-            />
-          </svg>
-          {isRefreshing ? "Refreshing…" : "Refresh"}
-        </Button>
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={2}
+              className={`h-3.5 w-3.5 ${isRefreshing ? "animate-spin" : ""}`}
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99"
+              />
+            </svg>
+            {isRefreshing ? "Refreshing…" : "Refresh"}
+          </Button>
+        </div>
       </div>
 
       <Card className="hidden shrink-0 space-y-3 p-4 md:block">
@@ -587,6 +603,17 @@ export function AppointmentsExplorer({
             setLeadsState((prev) =>
               prev.map((l) => (l.id === leadId ? { ...l, first_name: firstName, last_name: lastName } : l))
             );
+          }}
+        />
+      )}
+
+      {showAddAppointment && (
+        <AddManualAppointmentModal
+          onClose={() => setShowAddAppointment(false)}
+          onCreated={(appointment, lead) => {
+            setAppointments((prev) => [...prev, appointment]);
+            setLeadsState((prev) => [...prev, lead]);
+            setShowAddAppointment(false);
           }}
         />
       )}

@@ -327,8 +327,18 @@ export function LeadDetailPanel({
             {notes?.length === 0 && (
               <p className="text-xs italic text-black/40 dark:text-white/40">No notes yet.</p>
             )}
-            {notes?.map((n) => (
-              <div key={n.id} className="text-sm">
+            {notes?.map((n, i) => (
+              <div
+                key={n.id}
+                className={cn(
+                  "rounded-lg p-2 text-sm",
+                  // Alternating shading, not a border per-note — with
+                  // notes running back-to-back with no other separator,
+                  // it was hard to tell at a glance where one ends and
+                  // the next begins.
+                  i % 2 === 0 ? "bg-black/[0.03] dark:bg-white/[0.05]" : ""
+                )}
+              >
                 <p className="text-xs text-black/50 dark:text-white/50">
                   {n.author_name} · {new Date(n.created_at).toLocaleString()}
                 </p>

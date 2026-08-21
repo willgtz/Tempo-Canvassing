@@ -30,6 +30,12 @@ export default async function LeadsLayout({
           >
             Appointments
           </Link>
+          <Link
+            href="/leads/routes"
+            className="rounded-full border border-black/15 px-3 py-1.5 text-sm font-medium text-black transition-transform duration-100 hover:bg-black/5 active:scale-95 active:bg-black/10 dark:border-white/20 dark:text-white dark:hover:bg-white/10 dark:active:bg-white/20"
+          >
+            Route History
+          </Link>
           {(session.role === "admin" || session.role === "super_admin") && (
             <Link
               href="/admin/leads/upload"

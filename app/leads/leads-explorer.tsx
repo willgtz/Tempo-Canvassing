@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
+import Link from "next/link";
 import { LeadsMap } from "./leads-map";
 import { LeadsList } from "./leads-list";
 import { SearchableMultiSelect } from "./searchable-multi-select";
@@ -385,6 +386,12 @@ export function LeadsExplorer({
             </div>
 
             <div className="flex gap-2 border-t border-black/10 pt-4 dark:border-white/10">
+              <Link
+                href="/leads/routes"
+                className="flex flex-1 items-center justify-center rounded-full border border-black/15 px-3 py-1.5 text-sm font-medium hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+              >
+                Route History
+              </Link>
               <Button type="button" variant="secondary" onClick={handleClearFilters} className="flex-1">
                 Clear Filters
               </Button>
