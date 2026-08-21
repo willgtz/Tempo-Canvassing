@@ -133,6 +133,7 @@ export type AddManualLeadInput = {
   zipcode: string;
   phone: string | null;
   email: string | null;
+  notes: string | null;
 };
 
 export type AddManualLeadResult = { ok: true; lead: Lead } | { ok: false; error: string };
@@ -199,6 +200,17 @@ export async function addManualLead(input: AddManualLeadInput): Promise<AddManua
 
   if (error || !data) {
     return { ok: false, error: error?.message ?? "Failed to add lead." };
+  }
+
+  const noteText = input.notes?.trim();
+  if (noteText) {
+    // Best-effort — the lead itself is already saved at this point, so a
+    // note-insert failure shouldn't be reported as the whole action failing.
+    await supabase.from("lead_notes").insert({
+      lead_id: data.id,
+      user_id: session.userId,
+      note: noteText,
+    });
   }
 
   revalidatePath("/leads");

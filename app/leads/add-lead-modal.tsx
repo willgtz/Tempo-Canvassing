@@ -23,6 +23,7 @@ export function AddLeadModal({
   const [zipcode, setZipcode] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
+  const [notes, setNotes] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -39,6 +40,7 @@ export function AddLeadModal({
         zipcode,
         phone: phone || null,
         email: email || null,
+        notes: notes || null,
       });
       if (!result.ok) {
         setError(result.error);
@@ -152,6 +154,15 @@ export function AddLeadModal({
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
+                className="w-full rounded border border-black/15 px-2 py-1 text-sm dark:border-white/20 dark:bg-transparent"
+              />
+            </div>
+            <div className="space-y-1 sm:col-span-2">
+              <label className="text-xs font-medium">Notes</label>
+              <textarea
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                rows={3}
                 className="w-full rounded border border-black/15 px-2 py-1 text-sm dark:border-white/20 dark:bg-transparent"
               />
             </div>

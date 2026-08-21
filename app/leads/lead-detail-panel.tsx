@@ -3,6 +3,7 @@
 import { useEffect, useState, useTransition } from "react";
 import { updateLeadDisposition, updateLeadPriorSaleDate, addLeadNote } from "./actions";
 import { SetAppointmentModal } from "./set-appointment-modal";
+import { DispositionSelect } from "./disposition-select";
 import { getCurrentLocation, distanceFeet } from "@/lib/geo";
 import { useSlideIn } from "@/lib/use-slide-in";
 import { cn } from "@/components/ui/cn";
@@ -266,18 +267,7 @@ export function LeadDetailPanel({
         <div className="mt-6 space-y-2 border-t border-black/10 pt-4 dark:border-white/10">
           <label className="text-xs font-medium">Disposition</label>
           <div className="flex items-center gap-2">
-            <select
-              value={dispositionId}
-              onChange={(e) => setDispositionId(e.target.value)}
-              className="rounded border border-black/15 px-2 py-1 text-sm dark:border-white/20 dark:bg-transparent"
-            >
-              <option value="">No disposition</option>
-              {dispositions.map((d) => (
-                <option key={d.id} value={d.id}>
-                  {d.name}
-                </option>
-              ))}
-            </select>
+            <DispositionSelect dispositions={dispositions} value={dispositionId} onChange={setDispositionId} />
             <button
               onClick={handleSaveDisposition}
               disabled={!dispositionChanged || isSavingDisposition}
