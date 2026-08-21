@@ -14,19 +14,11 @@ type Size = "sm" | "md";
 // network round-trip involved — this is what makes a tap feel like it
 // registered immediately even before whatever the button triggers
 // (navigation, a Server Action) has actually resolved.
-// Subtle top-to-bottom gradient + shadow (not flat fills) on the two
-// solid-fill variants — small, cheap depth cue that reads as "a real
-// pressable button" rather than a flat color rectangle, without going
-// anywhere near skeuomorphic. Secondary/ghost stay flat on purpose:
-// they're meant to look quieter/lower-emphasis than primary/destructive,
-// and a gradient on a bordered-only button doesn't read the same way.
 const VARIANT_CLASSES: Record<Variant, string> = {
-  primary:
-    "bg-gradient-to-b from-blue-400 to-blue-600 text-white shadow-md shadow-blue-600/40 hover:from-blue-500 hover:to-blue-700 hover:shadow-lg hover:shadow-blue-600/50 active:from-blue-600 active:to-blue-800 dark:from-blue-400 dark:to-blue-600 dark:hover:from-blue-500 dark:hover:to-blue-700",
+  primary: "bg-blue-600 text-white hover:bg-blue-700 active:bg-blue-800 dark:bg-blue-500 dark:hover:bg-blue-600 dark:active:bg-blue-700",
   secondary:
     "border border-black/15 text-black hover:bg-black/5 active:bg-black/10 dark:border-white/20 dark:text-white dark:hover:bg-white/10 dark:active:bg-white/20",
-  destructive:
-    "bg-gradient-to-b from-red-400 to-red-600 text-white shadow-md shadow-red-600/40 hover:from-red-500 hover:to-red-700 hover:shadow-lg hover:shadow-red-600/50 active:from-red-600 active:to-red-800 dark:from-red-400 dark:to-red-600 dark:hover:from-red-500 dark:hover:to-red-700",
+  destructive: "bg-red-600 text-white hover:bg-red-700 active:bg-red-800 dark:bg-red-500 dark:hover:bg-red-600 dark:active:bg-red-700",
   ghost: "text-black/70 hover:bg-black/5 active:bg-black/10 dark:text-white/70 dark:hover:bg-white/10 dark:active:bg-white/20",
 };
 
@@ -43,7 +35,7 @@ export const Button = forwardRef<
     <button
       ref={ref}
       className={cn(
-        "inline-flex items-center justify-center gap-1.5 rounded-full font-medium transition-all duration-100 active:scale-95 disabled:pointer-events-none disabled:opacity-50",
+        "inline-flex items-center justify-center gap-1.5 rounded-full font-medium transition-transform duration-100 active:scale-95 disabled:pointer-events-none disabled:opacity-50",
         VARIANT_CLASSES[variant],
         SIZE_CLASSES[size],
         className

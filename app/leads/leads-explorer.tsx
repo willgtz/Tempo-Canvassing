@@ -44,7 +44,10 @@ export function LeadsExplorer({
   doorKnockRadiusFeet: number;
 }) {
   const [viewMode, setViewMode] = useState<ViewMode>("map");
-  const [dispositionFilter, setDispositionFilter] = useState("all");
+  // Empty set means "show all" — same convention the Appointments status
+  // filter already uses. Multi-select (not a single dropdown value) so a
+  // rep can filter to e.g. "Not Home" + "Callback" at once.
+  const [dispositionFilter, setDispositionFilter] = useState<Set<string>>(new Set());
   const [zipFilter, setZipFilter] = useState<string[]>([]);
   const [repFilter, setRepFilter] = useState("all");
   const [dateFrom, setDateFrom] = useState("");
@@ -98,7 +101,7 @@ export function LeadsExplorer({
     const addressQueryLower = appliedAddressQuery.trim().toLowerCase();
 
     return leadsState.filter((lead) => {
-      if (dispositionFilter !== "all" && lead.disposition_id !== dispositionFilter) return false;
+      if (dispositionFilter.size > 0 && !dispositionFilter.has(lead.disposition_id ?? "")) return false;
       if (zipSet && !zipSet.has(lead.zipcode)) return false;
       if (selectedRepZips && !selectedRepZips.has(lead.zipcode)) return false;
 
@@ -118,7 +121,7 @@ export function LeadsExplorer({
   const withoutLocation = filteredLeads.filter((l) => l.lat == null || l.lng == null).length;
 
   const activeFilterCount =
-    (dispositionFilter !== "all" ? 1 : 0) +
+    (dispositionFilter.size > 0 ? 1 : 0) +
     (repFilter !== "all" ? 1 : 0) +
     (zipFilter.length > 0 ? 1 : 0) +
     (dateFrom ? 1 : 0) +
@@ -129,13 +132,22 @@ export function LeadsExplorer({
     : null;
 
   function handleClearFilters() {
-    setDispositionFilter("all");
+    setDispositionFilter(new Set());
     setZipFilter([]);
     setRepFilter("all");
     setDateFrom("");
     setDateTo("");
     setAddressQuery("");
     setAppliedAddressQuery("");
+  }
+
+  function toggleDisposition(dispositionId: string) {
+    setDispositionFilter((prev) => {
+      const next = new Set(prev);
+      if (next.has(dispositionId)) next.delete(dispositionId);
+      else next.add(dispositionId);
+      return next;
+    });
   }
 
   function handleTogglePin(leadId: string) {
@@ -335,14 +347,34 @@ export function LeadsExplorer({
 
             <div className="space-y-1">
               <label className="text-xs font-medium">Disposition</label>
-              <Select value={dispositionFilter} onChange={(e) => setDispositionFilter(e.target.value)} className="block w-full">
-                <option value="all">All</option>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  onClick={() => setDispositionFilter(new Set())}
+                  className={cn(
+                    "rounded-full border px-3 py-1 text-xs font-medium transition-colors",
+                    dispositionFilter.size === 0
+                      ? "border-blue-600 bg-blue-600 text-white dark:border-blue-500 dark:bg-blue-500"
+                      : "border-black/15 hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+                  )}
+                >
+                  All
+                </button>
                 {dispositions.map((d) => (
-                  <option key={d.id} value={d.id}>
+                  <button
+                    key={d.id}
+                    onClick={() => toggleDisposition(d.id)}
+                    className={cn(
+                      "flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors",
+                      dispositionFilter.has(d.id)
+                        ? "border-blue-600 bg-blue-600 text-white dark:border-blue-500 dark:bg-blue-500"
+                        : "border-black/15 hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+                    )}
+                  >
+                    <span className="inline-block h-2 w-2 rounded-full" style={{ backgroundColor: d.color }} />
                     {d.name}
-                  </option>
+                  </button>
                 ))}
-              </Select>
+              </div>
             </div>
 
             {canFilterByRep && (
@@ -374,12 +406,18 @@ export function LeadsExplorer({
               emptyMessage="No zips assigned yet"
             />
 
+            {/* min-w-0 on each column — a native date input's intrinsic
+                minimum content width can exceed a grid-cols-2 track's
+                share of a narrow phone screen, and CSS Grid items
+                default to min-width:auto (not 0), so without this the
+                input overflowed its cell into the other one instead of
+                shrinking to fit. */}
             <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
+              <div className="min-w-0 space-y-1">
                 <label className="text-xs font-medium">From</label>
                 <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="block w-full" />
               </div>
-              <div className="space-y-1">
+              <div className="min-w-0 space-y-1">
                 <label className="text-xs font-medium">To</label>
                 <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="block w-full" />
               </div>
@@ -404,14 +442,34 @@ export function LeadsExplorer({
         <div className="flex flex-wrap items-end gap-3">
           <div className="space-y-1">
             <label className="text-xs font-medium">Disposition</label>
-            <Select value={dispositionFilter} onChange={(e) => setDispositionFilter(e.target.value)} className="block">
-              <option value="all">All</option>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                onClick={() => setDispositionFilter(new Set())}
+                className={cn(
+                  "rounded-full border px-3 py-1 text-xs font-medium transition-colors",
+                  dispositionFilter.size === 0
+                    ? "border-blue-600 bg-blue-600 text-white dark:border-blue-500 dark:bg-blue-500"
+                    : "border-black/15 hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+                )}
+              >
+                All
+              </button>
               {dispositions.map((d) => (
-                <option key={d.id} value={d.id}>
+                <button
+                  key={d.id}
+                  onClick={() => toggleDisposition(d.id)}
+                  className={cn(
+                    "flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors",
+                    dispositionFilter.has(d.id)
+                      ? "border-blue-600 bg-blue-600 text-white dark:border-blue-500 dark:bg-blue-500"
+                      : "border-black/15 hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+                  )}
+                >
+                  <span className="inline-block h-2 w-2 rounded-full" style={{ backgroundColor: d.color }} />
                   {d.name}
-                </option>
+                </button>
               ))}
-            </Select>
+            </div>
           </div>
 
           {canFilterByRep && (

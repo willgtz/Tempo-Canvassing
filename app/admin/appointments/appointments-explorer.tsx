@@ -339,12 +339,18 @@ export function AppointmentsExplorer({
               </div>
             </div>
 
+            {/* min-w-0 on each column — a native date input's intrinsic
+                minimum content width can exceed a grid-cols-2 track's
+                share of a narrow phone screen, and CSS Grid items
+                default to min-width:auto (not 0), so without this the
+                input overflowed its cell into the other one instead of
+                shrinking to fit. */}
             <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
+              <div className="min-w-0 space-y-1">
                 <label className="text-xs font-medium">From</label>
                 <Input type="date" value={scheduledFrom} onChange={(e) => setScheduledFrom(e.target.value)} className="block w-full" />
               </div>
-              <div className="space-y-1">
+              <div className="min-w-0 space-y-1">
                 <label className="text-xs font-medium">To</label>
                 <Input type="date" value={scheduledTo} onChange={(e) => setScheduledTo(e.target.value)} className="block w-full" />
               </div>

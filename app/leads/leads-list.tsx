@@ -122,54 +122,56 @@ export function LeadsList({
                     land at a different width in every group and drift
                     out of alignment scrolling down the page. Widths below
                     are shared by every group, so columns always line up. */}
-                <table className="hidden w-full min-w-[720px] table-fixed text-left text-sm md:table">
-                  <colgroup>
-                    <col className="w-[20%]" />
-                    <col className="w-[32%]" />
-                    <col className="w-[10%]" />
-                    <col className="w-[20%]" />
-                    <col className="w-[18%]" />
-                  </colgroup>
-                  <thead className="bg-black/5 dark:bg-white/5">
-                    <tr>
-                      <th className="px-3 py-2 font-medium">Name</th>
-                      <th className="px-3 py-2 font-medium">Address</th>
-                      <th className="px-3 py-2 font-medium">Zip</th>
-                      <th className="px-3 py-2 font-medium">Disposition</th>
-                      <th className="px-3 py-2 font-medium">Added</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {group.leads.map((lead) => {
-                      const disposition = lead.disposition_id ? dispositionById.get(lead.disposition_id) : undefined;
-                      return (
-                        <tr
-                          key={lead.id}
-                          onClick={() => onSelectLead(lead.id)}
-                          className="cursor-pointer border-t border-black/5 hover:bg-black/5 dark:border-white/10 dark:hover:bg-white/5"
-                        >
-                          <td className="px-3 py-2">
-                            {[lead.first_name, lead.last_name].filter(Boolean).join(" ") || "—"}
-                            {lead.is_manual && (
-                              <Badge className="ml-2 text-[10px] uppercase tracking-wide">Manual</Badge>
-                            )}
-                          </td>
-                          <td className="px-3 py-2">
-                            {lead.address_line}
-                            {lead.lat == null && (
-                              <span className="ml-2 text-xs text-black/40 dark:text-white/40">(no location)</span>
-                            )}
-                          </td>
-                          <td className="px-3 py-2">{lead.zipcode}</td>
-                          <td className="px-3 py-2">
-                            <Badge color={disposition?.color ?? DEFAULT_COLOR}>{disposition?.name ?? "—"}</Badge>
-                          </td>
-                          <td className="px-3 py-2">{new Date(lead.created_at).toLocaleDateString()}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+                <div className="hidden w-full min-w-[720px] overflow-hidden rounded-xl border border-black/10 dark:border-white/10 md:block">
+                  <table className="w-full table-fixed text-left text-sm">
+                    <colgroup>
+                      <col className="w-[20%]" />
+                      <col className="w-[32%]" />
+                      <col className="w-[10%]" />
+                      <col className="w-[20%]" />
+                      <col className="w-[18%]" />
+                    </colgroup>
+                    <thead className="bg-black/5 dark:bg-white/5">
+                      <tr>
+                        <th className="px-3 py-2 font-medium">Name</th>
+                        <th className="px-3 py-2 font-medium">Address</th>
+                        <th className="px-3 py-2 font-medium">Zip</th>
+                        <th className="px-3 py-2 font-medium">Disposition</th>
+                        <th className="px-3 py-2 font-medium">Added</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {group.leads.map((lead) => {
+                        const disposition = lead.disposition_id ? dispositionById.get(lead.disposition_id) : undefined;
+                        return (
+                          <tr
+                            key={lead.id}
+                            onClick={() => onSelectLead(lead.id)}
+                            className="cursor-pointer border-t border-black/5 hover:bg-black/5 dark:border-white/10 dark:hover:bg-white/5"
+                          >
+                            <td className="px-3 py-2">
+                              {[lead.first_name, lead.last_name].filter(Boolean).join(" ") || "—"}
+                              {lead.is_manual && (
+                                <Badge className="ml-2 text-[10px] uppercase tracking-wide">Manual</Badge>
+                              )}
+                            </td>
+                            <td className="px-3 py-2">
+                              {lead.address_line}
+                              {lead.lat == null && (
+                                <span className="ml-2 text-xs text-black/40 dark:text-white/40">(no location)</span>
+                              )}
+                            </td>
+                            <td className="px-3 py-2">{lead.zipcode}</td>
+                            <td className="px-3 py-2">
+                              <Badge color={disposition?.color ?? DEFAULT_COLOR}>{disposition?.name ?? "—"}</Badge>
+                            </td>
+                            <td className="px-3 py-2">{new Date(lead.created_at).toLocaleDateString()}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               </>
             )}
           </div>
