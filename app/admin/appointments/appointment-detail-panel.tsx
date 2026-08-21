@@ -22,6 +22,7 @@ import type {
   AppointmentStatus,
 } from "./types";
 import type { AppointmentFormField } from "@/app/leads/types";
+import { StatusSelect } from "./status-select";
 
 // Configured once William confirms the deal tool's actual stable
 // production URL (Vercel Dashboard → tempo-deal-tool project → Domains —
@@ -371,6 +372,7 @@ export function AppointmentDetailPanel({
         <label className="text-xs font-medium">Assigned</label>
         <AssignRoleEditor
           title={stagedOpenerIds.length > 1 ? "Openers" : "Opener"}
+          variant="opener"
           staged={stagedOpenerIds}
           setStaged={setStagedOpenerIds}
           activeProfiles={activeProfiles}
@@ -378,6 +380,7 @@ export function AppointmentDetailPanel({
         />
         <AssignRoleEditor
           title={stagedCloserIds.length > 1 ? "Closers" : "Closer"}
+          variant="closer"
           staged={stagedCloserIds}
           setStaged={setStagedCloserIds}
           activeProfiles={activeProfiles}
@@ -434,29 +437,12 @@ export function AppointmentDetailPanel({
             </div>
           </div>
         ) : (
-          <div className="flex flex-wrap gap-2">
-            {statuses.map((status) => {
-              const isSelected = status.id === appointment.status_id;
-              return (
-                <button
-                  key={status.id}
-                  onClick={() => handleSelectStatus(status)}
-                  disabled={isUpdatingStatus}
-                  className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium disabled:opacity-50 ${
-                    isSelected
-                      ? "border-black bg-black text-white dark:border-white dark:bg-white dark:text-black"
-                      : "border-black/15 dark:border-white/20"
-                  }`}
-                >
-                  <span
-                    className="inline-block h-2 w-2 rounded-full"
-                    style={{ backgroundColor: status.color }}
-                  />
-                  {status.name}
-                </button>
-              );
-            })}
-          </div>
+          <StatusSelect
+            statuses={statuses}
+            value={appointment.status_id}
+            onChange={handleSelectStatus}
+            disabled={isUpdatingStatus}
+          />
         )}
         {isUpdatingStatus && !pendingRescheduleStatusId && (
           <p className="text-xs text-black/50 dark:text-white/50">Updating…</p>
@@ -569,14 +555,29 @@ export function AppointmentDetailPanel({
   );
 }
 
+// Opener = blue, Closer = amber — distinct accent colors so the two
+// sections are easy to tell apart at a glance instead of just reading
+// the small text label above each one.
+const ROLE_VARIANT_CLASSES = {
+  opener: "border-blue-600/30 bg-blue-50 dark:border-blue-400/30 dark:bg-blue-500/10",
+  closer: "border-amber-600/30 bg-amber-50 dark:border-amber-400/30 dark:bg-amber-500/10",
+} as const;
+
+const ROLE_LABEL_CLASSES = {
+  opener: "text-blue-700 dark:text-blue-400",
+  closer: "text-amber-700 dark:text-amber-400",
+} as const;
+
 function AssignRoleEditor({
   title,
+  variant,
   staged,
   setStaged,
   activeProfiles,
   profileName,
 }: {
   title: string;
+  variant: "opener" | "closer";
   staged: string[];
   setStaged: (updater: (prev: string[]) => string[]) => void;
   activeProfiles: ActiveProfile[];
@@ -586,8 +587,8 @@ function AssignRoleEditor({
   const available = activeProfiles.filter((p) => !staged.includes(p.id));
 
   return (
-    <div className="space-y-1.5">
-      <p className="text-xs font-semibold text-black/60 dark:text-white/60">{title}</p>
+    <div className={cn("space-y-1.5 rounded-lg border p-2.5", ROLE_VARIANT_CLASSES[variant])}>
+      <p className={cn("text-xs font-semibold", ROLE_LABEL_CLASSES[variant])}>{title}</p>
       {staged.length === 0 && (
         <p className="text-sm text-black/40 dark:text-white/40">Unassigned</p>
       )}
@@ -615,7 +616,7 @@ function AssignRoleEditor({
               setStaged((prev) => [...prev, id]);
               setPickerValue("");
             }}
-            className="rounded border border-black/15 px-2 py-1 text-xs dark:border-white/20 dark:bg-transparent"
+            className="rounded border border-black/15 bg-white px-2 py-1 text-xs dark:border-white/20 dark:bg-transparent"
           >
             <option value="">+ Add person…</option>
             {available.map((p) => (
