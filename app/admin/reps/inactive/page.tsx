@@ -2,7 +2,7 @@ import { getAdminSession } from "@/lib/auth/admin";
 import { RepCard, type ManagedUser } from "../rep-card";
 import { loadRepsData } from "../load-reps-data";
 
-export default async function ManageRepsPage() {
+export default async function InactiveRepsPage() {
   const session = await getAdminSession();
   const data = await loadRepsData();
 
@@ -15,30 +15,23 @@ export default async function ManageRepsPage() {
   }
 
   const { profiles, managerOptions, nameById, assignmentsByUser, historyByUser } = data;
-  // Inactive reps live on their own tab now (app/admin/reps/inactive) —
-  // moved out rather than just shown dimmed here, per William's request,
-  // so this list stays a clean "who's currently active" view.
-  const activeProfiles = profiles.filter((p) => p.active);
+  const inactiveProfiles = profiles.filter((p) => !p.active);
 
   return (
     <div className="mx-auto w-full max-w-4xl space-y-3 p-4 md:p-6">
       <div>
-        <h1 className="text-xl font-semibold">Manage Reps</h1>
+        <h1 className="text-xl font-semibold">Inactive Reps</h1>
         <p className="text-sm text-black/60 dark:text-white/60">
-          Zip assignment is always available. Editing name, email, phone,
-          role, manager, or active status requires hitting Edit — you
-          can&apos;t edit your own account here, and the last remaining
-          admin/super_admin can&apos;t be demoted or deactivated. Removing a
-          zip closes it out (keeps history) rather than deleting the row.
-          Marking someone inactive moves them to the Inactive tab.
+          Anyone marked inactive from Manage lands here instead. Hit Edit
+          and check Active again to move them back.
         </p>
       </div>
 
       <div className="space-y-3">
-        {activeProfiles.length === 0 && (
-          <p className="text-sm italic text-black/40 dark:text-white/40">No active reps.</p>
+        {inactiveProfiles.length === 0 && (
+          <p className="text-sm italic text-black/40 dark:text-white/40">No inactive reps.</p>
         )}
-        {activeProfiles.map((p) => (
+        {inactiveProfiles.map((p) => (
           <RepCard
             key={p.id}
             user={p as ManagedUser}

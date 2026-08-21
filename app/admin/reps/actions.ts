@@ -79,6 +79,7 @@ export async function addRep(input: AddRepInput): Promise<AddRepResult> {
   }
 
   revalidatePath("/admin/reps/manage");
+  revalidatePath("/admin/reps/inactive");
   revalidatePath("/admin/reps/add");
   return { ok: true };
 }
@@ -133,6 +134,7 @@ export async function inviteRep(input: InviteRepInput): Promise<InviteRepResult>
   }
 
   revalidatePath("/admin/reps/manage");
+  revalidatePath("/admin/reps/inactive");
   revalidatePath("/admin/reps/add");
   return { ok: true };
 }
@@ -221,6 +223,7 @@ export async function updateUser(
   }
 
   revalidatePath("/admin/reps/manage");
+  revalidatePath("/admin/reps/inactive");
   revalidatePath("/admin/reps/add");
   return { ok: true };
 }
@@ -265,6 +268,7 @@ export async function assignZip(userId: string, zipcode: string): Promise<Assign
   }
 
   revalidatePath("/admin/reps/manage");
+  revalidatePath("/admin/reps/inactive");
   revalidatePath("/admin/reps/add");
   return { ok: true, assignment: { id: data.id, zipcode: data.zipcode } };
 }
@@ -429,6 +433,7 @@ export async function unassignZip(assignmentId: string): Promise<UnassignZipResu
   }
 
   revalidatePath("/admin/reps/manage");
+  revalidatePath("/admin/reps/inactive");
   revalidatePath("/admin/reps/add");
   return { ok: true };
 }

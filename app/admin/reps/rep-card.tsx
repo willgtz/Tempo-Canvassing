@@ -7,6 +7,7 @@ import {
   updateUser,
   sendPasswordReset,
   setUserPassword,
+  inviteRep,
   type UserRole,
 } from "./actions";
 import { Badge } from "@/components/ui/badge";
@@ -89,6 +90,22 @@ export function RepCard({
     startResetSend(async () => {
       const result = await sendPasswordReset(user.email);
       setResetMessage(result.ok ? `Reset email sent to ${user.email}.` : result.error);
+    });
+  }
+
+  // inviteRep is idempotent for still-pending accounts (invite-user Edge
+  // Function skips the "already exists" rejection when name_pending is
+  // true) — calling it again for the same email just regenerates a fresh
+  // token and re-sends the branded email, exactly what "resend in case
+  // the email was wrong/never arrived" needs, with no separate action.
+  const [resendMessage, setResendMessage] = useState<string | null>(null);
+  const [isResending, startResend] = useTransition();
+
+  function handleResendInvite() {
+    setResendMessage(null);
+    startResend(async () => {
+      const result = await inviteRep({ email: user.email });
+      setResendMessage(result.ok ? `Invite re-sent to ${user.email}.` : result.error);
     });
   }
 
@@ -323,6 +340,11 @@ export function RepCard({
           ) : (
             <div className="flex shrink-0 flex-col items-start gap-1 sm:items-end">
               <div className="flex flex-wrap gap-2">
+                {user.name_pending && (
+                  <Button variant="secondary" size="sm" onClick={handleResendInvite} disabled={isResending}>
+                    {isResending ? "Sending…" : "Resend Invite"}
+                  </Button>
+                )}
                 <Button variant="secondary" size="sm" onClick={handleSendReset} disabled={isSendingReset}>
                   {isSendingReset ? "Sending…" : "Email Reset Link"}
                 </Button>
@@ -340,6 +362,11 @@ export function RepCard({
                   Edit
                 </Button>
               </div>
+              {resendMessage && (
+                <span className="text-xs text-black/50 sm:max-w-[220px] sm:text-right dark:text-white/50">
+                  {resendMessage}
+                </span>
+              )}
               {resetMessage && (
                 <span className="text-xs text-black/50 sm:max-w-[220px] sm:text-right dark:text-white/50">
                   {resetMessage}

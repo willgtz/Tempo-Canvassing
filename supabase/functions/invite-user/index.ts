@@ -77,12 +77,18 @@ Deno.serve(async (req) => {
     return new Response("A valid email is required", { status: 400 });
   }
 
+  // A still-pending invite (name_pending: true — the profile row exists
+  // but they've never actually signed in and set a password) is allowed
+  // to go through again: this is what powers the "Resend Invite" button
+  // on the web Manage page, in case the email never arrived or went to
+  // spam. Only a genuinely completed account (name_pending: false)
+  // blocks a re-invite.
   const { data: existingProfile } = await supabaseAdmin
     .from("profiles")
-    .select("id")
+    .select("id, name_pending")
     .eq("email", email)
     .maybeSingle();
-  if (existingProfile) {
+  if (existingProfile && !existingProfile.name_pending) {
     return new Response("A user with this email already exists", { status: 409 });
   }
 
@@ -96,7 +102,10 @@ Deno.serve(async (req) => {
   // like inviteUserByEmail did, but returns the raw action_link instead
   // of Supabase sending its own generic default-template email. That
   // link is what lets us send a Fenix Sun-branded email ourselves below
-  // instead of Supabase's plain "You have been invited" template.
+  // instead of Supabase's plain "You have been invited" template. For a
+  // resend, the user already exists and is still unconfirmed, so this
+  // just issues a fresh token/link for the same account rather than
+  // erroring.
   const { data: linkData, error: authError } = await supabaseAdmin.auth.admin.generateLink({
     type: "invite",
     email,
@@ -112,18 +121,20 @@ Deno.serve(async (req) => {
   // for anyone in auth.users, and name_pending is what tells /invite to
   // still ask for a name. Placeholder name is the local part of their
   // email, purely so nothing else in the UI shows a blank name in the
-  // meantime.
-  const { error: profileError } = await supabaseAdmin.from("profiles").insert({
-    id: linkData.user.id,
-    full_name: email.split("@")[0],
-    email,
-    role: "rep",
-    name_pending: true,
-  });
+  // meantime. Skipped entirely on a resend — the row's already there.
+  if (!existingProfile) {
+    const { error: profileError } = await supabaseAdmin.from("profiles").insert({
+      id: linkData.user.id,
+      full_name: email.split("@")[0],
+      email,
+      role: "rep",
+      name_pending: true,
+    });
 
-  if (profileError) {
-    await supabaseAdmin.auth.admin.deleteUser(linkData.user.id);
-    return new Response(profileError.message, { status: 500 });
+    if (profileError) {
+      await supabaseAdmin.auth.admin.deleteUser(linkData.user.id);
+      return new Response(profileError.message, { status: 500 });
+    }
   }
 
   const emailError = await sendInviteEmail(email, linkData.properties.action_link);
@@ -164,8 +175,23 @@ async function sendInviteEmail(email: string, actionLink: string): Promise<strin
         <td align="center">
           <table role="presentation" width="100%" style="max-width:440px;background-color:#ffffff;border-radius:16px;overflow:hidden;">
             <tr>
-              <td style="background-color:#2563eb;padding:32px;text-align:center;">
-                <span style="color:#ffffff;font-size:28px;font-weight:700;letter-spacing:-0.5px;">Fenix</span>
+              <td align="center" style="background-color:#2563eb;padding:32px;text-align:center;">
+                <table role="presentation" cellpadding="0" cellspacing="0" align="center">
+                  <tr>
+                    <td style="padding-right:10px;vertical-align:middle;">
+                      <img
+                        src="https://www.fenixsun.com/icon.png"
+                        width="40"
+                        height="40"
+                        alt=""
+                        style="display:block;width:40px;height:40px;border-radius:9px;"
+                      />
+                    </td>
+                    <td style="vertical-align:middle;">
+                      <span style="color:#ffffff;font-size:28px;font-weight:700;letter-spacing:-0.5px;">Fenix</span>
+                    </td>
+                  </tr>
+                </table>
               </td>
             </tr>
             <tr>
