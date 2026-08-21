@@ -13,6 +13,7 @@ export default async function DashboardLayout({
   children: React.ReactNode;
 }) {
   const session = await requireSession();
+  const isAdmin = session.role === "admin" || session.role === "super_admin";
 
   return (
     <div className="flex flex-1 flex-col">
@@ -26,12 +27,12 @@ export default async function DashboardLayout({
             Leads
           </Link>
           <Link
-            href="/appointments"
+            href={isAdmin ? "/admin/appointments" : "/appointments"}
             className="rounded-full border border-black/15 px-3 py-1.5 text-sm font-medium text-black transition-transform duration-100 hover:bg-black/5 active:scale-95 active:bg-black/10 dark:border-white/20 dark:text-white dark:hover:bg-white/10 dark:active:bg-white/20"
           >
             Appointments
           </Link>
-          {(session.role === "admin" || session.role === "super_admin") && (
+          {isAdmin && (
             <Link
               href="/admin/dashboard"
               className="rounded-full border border-black/15 px-3 py-1.5 text-sm font-medium text-black transition-transform duration-100 hover:bg-black/5 active:scale-95 active:bg-black/10 dark:border-white/20 dark:text-white dark:hover:bg-white/10 dark:active:bg-white/20"
@@ -45,7 +46,7 @@ export default async function DashboardLayout({
       </nav>
       {children}
       <MobileTabBarSpacer />
-      <MobileTabBar isAdmin={session.role === "admin" || session.role === "super_admin"} />
+      <MobileTabBar isAdmin={isAdmin} />
     </div>
   );
 }

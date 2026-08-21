@@ -5,7 +5,6 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { AppointmentDetailPanel } from "./appointment-detail-panel";
 import { AppointmentsCalendar } from "./appointments-calendar";
 import { AddManualAppointmentModal } from "./add-manual-appointment-modal";
-import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
 import { cn } from "@/components/ui/cn";
@@ -182,12 +181,13 @@ export function AppointmentsExplorer({
     // it never grows past its own content and the calendar gets whatever
     // space is actually left.
     <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden md:gap-6">
-      {/* Mobile: one slim row — search, a filter icon (badge = active
-          count) opening a bottom sheet with the status/date/closer
-          controls, and an icon view toggle — instead of the full
-          three-row Card, which ate most of the screen on a phone. Mirrors
-          the same compaction done on the Leads page. */}
-      <div className="flex shrink-0 items-center justify-between gap-2 md:hidden">
+      {/* One slim row on every viewport now, not just mobile — search, a
+          filter icon (badge = active count) opening a sheet with the
+          status/date/closer controls, and an icon view toggle, instead
+          of the full three-row Card + separate toolbar row that used to
+          only collapse below md. The calendar/list gets the space back
+          on desktop too now, not just on a phone. */}
+      <div className="flex shrink-0 items-center justify-between gap-2">
         {!showMobileSearch && <h1 className="shrink-0 text-lg font-semibold">{title}</h1>}
         {showMobileSearch ? (
           <>
@@ -258,6 +258,20 @@ export function AppointmentsExplorer({
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 5v14M5 12h14" />
               </svg>
             </button>
+            <button
+              onClick={() => startRefresh(() => router.refresh())}
+              disabled={isRefreshing}
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-black/15 active:bg-black/10 disabled:opacity-50 dark:border-white/20 dark:active:bg-white/20"
+              aria-label="Refresh"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className={cn("h-4.5 w-4.5", isRefreshing && "animate-spin")}>
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99"
+                />
+              </svg>
+            </button>
             <div className="flex shrink-0 overflow-hidden rounded-full border border-black/15 dark:border-white/20">
               <button
                 onClick={() => setViewMode("calendar")}
@@ -284,8 +298,8 @@ export function AppointmentsExplorer({
 
       {showMobileFilters && (
         <>
-          <div className="fixed inset-0 z-30 bg-black/30 backdrop-blur-sm md:hidden" onClick={() => setShowMobileFilters(false)} />
-          <div className="fixed inset-x-0 bottom-0 z-40 max-h-[80vh] space-y-4 overflow-y-auto rounded-t-2xl border-t border-black/10 bg-white/90 p-5 backdrop-blur-xl md:hidden dark:border-white/10 dark:bg-neutral-950/90">
+          <div className="fixed inset-0 z-30 bg-black/30 backdrop-blur-sm" onClick={() => setShowMobileFilters(false)} />
+          <div className="fixed inset-x-0 bottom-0 z-40 max-h-[80vh] space-y-4 overflow-y-auto rounded-t-2xl border-t border-black/10 bg-white/90 p-5 backdrop-blur-xl sm:inset-x-auto sm:right-6 sm:bottom-6 sm:w-full sm:max-w-md sm:rounded-2xl sm:border dark:border-white/10 dark:bg-neutral-950/90">
             <div className="flex items-center justify-between">
               <h2 className="text-base font-semibold">Filters</h2>
               <Button variant="ghost" size="sm" onClick={() => setShowMobileFilters(false)}>
@@ -367,123 +381,6 @@ export function AppointmentsExplorer({
           </div>
         </>
       )}
-
-      <div className="hidden shrink-0 items-center justify-between md:flex">
-        <div className="flex gap-1 overflow-hidden rounded-full border border-black/15 p-0.5 dark:border-white/20">
-          {(["list", "calendar"] as const).map((mode) => (
-            <button
-              key={mode}
-              onClick={() => setViewMode(mode)}
-              className={cn(
-                "rounded-full px-3 py-1 text-xs font-medium capitalize transition-colors",
-                viewMode === mode
-                  ? "bg-blue-600 text-white dark:bg-blue-500"
-                  : "text-black/60 hover:bg-black/5 dark:text-white/60 dark:hover:bg-white/10"
-              )}
-            >
-              {mode}
-            </button>
-          ))}
-        </div>
-        <div className="flex items-center gap-2">
-          <Button variant="secondary" size="sm" onClick={() => setShowAddAppointment(true)}>
-            + New Appointment
-          </Button>
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => startRefresh(() => router.refresh())}
-            disabled={isRefreshing}
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth={2}
-              className={`h-3.5 w-3.5 ${isRefreshing ? "animate-spin" : ""}`}
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99"
-              />
-            </svg>
-            {isRefreshing ? "Refreshing…" : "Refresh"}
-          </Button>
-        </div>
-      </div>
-
-      <Card className="hidden shrink-0 space-y-3 p-4 md:block">
-        <Input
-          value={searchText}
-          onChange={(e) => setSearchText(e.target.value)}
-          placeholder="Search name or address…"
-          className="w-full"
-        />
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            onClick={() => setSelectedStatusIds(new Set())}
-            className={cn(
-              "rounded-full border px-3 py-1 text-xs font-medium transition-colors",
-              selectedStatusIds.size === 0
-                ? "border-blue-600 bg-blue-600 text-white dark:border-blue-500 dark:bg-blue-500"
-                : "border-black/15 hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
-            )}
-          >
-            All
-          </button>
-          {statuses.map((status) => (
-            <button
-              key={status.id}
-              onClick={() => toggleStatus(status.id)}
-              className={cn(
-                "flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors",
-                selectedStatusIds.has(status.id)
-                  ? "border-blue-600 bg-blue-600 text-white dark:border-blue-500 dark:bg-blue-500"
-                  : "border-black/15 hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
-              )}
-            >
-              <span className="inline-block h-2 w-2 rounded-full" style={{ backgroundColor: status.color }} />
-              {status.name}
-            </button>
-          ))}
-        </div>
-        <div className="flex flex-wrap items-center gap-3 text-xs">
-          <label className="flex items-center gap-1.5">
-            Scheduled from
-            <Input
-              type="date"
-              value={scheduledFrom}
-              onChange={(e) => setScheduledFrom(e.target.value)}
-              className="text-xs"
-            />
-          </label>
-          <label className="flex items-center gap-1.5">
-            to
-            <Input type="date" value={scheduledTo} onChange={(e) => setScheduledTo(e.target.value)} className="text-xs" />
-          </label>
-          <label className="flex items-center gap-1.5">
-            Closer
-            <Select value={selectedCloserId} onChange={(e) => setSelectedCloserId(e.target.value)} className="text-xs">
-              <option value="">All</option>
-              {closers.map((c) => (
-                <option key={c.userId} value={c.userId}>
-                  {c.fullName}
-                </option>
-              ))}
-            </Select>
-          </label>
-          {hasAnyFilter && (
-            <button
-              onClick={clearAllFilters}
-              className="text-black/50 hover:text-black dark:text-white/50 dark:hover:text-white"
-            >
-              Clear filters
-            </button>
-          )}
-        </div>
-      </Card>
 
       {appointments.length === 0 && (
         <p className="shrink-0 text-sm italic text-black/50 dark:text-white/50">No appointments yet.</p>

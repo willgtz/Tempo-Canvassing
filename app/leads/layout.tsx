@@ -12,6 +12,7 @@ export default async function LeadsLayout({
   // Any authenticated + active user (rep/team_lead/admin/super_admin) can
   // reach this screen — unlike /admin, which is admin/super_admin only.
   const session = await requireSession();
+  const isAdmin = session.role === "admin" || session.role === "super_admin";
 
   return (
     <div className="flex flex-1 flex-col">
@@ -19,13 +20,13 @@ export default async function LeadsLayout({
         <span className="font-medium text-sm">{session.fullName}</span>
         <div className="flex flex-wrap items-center gap-2">
           <Link
-            href="/dashboard"
+            href={isAdmin ? "/admin/dashboard" : "/dashboard"}
             className="rounded-full border border-black/15 px-3 py-1.5 text-sm font-medium text-black transition-transform duration-100 hover:bg-black/5 active:scale-95 active:bg-black/10 dark:border-white/20 dark:text-white dark:hover:bg-white/10 dark:active:bg-white/20"
           >
             Dashboard
           </Link>
           <Link
-            href="/appointments"
+            href={isAdmin ? "/admin/appointments" : "/appointments"}
             className="rounded-full border border-black/15 px-3 py-1.5 text-sm font-medium text-black transition-transform duration-100 hover:bg-black/5 active:scale-95 active:bg-black/10 dark:border-white/20 dark:text-white dark:hover:bg-white/10 dark:active:bg-white/20"
           >
             Appointments
@@ -36,7 +37,7 @@ export default async function LeadsLayout({
           >
             Route History
           </Link>
-          {(session.role === "admin" || session.role === "super_admin") && (
+          {isAdmin && (
             <Link
               href="/admin/leads/upload"
               className="rounded-full border border-black/15 px-3 py-1.5 text-sm font-medium text-black transition-transform duration-100 hover:bg-black/5 active:scale-95 active:bg-black/10 dark:border-white/20 dark:text-white dark:hover:bg-white/10 dark:active:bg-white/20"
@@ -53,7 +54,7 @@ export default async function LeadsLayout({
           edge-to-edge on mobile (matches the native app's map treatment);
           precise height accounting for the fixed tab bar overlapping it is
           handled in the mobile polish pass, not here. */}
-      <MobileTabBar isAdmin={session.role === "admin" || session.role === "super_admin"} />
+      <MobileTabBar isAdmin={isAdmin} />
     </div>
   );
 }

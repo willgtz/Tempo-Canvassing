@@ -10,6 +10,7 @@ export default async function AppointmentsLayout({
   children: React.ReactNode;
 }) {
   const session = await requireSession();
+  const isAdmin = session.role === "admin" || session.role === "super_admin";
 
   return (
     // h-dvh + overflow-hidden locks this route to exactly the viewport
@@ -23,7 +24,7 @@ export default async function AppointmentsLayout({
         <span className="text-sm font-medium">{session.fullName}</span>
         <div className="flex flex-wrap items-center gap-2">
           <Link
-            href="/dashboard"
+            href={isAdmin ? "/admin/dashboard" : "/dashboard"}
             className="rounded-full border border-black/15 px-3 py-1.5 text-sm font-medium text-black transition-transform duration-100 hover:bg-black/5 active:scale-95 active:bg-black/10 dark:border-white/20 dark:text-white dark:hover:bg-white/10 dark:active:bg-white/20"
           >
             Dashboard
@@ -34,7 +35,7 @@ export default async function AppointmentsLayout({
           >
             Leads
           </Link>
-          {(session.role === "admin" || session.role === "super_admin") && (
+          {isAdmin && (
             <Link
               href="/admin/appointments"
               className="rounded-full border border-black/15 px-3 py-1.5 text-sm font-medium text-black transition-transform duration-100 hover:bg-black/5 active:scale-95 active:bg-black/10 dark:border-white/20 dark:text-white dark:hover:bg-white/10 dark:active:bg-white/20"
@@ -55,7 +56,7 @@ export default async function AppointmentsLayout({
           growing to fit). */}
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">{children}</div>
       <MobileTabBarSpacer />
-      <MobileTabBar isAdmin={session.role === "admin" || session.role === "super_admin"} />
+      <MobileTabBar isAdmin={isAdmin} />
     </div>
   );
 }

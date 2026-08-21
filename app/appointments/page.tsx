@@ -8,6 +8,7 @@ import type {
   AppointmentNote,
   AppointmentStatus,
 } from "@/app/admin/appointments/types";
+import type { AppointmentFormField } from "@/app/leads/types";
 
 type AssignmentJoinRow = {
   id: string;
@@ -41,6 +42,7 @@ export default async function AppointmentsPage() {
   const [
     { data: appointments, error: apptError },
     { data: statuses, error: statusError },
+    { data: formFields },
   ] = await Promise.all([
     supabase
       .from("appointments")
@@ -51,6 +53,13 @@ export default async function AppointmentsPage() {
     supabase
       .from("appointment_statuses")
       .select("id, name, color, sort_order, is_default")
+      .order("sort_order"),
+    // Needed for the "New Appointment" manual-entry form (Additional
+    // Opener/Notes are just entries in this same admin-configured list) —
+    // not used anywhere else on this page.
+    supabase
+      .from("appointment_form_fields")
+      .select("id, label, field_type, options, is_required, sort_order")
       .order("sort_order"),
   ]);
 
@@ -111,6 +120,7 @@ export default async function AppointmentsPage() {
       appointments={(appointments ?? []) as Appointment[]}
       statuses={(statuses ?? []) as AppointmentStatus[]}
       leads={(leads ?? []) as AppointmentLead[]}
+      formFields={(formFields ?? []) as AppointmentFormField[]}
       initialAssignments={assignments}
       initialNotes={notes}
     />

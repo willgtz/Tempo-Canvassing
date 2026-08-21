@@ -28,8 +28,8 @@ export function Badge({
       style={
         color
           ? {
-              backgroundColor: `color-mix(in srgb, ${color} 14%, transparent)`,
-              borderColor: `color-mix(in srgb, ${color} 45%, transparent)`,
+              backgroundColor: `color-mix(in srgb, ${color} 22%, transparent)`,
+              borderColor: `color-mix(in srgb, ${color} 55%, transparent)`,
               ...style,
             }
           : style

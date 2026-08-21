@@ -105,11 +105,13 @@ export function DoorKnockSettingsClient({
   return (
     <div className="mx-auto w-full max-w-3xl space-y-6 p-6">
       <div>
-        <h1 className="text-xl font-semibold">Door-Knock Settings</h1>
+        <h1 className="text-xl font-semibold">Settings</h1>
         <p className="text-sm text-black/60 dark:text-white/60">
-          Verification radius and per-user visibility into other people&apos;s door-knock counts.
+          Verification radius, door-knock visibility, and the shareable appointment form.
         </p>
       </div>
+
+      <ShareableFormCard />
 
       <Card className="p-4">
         <h2 className="text-sm font-medium">Door-knock verification radius</h2>
@@ -229,5 +231,42 @@ export function DoorKnockSettingsClient({
         </div>
       </Card>
     </div>
+  );
+}
+
+// window.location.origin (not a hardcoded domain) so this shows the
+// right link whether it's actually the production domain or someone's
+// testing it on a preview deployment — same link, no separate config.
+function ShareableFormCard() {
+  const [copied, setCopied] = useState(false);
+  const url = typeof window !== "undefined" ? `${window.location.origin}/appointment-request` : "";
+
+  async function handleCopy() {
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Clipboard API can fail (permissions, non-HTTPS) — the URL is
+      // still shown in the field either way, so it's still copyable
+      // by hand.
+    }
+  }
+
+  return (
+    <Card className="p-4">
+      <h2 className="text-sm font-medium">Shareable appointment form</h2>
+      <p className="mt-1 text-xs text-black/50 dark:text-white/50">
+        No account needed — for someone (e.g. a designer) who just needs to submit an appointment
+        without going through Leads. It comes in unassigned; you&apos;ll see it in Appointments and
+        can assign it from there.
+      </p>
+      <div className="mt-3 flex items-center gap-2">
+        <Input value={url} readOnly onFocus={(e) => e.target.select()} className="flex-1" />
+        <Button size="sm" onClick={handleCopy}>
+          {copied ? "Copied!" : "Copy Link"}
+        </Button>
+      </div>
+    </Card>
   );
 }
