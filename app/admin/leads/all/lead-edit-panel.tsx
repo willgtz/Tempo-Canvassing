@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { updateLead } from "./actions";
 import { useSlideIn } from "@/lib/use-slide-in";
 import { cn } from "@/components/ui/cn";
+import { AddressAutocomplete } from "@/components/address-autocomplete";
 import type { AdminLead, Disposition } from "./types";
 
 export function LeadEditPanel({
@@ -116,11 +117,17 @@ export function LeadEditPanel({
           </div>
           <div className="space-y-1 sm:col-span-2">
             <label className="text-xs font-medium">Address</label>
-            <input
+            <AddressAutocomplete
               value={addressLine}
-              onChange={(e) => setAddressLine(e.target.value)}
+              onChange={setAddressLine}
+              onSelect={(result) => {
+                setAddressLine(result.addressLine);
+                if (result.city) setCity(result.city);
+                if (result.state) setState(result.state);
+                if (result.zipcode) setZipcode(result.zipcode);
+              }}
               required
-              className="w-full rounded border border-black/15 px-2 py-1 text-sm dark:border-white/20 dark:bg-transparent"
+              className="w-full rounded border border-black/15 px-2 py-1 text-base sm:text-sm dark:border-white/20 dark:bg-transparent"
             />
           </div>
           <div className="space-y-1">

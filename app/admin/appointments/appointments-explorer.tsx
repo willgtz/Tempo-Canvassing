@@ -609,6 +609,7 @@ export function AppointmentsExplorer({
 
       {showAddAppointment && (
         <AddManualAppointmentModal
+          formFields={formFields}
           onClose={() => setShowAddAppointment(false)}
           onCreated={(appointment, lead) => {
             setAppointments((prev) => [...prev, appointment]);

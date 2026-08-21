@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { submitAppointment } from "./actions";
 import { useSlideIn } from "@/lib/use-slide-in";
 import { cn } from "@/components/ui/cn";
+import { AppointmentFormFieldInput } from "@/components/appointment-form-field-input";
 import type { AppointmentFormField, Lead } from "./types";
 
 // Mirrors NewAppointmentSheet.swift: name/address pulled from the lead
@@ -124,7 +125,7 @@ export function SetAppointmentModal({
           </div>
 
           {formFields.map((field) => (
-            <FormFieldInput
+            <AppointmentFormFieldInput
               key={field.id}
               field={field}
               value={responses[field.id] ?? ""}
@@ -146,96 +147,4 @@ export function SetAppointmentModal({
       </div>
     </>
   );
-}
-
-function FormFieldInput({
-  field,
-  value,
-  onChange,
-}: {
-  field: AppointmentFormField;
-  value: string;
-  onChange: (value: string) => void;
-}) {
-  const label = `${field.label}${field.is_required ? " *" : ""}`;
-
-  switch (field.field_type) {
-    case "textarea":
-      return (
-        <div className="space-y-1">
-          <label className="text-xs font-medium">{label}</label>
-          <textarea
-            value={value}
-            onChange={(e) => onChange(e.target.value)}
-            rows={3}
-            className="w-full rounded border border-black/15 px-2 py-1 text-sm dark:border-white/20 dark:bg-transparent"
-          />
-        </div>
-      );
-    case "number":
-      return (
-        <div className="space-y-1">
-          <label className="text-xs font-medium">{label}</label>
-          <input
-            type="number"
-            value={value}
-            onChange={(e) => onChange(e.target.value)}
-            className="w-full rounded border border-black/15 px-2 py-1 text-sm dark:border-white/20 dark:bg-transparent"
-          />
-        </div>
-      );
-    case "date":
-      return (
-        <div className="space-y-1">
-          <label className="text-xs font-medium">{label}</label>
-          <input
-            type="date"
-            value={value}
-            onChange={(e) => onChange(e.target.value)}
-            className="w-full rounded border border-black/15 px-2 py-1 text-sm dark:border-white/20 dark:bg-transparent"
-          />
-        </div>
-      );
-    case "select":
-      return (
-        <div className="space-y-1">
-          <label className="text-xs font-medium">{label}</label>
-          <select
-            value={value}
-            onChange={(e) => onChange(e.target.value)}
-            className="w-full rounded border border-black/15 px-2 py-1 text-sm dark:border-white/20 dark:bg-transparent"
-          >
-            <option value="">Select…</option>
-            {(field.options ?? []).map((option) => (
-              <option key={option} value={option}>
-                {option}
-              </option>
-            ))}
-          </select>
-        </div>
-      );
-    case "checkbox":
-      return (
-        <label className="flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            checked={value === "true"}
-            onChange={(e) => onChange(e.target.checked ? "true" : "false")}
-          />
-          {field.label}
-        </label>
-      );
-    case "text":
-    default:
-      return (
-        <div className="space-y-1">
-          <label className="text-xs font-medium">{label}</label>
-          <input
-            value={value}
-            onChange={(e) => onChange(e.target.value)}
-            className="w-full rounded border border-black/15 px-2 py-1 text-sm dark:border-white/20 dark:bg-transparent"
-          />
-        </div>
-      );
-  }
 }

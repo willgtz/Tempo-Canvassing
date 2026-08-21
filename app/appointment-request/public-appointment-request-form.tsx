@@ -1,27 +1,19 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { addManualAppointment } from "./actions";
-import { useSlideIn } from "@/lib/use-slide-in";
-import { cn } from "@/components/ui/cn";
+import { useState } from "react";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { AddressAutocomplete } from "@/components/address-autocomplete";
 import { AppointmentFormFieldInput } from "@/components/appointment-form-field-input";
-import type { Appointment, AppointmentLead } from "./types";
 import type { AppointmentFormField } from "@/app/leads/types";
 
-// Same shape/flow as app/leads/add-lead-modal.tsx, but creates an
-// appointment in the same step — for a design-request-type appointment
-// that didn't come from a rep knocking a door via the Leads flow.
-export function AddManualAppointmentModal({
+const ZIP_RE = /^\d{5}$/;
+
+export function PublicAppointmentRequestForm({
   formFields,
-  onClose,
-  onCreated,
 }: {
   formFields: AppointmentFormField[];
-  onClose: () => void;
-  onCreated: (appointment: Appointment, lead: AppointmentLead) => void;
 }) {
-  const visible = useSlideIn();
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [addressLine, setAddressLine] = useState("");
@@ -35,7 +27,8 @@ export function AddManualAppointmentModal({
   });
   const [responses, setResponses] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
-  const [isPending, startTransition] = useTransition();
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
 
   function setResponse(fieldId: string, value: string) {
     setResponses((prev) => ({ ...prev, [fieldId]: value }));
@@ -45,59 +38,63 @@ export function AddManualAppointmentModal({
     (f) => f.is_required && !(responses[f.id] ?? "").trim()
   );
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    startTransition(async () => {
-      const result = await addManualAppointment({
-        firstName: firstName || null,
-        lastName: lastName || null,
-        addressLine,
-        city: city || null,
-        state: state || null,
-        zipcode,
-        scheduledAt: new Date(scheduledAt).toISOString(),
-        responses,
+
+    if (!ZIP_RE.test(zipcode.trim())) {
+      setError("Zip must be exactly 5 digits.");
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const res = await fetch("/api/public/appointment-request", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          firstName: firstName || null,
+          lastName: lastName || null,
+          addressLine,
+          city: city || null,
+          state: state || null,
+          zipcode,
+          scheduledAt: new Date(scheduledAt).toISOString(),
+          responses,
+        }),
       });
-      if (!result.ok) {
-        setError(result.error);
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error ?? "Failed to submit.");
         return;
       }
-      onCreated(result.appointment, result.lead);
-    });
+      setSubmitted(true);
+    } catch {
+      setError("Network error — please try again.");
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
-  const fieldClass =
-    "w-full rounded border border-black/15 px-2 py-1 text-base sm:text-sm dark:border-white/20 dark:bg-transparent";
+  if (submitted) {
+    return (
+      <div className="flex flex-1 items-center justify-center px-4 py-10">
+        <Card className="w-full max-w-md p-6 text-center">
+          <h1 className="text-xl font-semibold">Request submitted</h1>
+          <p className="mt-2 text-sm text-black/60 dark:text-white/60">
+            Thanks — this appointment has been added and the team will see it.
+          </p>
+        </Card>
+      </div>
+    );
+  }
 
   return (
-    <>
-      <div
-        className={cn(
-          "fixed inset-0 z-20 bg-black/40 backdrop-blur-md transition-opacity duration-200",
-          visible ? "opacity-100" : "opacity-0"
-        )}
-        onClick={onClose}
-      />
-      <div
-        className={cn(
-          "fixed left-1/2 top-1/2 z-30 max-h-[85vh] w-full max-w-md overflow-y-auto -translate-x-1/2 -translate-y-1/2 rounded-lg border border-black/10 bg-white p-6 shadow-xl transition-all duration-200 ease-out dark:border-white/10 dark:bg-neutral-950",
-          visible ? "scale-100 opacity-100" : "scale-95 opacity-0"
-        )}
-      >
-        <div className="flex items-start justify-between gap-4">
-          <h2 className="text-lg font-semibold">New Appointment</h2>
-          <button
-            onClick={onClose}
-            className="text-sm text-black/50 hover:text-black dark:text-white/50 dark:hover:text-white"
-          >
-            Close
-          </button>
-        </div>
+    <div className="flex flex-1 justify-center px-4 py-10">
+      <Card className="w-full max-w-md p-6">
+        <h1 className="text-xl font-semibold">Request an Appointment</h1>
         <p className="mt-1 text-sm text-black/60 dark:text-white/60">
-          For an appointment that didn&apos;t come from a rep in the field — e.g. a design request
-          phoned or emailed in directly. Creates a manually-marked lead behind the scenes, same as
-          Add Lead does.
+          No account needed — fill this out and the team will see it come in.
         </p>
 
         <form onSubmit={handleSubmit} className="mt-4 space-y-3">
@@ -107,7 +104,7 @@ export function AddManualAppointmentModal({
               <input
                 value={firstName}
                 onChange={(e) => setFirstName(e.target.value)}
-                className={fieldClass}
+                className="w-full rounded border border-black/15 px-2 py-1.5 text-base dark:border-white/20 dark:bg-transparent"
               />
             </div>
             <div className="space-y-1">
@@ -115,11 +112,11 @@ export function AddManualAppointmentModal({
               <input
                 value={lastName}
                 onChange={(e) => setLastName(e.target.value)}
-                className={fieldClass}
+                className="w-full rounded border border-black/15 px-2 py-1.5 text-base dark:border-white/20 dark:bg-transparent"
               />
             </div>
             <div className="space-y-1 sm:col-span-2">
-              <label className="text-xs font-medium">Address</label>
+              <label className="text-xs font-medium">Address *</label>
               <AddressAutocomplete
                 value={addressLine}
                 onChange={setAddressLine}
@@ -130,7 +127,7 @@ export function AddManualAppointmentModal({
                   if (result.zipcode) setZipcode(result.zipcode);
                 }}
                 required
-                className={fieldClass}
+                className="w-full rounded border border-black/15 px-2 py-1.5 text-base dark:border-white/20 dark:bg-transparent"
               />
             </div>
             <div className="space-y-1">
@@ -138,7 +135,7 @@ export function AddManualAppointmentModal({
               <input
                 value={city}
                 onChange={(e) => setCity(e.target.value)}
-                className={fieldClass}
+                className="w-full rounded border border-black/15 px-2 py-1.5 text-base dark:border-white/20 dark:bg-transparent"
               />
             </div>
             <div className="space-y-1">
@@ -146,11 +143,11 @@ export function AddManualAppointmentModal({
               <input
                 value={state}
                 onChange={(e) => setState(e.target.value)}
-                className={fieldClass}
+                className="w-full rounded border border-black/15 px-2 py-1.5 text-base dark:border-white/20 dark:bg-transparent"
               />
             </div>
             <div className="space-y-1">
-              <label className="text-xs font-medium">Zip</label>
+              <label className="text-xs font-medium">Zip *</label>
               <input
                 value={zipcode}
                 onChange={(e) => setZipcode(e.target.value)}
@@ -158,17 +155,17 @@ export function AddManualAppointmentModal({
                 inputMode="numeric"
                 pattern="\d{5}"
                 maxLength={5}
-                className={fieldClass}
+                className="w-full rounded border border-black/15 px-2 py-1.5 text-base dark:border-white/20 dark:bg-transparent"
               />
             </div>
             <div className="space-y-1">
-              <label className="text-xs font-medium">Date &amp; time</label>
+              <label className="text-xs font-medium">Date &amp; time *</label>
               <input
                 type="datetime-local"
                 value={scheduledAt}
                 onChange={(e) => setScheduledAt(e.target.value)}
                 required
-                className={fieldClass}
+                className="w-full rounded border border-black/15 px-2 py-1.5 text-base dark:border-white/20 dark:bg-transparent"
               />
             </div>
           </div>
@@ -186,18 +183,13 @@ export function AddManualAppointmentModal({
             </div>
           )}
 
-          <div className="flex items-center gap-3 pt-1">
-            <button
-              type="submit"
-              disabled={isPending || missingRequired.length > 0}
-              className="rounded bg-black px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50 dark:bg-white dark:text-black"
-            >
-              {isPending ? "Creating…" : "Create Appointment"}
-            </button>
-            {error && <span className="text-sm text-red-600 dark:text-red-400">{error}</span>}
-          </div>
+          {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+
+          <Button type="submit" disabled={isSubmitting || missingRequired.length > 0} className="w-full">
+            {isSubmitting ? "Submitting…" : "Submit Request"}
+          </Button>
         </form>
-      </div>
-    </>
+      </Card>
+    </div>
   );
 }

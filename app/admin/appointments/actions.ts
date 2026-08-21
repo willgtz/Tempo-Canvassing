@@ -209,6 +209,10 @@ export type AddManualAppointmentInput = {
   state: string | null;
   zipcode: string;
   scheduledAt: string; // ISO 8601
+  // Same appointment_form_fields.id -> answer shape submitAppointment
+  // (app/leads/actions.ts) uses — this is how Additional Opener and
+  // Notes get in, same as the normal Leads-flow submission form.
+  responses: Record<string, string>;
 };
 
 export type AddManualAppointmentResult =
@@ -319,7 +323,7 @@ export async function addManualAppointment(
       lead_id: lead.id,
       scheduled_at: input.scheduledAt,
       status_id: defaultStatus.id,
-      custom_field_responses: {},
+      custom_field_responses: input.responses,
       created_by: session.userId,
     })
     .select("id, lead_id, scheduled_at, status_id, custom_field_responses, created_by, created_at, updated_at, deal_submitted_at")
