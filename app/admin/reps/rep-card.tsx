@@ -8,6 +8,7 @@ import {
   sendPasswordReset,
   setUserPassword,
   inviteRep,
+  cancelInvite,
   type UserRole,
 } from "./actions";
 import { Badge } from "@/components/ui/badge";
@@ -106,6 +107,22 @@ export function RepCard({
     startResend(async () => {
       const result = await inviteRep({ email: user.email });
       setResendMessage(result.ok ? `Invite re-sent to ${user.email}.` : result.error);
+    });
+  }
+
+  const [isCanceling, startCancel] = useTransition();
+
+  function handleCancelInvite() {
+    if (!confirm(`Cancel the invite to ${user.email}? This deletes the pending account entirely — you'll be able to invite this email fresh afterward.`)) {
+      return;
+    }
+    startCancel(async () => {
+      const result = await cancelInvite(user.id);
+      if (!result.ok) {
+        setResendMessage(result.error);
+      }
+      // On success the row disappears via revalidatePath — no local state
+      // to reset.
     });
   }
 
@@ -341,9 +358,14 @@ export function RepCard({
             <div className="flex shrink-0 flex-col items-start gap-1 sm:items-end">
               <div className="flex flex-wrap gap-2">
                 {user.name_pending && (
-                  <Button variant="secondary" size="sm" onClick={handleResendInvite} disabled={isResending}>
-                    {isResending ? "Sending…" : "Resend Invite"}
-                  </Button>
+                  <>
+                    <Button variant="secondary" size="sm" onClick={handleResendInvite} disabled={isResending}>
+                      {isResending ? "Sending…" : "Resend Invite"}
+                    </Button>
+                    <Button variant="secondary" size="sm" onClick={handleCancelInvite} disabled={isCanceling}>
+                      {isCanceling ? "Canceling…" : "Cancel Invite"}
+                    </Button>
+                  </>
                 )}
                 <Button variant="secondary" size="sm" onClick={handleSendReset} disabled={isSendingReset}>
                   {isSendingReset ? "Sending…" : "Email Reset Link"}

@@ -139,6 +139,47 @@ export async function inviteRep(input: InviteRepInput): Promise<InviteRepResult>
   return { ok: true };
 }
 
+export type CancelInviteResult = { ok: true } | { ok: false; error: string };
+
+// Deletes a still-pending invite entirely (auth user + profile row —
+// profiles.id has ON DELETE CASCADE from auth.users, schema.sql) rather
+// than just deactivating it, so the same email can be re-invited fresh
+// afterward. Only ever allowed on a name_pending account — canceling a
+// real, already-set-up account isn't what this is for; that's the
+// Active checkbox in Edit. If the pending account already has zip
+// assignments (rare, but the UI doesn't block assigning zips before an
+// invite is accepted), those tables' user_id FKs aren't cascading, so
+// this can fail — matches what deleteUser's error surfaces.
+export async function cancelInvite(userId: string): Promise<CancelInviteResult> {
+  const session = await getAdminSession();
+  if (!session) return { ok: false, error: "Unauthorized" };
+
+  const supabase = await createClient();
+  const { data: profile, error: profileError } = await supabase
+    .from("profiles")
+    .select("name_pending")
+    .eq("id", userId)
+    .single();
+
+  if (profileError || !profile) {
+    return { ok: false, error: profileError?.message ?? "User not found." };
+  }
+  if (!profile.name_pending) {
+    return { ok: false, error: "Only a still-pending invite can be canceled." };
+  }
+
+  const adminClient = createAdminClient();
+  const { error } = await adminClient.auth.admin.deleteUser(userId);
+  if (error) {
+    return { ok: false, error: error.message };
+  }
+
+  revalidatePath("/admin/reps/manage");
+  revalidatePath("/admin/reps/inactive");
+  revalidatePath("/admin/reps/add");
+  return { ok: true };
+}
+
 export async function updateUser(
   userId: string,
   input: UpdateUserInput
