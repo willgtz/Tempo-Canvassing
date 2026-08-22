@@ -4,10 +4,13 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
+type Phase = "checking" | "confirm" | "verifying" | "form" | "error";
+
 export default function InvitePage() {
-  const [ready, setReady] = useState(false);
-  const [hasSession, setHasSession] = useState(false);
+  const [phase, setPhase] = useState<Phase>("checking");
   const [linkError, setLinkError] = useState<string | null>(null);
+  const [tokenHash, setTokenHash] = useState<string | null>(null);
+  const [otpType, setOtpType] = useState<string | null>(null);
   const [namePending, setNamePending] = useState(false);
   const [fullName, setFullName] = useState("");
   const [password, setPassword] = useState("");
@@ -16,68 +19,88 @@ export default function InvitePage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const router = useRouter();
 
+  // Purely reads the URL — never calls verifyOtp itself, so this is safe
+  // to run even if an email security scanner or a mail client's link
+  // preview loads this page automatically before the real recipient
+  // clicks. Consuming the one-time token is gated behind an explicit
+  // button click instead (handleConfirm below) — even the first fix
+  // here (pointing the link at our own page instead of Supabase's
+  // verify endpoint) turned out not to be enough on its own, since some
+  // scanners/previews execute a page's JS too, not just a bare GET. A
+  // simulated click after page load is a much higher bar those don't
+  // clear.
   useEffect(() => {
-    const supabase = createClient();
-
     async function init() {
-      // Supabase's own auth server reports a burned/expired invite token
-      // via a #error=...&error_description=... hash fragment on this
-      // exact page, regardless of what link format sent them here. Checked
-      // first and unconditionally — if this browser also happens to have
-      // an unrelated active session (e.g. the admin who sent the invite,
-      // testing it while still logged into their own account), that must
-      // never be mistaken for a freshly-established invite session, or
-      // this silently falls through to "you're signed in, just set a
-      // password" for the WRONG account instead of surfacing the real
-      // expired-link error.
       const hashParams = new URLSearchParams(window.location.hash.slice(1));
       const hashError = hashParams.get("error_description") || hashParams.get("error");
       if (hashError) {
         setLinkError(hashError.replace(/\+/g, " "));
-        setReady(true);
+        setPhase("error");
         return;
       }
 
-      // New-style link (invite-user Edge Function): a token_hash in the
-      // query string, exchanged here explicitly rather than relying on
-      // detectSessionInUrl's implicit hash-token pickup — see the Edge
-      // Function's comment on why the link points here instead of
-      // straight at Supabase's own verify endpoint.
       const params = new URLSearchParams(window.location.search);
-      const tokenHash = params.get("token_hash");
+      const th = params.get("token_hash");
       const type = params.get("type");
-      if (tokenHash && type) {
-        const { error: verifyError } = await supabase.auth.verifyOtp({
-          token_hash: tokenHash,
-          type: type as "invite" | "recovery" | "email" | "signup" | "email_change" | "magiclink",
-        });
-        if (verifyError) {
-          setLinkError(verifyError.message);
-          setReady(true);
-          return;
-        }
+      if (th && type) {
+        setTokenHash(th);
+        setOtpType(type);
+        setPhase("confirm");
+        return;
       }
 
-      const { data } = await supabase.auth.getSession();
-      const session = data.session;
-      setHasSession(Boolean(session));
-      if (session) {
-        // Email-only invites (invite-user Edge Function, used by both the
-        // web and iOS admin panels) create the profile row with
-        // name_pending: true and a placeholder name — this is what tells
-        // us to still ask for a real one here.
-        const { data: profile } = await supabase
-          .from("profiles")
-          .select("name_pending")
-          .eq("id", session.user.id)
-          .single();
-        setNamePending(Boolean(profile?.name_pending));
-      }
-      setReady(true);
+      await checkExistingSession();
     }
-
     init();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  async function checkExistingSession() {
+    const supabase = createClient();
+    const { data } = await supabase.auth.getSession();
+    if (!data.session) {
+      setLinkError(null);
+      setPhase("error");
+      return;
+    }
+    await loadProfileAndShowForm(data.session.user.id);
+  }
+
+  async function loadProfileAndShowForm(userId: string) {
+    const supabase = createClient();
+    // Email-only invites (invite-user Edge Function, used by both the web
+    // and iOS admin panels) create the profile row with name_pending: true
+    // and a placeholder name — this is what tells us to still ask for a
+    // real one here.
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("name_pending")
+      .eq("id", userId)
+      .single();
+    setNamePending(Boolean(profile?.name_pending));
+    setPhase("form");
+  }
+
+  // Only ever called from the Continue button's onClick — never
+  // automatically on page load. This is the actual defense: an automated
+  // scanner or preview can fetch and even render this page, but it isn't
+  // simulating a real person clicking a button, so it can't burn the
+  // token before the recipient does.
+  async function handleConfirm() {
+    if (!tokenHash || !otpType) return;
+    setPhase("verifying");
+    const supabase = createClient();
+    const { data, error: verifyError } = await supabase.auth.verifyOtp({
+      token_hash: tokenHash,
+      type: otpType as "invite" | "recovery" | "email" | "signup" | "email_change" | "magiclink",
+    });
+    if (verifyError || !data.user) {
+      setLinkError(verifyError?.message ?? null);
+      setPhase("error");
+      return;
+    }
+    await loadProfileAndShowForm(data.user.id);
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -125,11 +148,11 @@ export default function InvitePage() {
     router.push("/dashboard");
   }
 
-  if (!ready) {
+  if (phase === "checking" || phase === "verifying") {
     return null;
   }
 
-  if (!hasSession) {
+  if (phase === "error") {
     return (
       <div className="flex flex-1 items-center justify-center px-4">
         <p className="max-w-sm text-center text-sm text-red-600 dark:text-red-400">
@@ -138,6 +161,25 @@ export default function InvitePage() {
             : "This invite link is invalid or has expired."}{" "}
           Ask your admin to resend it.
         </p>
+      </div>
+    );
+  }
+
+  if (phase === "confirm") {
+    return (
+      <div className="flex flex-1 items-center justify-center px-4">
+        <div className="w-full max-w-sm space-y-4 rounded-lg border border-black/10 p-6 text-center dark:border-white/10">
+          <h1 className="text-lg font-semibold">You&apos;re invited to Fenix</h1>
+          <p className="text-sm text-black/60 dark:text-white/60">
+            Click below to continue setting up your account.
+          </p>
+          <button
+            onClick={handleConfirm}
+            className="w-full rounded bg-black px-3 py-2 text-sm font-medium text-white dark:bg-white dark:text-black"
+          >
+            Continue
+          </button>
+        </div>
       </div>
     );
   }
