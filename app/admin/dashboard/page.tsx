@@ -1,6 +1,16 @@
 import { getAdminSession } from "@/lib/auth/admin";
 import { createClient } from "@/lib/supabase/server";
+import { fetchAllRows } from "@/lib/supabase/fetch-all-rows";
 import { AdminDashboardClient } from "./admin-dashboard-client";
+
+type DashboardLeadRow = {
+  id: string;
+  disposition_id: string | null;
+  zipcode: string;
+  lat: number | null;
+  is_manual: boolean;
+  created_at: string;
+};
 
 export default async function AdminDashboardPage() {
   const session = await getAdminSession();
@@ -34,7 +44,17 @@ export default async function AdminDashboardPage() {
     { data: profiles, error: profilesError },
     { data: teamZips, error: teamZipsError },
   ] = await Promise.all([
-    supabase.from("leads").select("id, disposition_id, zipcode, lat, is_manual, created_at"),
+    fetchAllRows<DashboardLeadRow>((from, to) =>
+      supabase
+        .from("leads")
+        .select("id, disposition_id, zipcode, lat, is_manual, created_at")
+        // .range() pagination needs a deterministic order — this query had
+        // none before since a single unpaginated fetch didn't need one,
+        // but paging by an unordered set risks skipped/duplicated rows
+        // across page boundaries.
+        .order("id")
+        .range(from, to)
+    ),
     supabase.rpc("door_knock_counts", {
       from_date: dateOnly(thirtyDaysAgo),
       to_date: dateOnly(now),

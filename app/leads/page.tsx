@@ -1,5 +1,6 @@
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
+import { fetchAllRows } from "@/lib/supabase/fetch-all-rows";
 import { LeadsExplorer } from "./leads-explorer";
 import type { AppointmentFormField, Disposition, Lead, TeamZip } from "./types";
 
@@ -22,12 +23,20 @@ export default async function LeadsPage() {
     { data: appointmentFormFields, error: appointmentFormFieldsError },
     { data: radiusRow, error: radiusError },
   ] = await Promise.all([
-    supabase
-      .from("leads")
-      .select(
-        "id, first_name, last_name, address_line, city, state, zipcode, lat, lng, geocode_precision, disposition_id, prior_sale_date, is_manual, entered_by, profiles!entered_by(full_name), created_at"
-      )
-      .order("created_at", { ascending: false }),
+    fetchAllRows((from, to) =>
+      supabase
+        .from("leads")
+        .select(
+          "id, first_name, last_name, address_line, city, state, zipcode, lat, lng, geocode_precision, disposition_id, prior_sale_date, is_manual, entered_by, profiles!entered_by(full_name), created_at"
+        )
+        // id as a secondary, unique sort key — see fetch-all-rows.ts's
+        // comment: .range() pagination needs a fully deterministic order,
+        // and a bulk CSV insert commonly gives every row the same
+        // created_at.
+        .order("created_at", { ascending: false })
+        .order("id", { ascending: true })
+        .range(from, to)
+    ),
     supabase.from("dispositions").select("id, name, color, sort_order").order("sort_order"),
     supabase.rpc("subordinate_zip_assignments", { root_user_id: session.userId }),
     // Same admin-configurable question list the iOS app's NewAppointmentSheet

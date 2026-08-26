@@ -1,5 +1,6 @@
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
+import { fetchAllRows } from "@/lib/supabase/fetch-all-rows";
 import {
   countInLastDays,
   countByDisposition,
@@ -21,6 +22,15 @@ type DoorKnockCount = {
   total_count: number;
 };
 
+type DashboardLeadRow = {
+  id: string;
+  disposition_id: string | null;
+  zipcode: string;
+  lat: number | null;
+  is_manual: boolean;
+  created_at: string;
+};
+
 export default async function DashboardPage() {
   const session = await requireSession();
   const supabase = await createClient();
@@ -39,7 +49,13 @@ export default async function DashboardPage() {
     { data: doorKnockCounts, error: doorKnockError },
     { data: dispositions, error: dispositionsError },
   ] = await Promise.all([
-    supabase.from("leads").select("id, disposition_id, zipcode, lat, is_manual, created_at"),
+    fetchAllRows<DashboardLeadRow>((from, to) =>
+      supabase
+        .from("leads")
+        .select("id, disposition_id, zipcode, lat, is_manual, created_at")
+        .order("id")
+        .range(from, to)
+    ),
     supabase.rpc("door_knock_counts", {
       from_date: dateOnly(thirtyDaysAgo),
       to_date: dateOnly(now),
