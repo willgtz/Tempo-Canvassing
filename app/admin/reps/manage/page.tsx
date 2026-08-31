@@ -36,7 +36,7 @@ export default async function ManageRepsPage() {
       </div>
 
       {unassignedZips.length > 0 ? (
-        <details open className="rounded-lg border border-amber-500/40 bg-amber-500/5 p-3 text-sm">
+        <details className="rounded-lg border border-amber-500/40 bg-amber-500/5 p-3 text-sm">
           <summary className="cursor-pointer select-none font-medium text-amber-700 dark:text-amber-400">
             Unassigned Zip Codes ({unassignedZips.length})
           </summary>

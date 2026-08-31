@@ -95,12 +95,12 @@ export function ManageRepsClient({
       />
 
       {filteredPending.length > 0 && (
-        <div className="space-y-3 rounded-lg border border-amber-500/40 bg-amber-500/5 p-3">
-          <h2 className="text-sm font-medium text-amber-700 dark:text-amber-400">
+        <details className="rounded-lg border border-amber-500/40 bg-amber-500/5 p-3">
+          <summary className="cursor-pointer select-none text-sm font-medium text-amber-700 dark:text-amber-400">
             Pending Invites ({filteredPending.length})
-          </h2>
-          <div className="space-y-3">{filteredPending.map(renderCard)}</div>
-        </div>
+          </summary>
+          <div className="mt-3 space-y-3">{filteredPending.map(renderCard)}</div>
+        </details>
       )}
 
       <div className="space-y-3">
