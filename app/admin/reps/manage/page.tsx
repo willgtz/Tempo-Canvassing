@@ -1,6 +1,7 @@
 import { getAdminSession } from "@/lib/auth/admin";
-import { RepCard, type ManagedUser } from "../rep-card";
+import type { ManagedUser } from "../rep-card";
 import { loadRepsData } from "../load-reps-data";
+import { ManageRepsClient } from "./manage-reps-client";
 
 export default async function ManageRepsPage() {
   const session = await getAdminSession();
@@ -63,22 +64,14 @@ export default async function ManageRepsPage() {
         </p>
       )}
 
-      <div className="space-y-3">
-        {activeProfiles.length === 0 && (
-          <p className="text-sm italic text-black/40 dark:text-white/40">No active reps.</p>
-        )}
-        {activeProfiles.map((p) => (
-          <RepCard
-            key={p.id}
-            user={p as ManagedUser}
-            managerOptions={managerOptions}
-            isSelf={p.id === session.userId}
-            managerName={p.manager_id ? (nameById.get(p.manager_id) ?? null) : null}
-            initialAssignments={assignmentsByUser.get(p.id) ?? []}
-            zipHistory={historyByUser.get(p.id) ?? []}
-          />
-        ))}
-      </div>
+      <ManageRepsClient
+        activeProfiles={activeProfiles as ManagedUser[]}
+        managerOptions={managerOptions}
+        nameById={nameById}
+        assignmentsByUser={assignmentsByUser}
+        historyByUser={historyByUser}
+        currentUserId={session.userId}
+      />
     </div>
   );
 }
