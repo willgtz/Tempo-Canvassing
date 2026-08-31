@@ -14,7 +14,7 @@ export default async function ManageRepsPage() {
     );
   }
 
-  const { profiles, managerOptions, nameById, assignmentsByUser, historyByUser } = data;
+  const { profiles, managerOptions, nameById, assignmentsByUser, historyByUser, unassignedZips } = data;
   // Inactive reps live on their own tab now (app/admin/reps/inactive) —
   // moved out rather than just shown dimmed here, per William's request,
   // so this list stays a clean "who's currently active" view.
@@ -33,6 +33,35 @@ export default async function ManageRepsPage() {
           Marking someone inactive moves them to the Inactive tab.
         </p>
       </div>
+
+      {unassignedZips.length > 0 ? (
+        <details open className="rounded-lg border border-amber-500/40 bg-amber-500/5 p-3 text-sm">
+          <summary className="cursor-pointer select-none font-medium text-amber-700 dark:text-amber-400">
+            Unassigned Zip Codes ({unassignedZips.length})
+          </summary>
+          <p className="mt-2 text-xs text-black/50 dark:text-white/50">
+            These zips have leads but no rep currently covering them.
+            Sorted by lead count, highest first.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {unassignedZips.map((z) => (
+              <span
+                key={z.zipcode}
+                className="inline-flex items-center gap-1.5 rounded-full border border-black/10 bg-white px-2.5 py-1 text-xs dark:border-white/10 dark:bg-neutral-950"
+              >
+                <span className="font-medium">{z.zipcode}</span>
+                <span className="text-black/40 dark:text-white/40">
+                  {z.leadCount} lead{z.leadCount === 1 ? "" : "s"}
+                </span>
+              </span>
+            ))}
+          </div>
+        </details>
+      ) : (
+        <p className="text-sm italic text-black/40 dark:text-white/40">
+          Every zip with leads currently has a rep assigned.
+        </p>
+      )}
 
       <div className="space-y-3">
         {activeProfiles.length === 0 && (

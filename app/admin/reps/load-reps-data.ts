@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { fetchAllRows } from "@/lib/supabase/fetch-all-rows";
 
 // Shared by both the Manage (active) and Inactive tabs — both need the
 // full, unfiltered profile set to build managerOptions/nameById (an
@@ -12,6 +13,7 @@ export async function loadRepsData() {
     { data: profiles, error },
     { data: assignments, error: assignmentsError },
     { data: historyRows, error: historyError },
+    { data: leadZipRows, error: leadZipsError },
   ] = await Promise.all([
     supabase
       .from("profiles")
@@ -33,9 +35,22 @@ export async function loadRepsData() {
       .from("zip_assignments")
       .select("id, user_id, zipcode, assigned_at, assigned_by, unassigned_at, unassigned_by")
       .order("assigned_at", { ascending: false }),
+    // One row per lead (not distinct) — tallied into per-zip counts below,
+    // which also gives the "unassigned zips" card a lead count for free.
+    // Same filter assign_all_zips (schema.sql) uses for "real, current"
+    // zips. Paginated: this table can plausibly exceed Supabase's default
+    // 1000-row response cap once a company's been canvassing a while.
+    fetchAllRows<{ zipcode: string }>((from, to) =>
+      supabase
+        .from("leads")
+        .select("zipcode")
+        .is("deleted_at", null)
+        .order("id")
+        .range(from, to)
+    ),
   ]);
 
-  const loadError = error ?? assignmentsError ?? historyError ?? null;
+  const loadError = error ?? assignmentsError ?? historyError ?? leadZipsError ?? null;
 
   const managerOptions = (profiles ?? []).filter((p) =>
     ["team_lead", "admin", "super_admin"].includes(p.role)
@@ -73,6 +88,24 @@ export async function loadRepsData() {
     historyByUser.set(h.user_id, list);
   }
 
+  // A zip counts as "assigned" if ANY rep currently covers it — flattened
+  // across every user's active assignments (assignmentsByUser above),
+  // not a second query.
+  const assignedZips = new Set<string>();
+  for (const list of assignmentsByUser.values()) {
+    for (const a of list) assignedZips.add(a.zipcode);
+  }
+
+  const leadCountByZip = new Map<string, number>();
+  for (const row of leadZipRows) {
+    leadCountByZip.set(row.zipcode, (leadCountByZip.get(row.zipcode) ?? 0) + 1);
+  }
+
+  const unassignedZips = Array.from(leadCountByZip.entries())
+    .filter(([zipcode]) => !assignedZips.has(zipcode))
+    .map(([zipcode, leadCount]) => ({ zipcode, leadCount }))
+    .sort((a, b) => b.leadCount - a.leadCount);
+
   return {
     error: loadError,
     profiles: profiles ?? [],
@@ -80,5 +113,6 @@ export async function loadRepsData() {
     nameById,
     assignmentsByUser,
     historyByUser,
+    unassignedZips,
   };
 }
