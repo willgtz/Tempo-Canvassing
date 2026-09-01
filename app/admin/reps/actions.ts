@@ -314,6 +314,46 @@ export async function assignZip(userId: string, zipcode: string): Promise<Assign
   return { ok: true, assignment: { id: data.id, zipcode: data.zipcode } };
 }
 
+export type AssignAllZipsResult =
+  | { ok: true; assignments: { id: string; zipcode: string }[] }
+  | { ok: false; error: string };
+
+// Wraps the assign_all_zips SQL function (schema.sql) — already existed,
+// built for the iOS admin panel, just never had a web button. It snapshots
+// every distinct zip currently in `leads` and assigns whichever ones this
+// user doesn't already have; the function itself re-checks is_admin()
+// server-side (security definer), so getAdminSession() here is just the
+// same clean-error-instead-of-a-raw-DB-one pattern every other action
+// uses, not the real authorization boundary. One-time snapshot, not a
+// standing "always every zip" grant — a zip that only shows up in leads
+// uploaded after this runs won't be picked up until it's run again.
+export async function assignAllZips(userId: string): Promise<AssignAllZipsResult> {
+  const session = await getAdminSession();
+  if (!session) return { ok: false, error: "Unauthorized" };
+
+  const supabase = await createClient();
+  const { error: rpcError } = await supabase.rpc("assign_all_zips", { target_user_id: userId });
+  if (rpcError) {
+    return { ok: false, error: rpcError.message };
+  }
+
+  const { data, error: fetchError } = await supabase
+    .from("zip_assignments")
+    .select("id, zipcode")
+    .eq("user_id", userId)
+    .is("unassigned_at", null)
+    .order("zipcode");
+
+  if (fetchError || !data) {
+    return { ok: false, error: fetchError?.message ?? "Zips assigned, but failed to refresh the list." };
+  }
+
+  revalidatePath("/admin/reps/manage");
+  revalidatePath("/admin/reps/inactive");
+  revalidatePath("/admin/reps/add");
+  return { ok: true, assignments: data };
+}
+
 export type GrantVisibilityResult =
   | { ok: true; grants: { id: string; granteeId: string; targetId: string }[] }
   | { ok: false; error: string };

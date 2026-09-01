@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import {
   assignZip,
   unassignZip,
+  assignAllZips,
   updateUser,
   sendPasswordReset,
   setUserPassword,
@@ -207,6 +208,21 @@ export function RepCard({
         return;
       }
       setAssignments((prev) => prev.filter((a) => a.id !== assignmentId));
+    });
+  }
+
+  function handleAssignAllZips() {
+    if (!confirm(`Assign every zip that currently has leads to ${user.full_name}? This only covers zips that exist right now — a zip added later needs this run again.`)) {
+      return;
+    }
+    setZipError(null);
+    startZipSave(async () => {
+      const result = await assignAllZips(user.id);
+      if (!result.ok) {
+        setZipError(result.error);
+        return;
+      }
+      setAssignments(result.assignments);
     });
   }
 
@@ -457,6 +473,14 @@ export function RepCard({
           className="rounded border border-black/15 px-3 py-1 text-sm disabled:opacity-50 dark:border-white/20"
         >
           Assign
+        </button>
+        <button
+          type="button"
+          onClick={handleAssignAllZips}
+          disabled={isSavingZip}
+          className="rounded border border-black/15 px-3 py-1 text-sm disabled:opacity-50 dark:border-white/20"
+        >
+          Assign All Zips
         </button>
         {zipError && <span className="text-xs text-red-600 dark:text-red-400">{zipError}</span>}
       </form>
