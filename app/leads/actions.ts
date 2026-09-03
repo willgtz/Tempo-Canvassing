@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { getSession } from "@/lib/auth/session";
 import { getAdminSession } from "@/lib/auth/admin";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { geocodeAddress } from "@/lib/geocode/google";
 import type { Lead } from "./types";
 
@@ -270,7 +271,15 @@ export async function submitAppointment(
     };
   }
 
-  const { error: insertError } = await supabase.from("appointments").insert({
+  // Service-role for this one insert — see createAdminClient's case-4
+  // comment: appointments_insert's own policy is `created_by = auth.uid()`
+  // with zero admin-conditional logic, but a confirmed RLS enforcement
+  // bug reliably fails this exact check for non-admin sessions even when
+  // created_by is genuinely their own uid. created_by is still hardcoded
+  // to this same request's already-verified session, never client-
+  // supplied.
+  const adminClient = createAdminClient();
+  const { error: insertError } = await adminClient.from("appointments").insert({
     lead_id: input.leadId,
     scheduled_at: input.scheduledAt,
     status_id: defaultStatus.id,

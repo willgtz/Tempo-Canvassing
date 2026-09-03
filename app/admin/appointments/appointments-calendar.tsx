@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { cn } from "@/components/ui/cn";
 import type { Appointment, AppointmentLead, AppointmentStatus } from "./types";
 
@@ -276,12 +276,37 @@ function DayGrid({
     return d.toLocaleTimeString(undefined, { hour: "numeric" });
   }
 
+  // The grid always renders the full 24 hours (so an unusually early/late
+  // appointment is still reachable by scrolling) but starts scrolled to a
+  // sensible hour instead of midnight — every mainstream calendar app
+  // (Google/Apple Calendar) does this same "full day grid, pre-scrolled
+  // to something relevant" rather than hiding hours outright. Scrolls to
+  // 7am by default, or earlier if the day's first appointment starts
+  // before that, so a genuinely early appointment is visible immediately
+  // too, not just the fixed default.
+  const DEFAULT_START_HOUR = 7;
+  const earliestAppointmentHour =
+    dayAppointments.length > 0 ? new Date(dayAppointments[0].scheduled_at).getHours() : DEFAULT_START_HOUR;
+  const targetHour = Math.min(DEFAULT_START_HOUR, earliestAppointmentHour);
+
+  const hourRefs = useRef<Map<number, HTMLDivElement>>(new Map());
+  useEffect(() => {
+    hourRefs.current.get(targetHour)?.scrollIntoView({ block: "start" });
+  }, [referenceDate, targetHour]);
+
   return (
     <div className="min-h-0 max-h-[85vh] flex-1 overflow-y-auto p-2">
       {hours.map((hour) => {
         const inHour = dayAppointments.filter((a) => new Date(a.scheduled_at).getHours() === hour);
         return (
-          <div key={hour} className="flex min-h-[44px] gap-2 border-t border-black/5 py-1.5 dark:border-white/10">
+          <div
+            key={hour}
+            ref={(el) => {
+              if (el) hourRefs.current.set(hour, el);
+              else hourRefs.current.delete(hour);
+            }}
+            className="flex min-h-[44px] gap-2 border-t border-black/5 py-1.5 dark:border-white/10"
+          >
             <span className="w-14 shrink-0 pt-1 text-right text-xs text-black/40 dark:text-white/40">{hourLabel(hour)}</span>
             <div className="flex-1 space-y-1">
               {inHour.map((a) => {

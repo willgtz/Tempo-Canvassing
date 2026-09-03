@@ -123,18 +123,14 @@ export type AddMyManualAppointmentResult =
 // everyone, and scoped so a rep only ever sees the ones they entered.
 //
 // Creates a manual lead (leads_insert_manual RLS: any authenticated user)
-// and the appointment (appointments_insert RLS: created_by = auth.uid())
-// through the normal session-scoped client, so both run under real RLS.
-// The one exception: appointment_assignments writes are admin-only RLS
-// (assigning a closer is meant to be an admin action) — a rep has no way
-// to self-assign as opener through the normal client, but without an
-// assignment row, appointments_select would never show them their own
-// appointment again afterward (admin OR is_assigned_to_appointment,
-// nothing else). Service-role is used for exactly that one insert, with
-// every value hardcoded from this same request (the caller's own
-// session, the appointment just created two lines above) — never
-// client-supplied, so this can't be used to assign anyone to anything
-// else. See the widened comment on createAdminClient.
+// through the normal session-scoped client, so that write runs under real
+// RLS. The appointments insert itself, and the appointment_assignments
+// self-assign, both go through service-role — see createAdminClient's
+// case-3 (assignment) and case-4 (appointments RLS bug) comments for why
+// each is needed. Every value in both is still hardcoded from this same
+// request (the caller's own session, the appointment just created a few
+// lines above) — never client-supplied, so this can't be used to write
+// anything on anyone else's behalf.
 export async function addMyManualAppointment(
   input: AddMyManualAppointmentInput
 ): Promise<AddMyManualAppointmentResult> {
@@ -201,7 +197,16 @@ export async function addMyManualAppointment(
     };
   }
 
-  const { data: appointment, error: apptError } = await supabase
+  // Service-role for this one insert — see createAdminClient's case-4
+  // comment: appointments_insert's own policy is `created_by = auth.uid()`
+  // with zero admin-conditional logic, but a confirmed RLS enforcement
+  // bug reliably fails this exact check for non-admin sessions even when
+  // created_by is genuinely their own uid. created_by is still hardcoded
+  // to this same request's already-verified session, never client-
+  // supplied, so this can't be used to attribute an appointment to anyone
+  // else.
+  const adminClient = createAdminClient();
+  const { data: appointment, error: apptError } = await adminClient
     .from("appointments")
     .insert({
       lead_id: lead.id,
@@ -217,7 +222,6 @@ export async function addMyManualAppointment(
     return { ok: false, error: apptError?.message ?? "Failed to create appointment." };
   }
 
-  const adminClient = createAdminClient();
   const { error: assignError } = await adminClient.from("appointment_assignments").insert({
     appointment_id: appointment.id,
     user_id: session.userId,
