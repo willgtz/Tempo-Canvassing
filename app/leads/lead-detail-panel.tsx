@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
-import { updateLeadDisposition, updateLeadPriorSaleDate, addLeadNote } from "./actions";
+import { updateLeadDisposition, updateLeadPriorSaleDate, updateLeadName, addLeadNote } from "./actions";
 import { SetAppointmentModal } from "./set-appointment-modal";
 import { DispositionSelect } from "./disposition-select";
+import { AddressActionsMenu } from "@/components/address-actions-menu";
 import { getCurrentLocation, distanceFeet } from "@/lib/geo";
 import { useSlideIn } from "@/lib/use-slide-in";
 import { cn } from "@/components/ui/cn";
@@ -48,6 +49,11 @@ export function LeadDetailPanel({
 }) {
   const visible = useSlideIn();
   const [showSetAppointment, setShowSetAppointment] = useState(false);
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [firstNameDraft, setFirstNameDraft] = useState(lead.first_name ?? "");
+  const [lastNameDraft, setLastNameDraft] = useState(lead.last_name ?? "");
+  const [nameError, setNameError] = useState<string | null>(null);
+  const [isSavingName, startNameSave] = useTransition();
   const [dispositionId, setDispositionId] = useState(lead.disposition_id ?? "");
   const [dispositionError, setDispositionError] = useState<string | null>(null);
   const [isSavingDisposition, startDispositionSave] = useTransition();
@@ -164,6 +170,28 @@ export function LeadDetailPanel({
     });
   }
 
+  function handleSaveName() {
+    setNameError(null);
+    startNameSave(async () => {
+      const firstName = firstNameDraft.trim() || null;
+      const lastName = lastNameDraft.trim() || null;
+      const result = await updateLeadName(lead.id, firstName, lastName);
+      if (!result.ok) {
+        setNameError(result.error);
+        return;
+      }
+      onLeadUpdated({ ...lead, first_name: firstName, last_name: lastName });
+      setIsEditingName(false);
+    });
+  }
+
+  function handleCancelEditName() {
+    setFirstNameDraft(lead.first_name ?? "");
+    setLastNameDraft(lead.last_name ?? "");
+    setNameError(null);
+    setIsEditingName(false);
+  }
+
   function handleSaveNote() {
     const text = newNote.trim();
     if (!text) return;
@@ -203,22 +231,71 @@ export function LeadDetailPanel({
         )}
       >
         <div className="flex items-start justify-between gap-4">
-          <h2 className="text-lg font-semibold">
-            {[lead.first_name, lead.last_name].filter(Boolean).join(" ") || "Lead"}
-          </h2>
+          {isEditingName ? (
+            <div className="flex-1 space-y-2">
+              <div className="flex gap-2">
+                <input
+                  value={firstNameDraft}
+                  onChange={(e) => setFirstNameDraft(e.target.value)}
+                  placeholder="First name"
+                  autoFocus
+                  className="w-full min-w-0 rounded border border-black/15 px-2 py-1 text-sm dark:border-white/20 dark:bg-transparent"
+                />
+                <input
+                  value={lastNameDraft}
+                  onChange={(e) => setLastNameDraft(e.target.value)}
+                  placeholder="Last name"
+                  className="w-full min-w-0 rounded border border-black/15 px-2 py-1 text-sm dark:border-white/20 dark:bg-transparent"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleSaveName}
+                  disabled={isSavingName}
+                  className="rounded bg-black px-2.5 py-1 text-xs font-medium text-white disabled:opacity-50 dark:bg-white dark:text-black"
+                >
+                  {isSavingName ? "Saving…" : "Save"}
+                </button>
+                <button
+                  onClick={handleCancelEditName}
+                  disabled={isSavingName}
+                  className="rounded border border-black/15 px-2.5 py-1 text-xs disabled:opacity-50 dark:border-white/20"
+                >
+                  Cancel
+                </button>
+              </div>
+              {nameError && <p className="text-xs text-red-600 dark:text-red-400">{nameError}</p>}
+            </div>
+          ) : (
+            <h2 className="flex items-center gap-2 text-lg font-semibold">
+              {[lead.first_name, lead.last_name].filter(Boolean).join(" ") || "Lead"}
+              <button
+                onClick={() => setIsEditingName(true)}
+                className="text-xs font-normal text-black/40 hover:text-black dark:text-white/40 dark:hover:text-white"
+              >
+                Edit
+              </button>
+            </h2>
+          )}
           <button
             onClick={onClose}
-            className="text-sm text-black/50 hover:text-black dark:text-white/50 dark:hover:text-white"
+            className="shrink-0 text-sm text-black/50 hover:text-black dark:text-white/50 dark:hover:text-white"
           >
             Close
           </button>
         </div>
 
-        <p className="mt-1 text-sm text-black/70 dark:text-white/70">
-          {lead.address_line}
-          <br />
-          {[lead.city, lead.state, lead.zipcode].filter(Boolean).join(", ")}
-        </p>
+        <div className="mt-1 text-sm text-black/70 dark:text-white/70">
+          <AddressActionsMenu
+            addressLine={lead.address_line}
+            city={lead.city}
+            state={lead.state}
+            zipcode={lead.zipcode}
+            lat={lead.lat}
+            lng={lead.lng}
+            className="text-left text-sm text-black/70 underline decoration-black/30 underline-offset-2 hover:decoration-black dark:text-white/70 dark:decoration-white/30 dark:hover:decoration-white"
+          />
+        </div>
 
         {lead.is_manual && (
           <p className="mt-2 inline-block rounded border border-black/20 px-2 py-1 text-xs text-black/60 dark:border-white/30 dark:text-white/60">

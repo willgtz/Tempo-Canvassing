@@ -125,6 +125,40 @@ export async function updateLeadPriorSaleDate(
   return { ok: true };
 }
 
+export type UpdateLeadNameResult = { ok: true } | { ok: false; error: string };
+
+// Any rep who can currently see the lead can correct its name — a CSV
+// import or a quick door-knock note often leaves a placeholder/misspelled
+// name, and there's no reason only admins should be able to fix that.
+// Reuses update_lead_name_for_appointment (schema.sql) rather than a
+// plain RLS-scoped update — it's the same security-definer function
+// SetAppointmentModal's name-edit-on-submit already uses, and its
+// authorization check is exactly the general "can this user touch this
+// lead" rule (admin, visible zip, own manual entry, or assigned to an
+// appointment on it), not something appointment-submission-specific.
+export async function updateLeadName(
+  leadId: string,
+  firstName: string | null,
+  lastName: string | null
+): Promise<UpdateLeadNameResult> {
+  const session = await getSession();
+  if (!session) return { ok: false, error: "Unauthorized" };
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("update_lead_name_for_appointment", {
+    p_lead_id: leadId,
+    p_first_name: firstName,
+    p_last_name: lastName,
+  });
+
+  if (error) {
+    return { ok: false, error: error.message };
+  }
+
+  revalidatePath("/leads");
+  return { ok: true };
+}
+
 export type AddManualLeadInput = {
   firstName: string | null;
   lastName: string | null;
