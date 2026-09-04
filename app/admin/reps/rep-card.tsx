@@ -436,86 +436,92 @@ export function RepCard({
         </div>
       )}
 
-      <div className="mt-3 flex flex-wrap gap-2">
-        {assignments.length === 0 && (
-          <span className="text-sm italic text-black/40 dark:text-white/40">
-            No active zip assignments
-          </span>
-        )}
-        {assignments.map((a) => (
-          <button
-            key={a.id}
-            type="button"
-            disabled={isSavingZip}
-            onClick={() => handleRemoveZip(a.id)}
-            className="rounded-full border border-black/15 px-3 py-1 text-xs disabled:opacity-50 dark:border-white/20"
-            title="Remove assignment"
-          >
-            {a.zipcode} ×
-          </button>
-        ))}
-      </div>
+      <details className="mt-3 rounded-lg border border-black/10 p-2.5 dark:border-white/10">
+        <summary className="cursor-pointer select-none text-sm font-medium">
+          Zip Codes ({assignments.length} assigned)
+        </summary>
 
-      <form onSubmit={handleAssignZip} className="mt-3 flex flex-wrap items-center gap-2">
-        <input
-          value={zipInput}
-          onChange={(e) => setZipInput(e.target.value)}
-          placeholder="Zip code"
-          inputMode="numeric"
-          pattern="\d{5}"
-          maxLength={5}
-          required
-          className="w-28 rounded border border-black/15 px-2 py-1 text-sm dark:border-white/20 dark:bg-transparent"
-        />
-        <button
-          type="submit"
-          disabled={isSavingZip}
-          className="rounded border border-black/15 px-3 py-1 text-sm disabled:opacity-50 dark:border-white/20"
-        >
-          Assign
-        </button>
-        <button
-          type="button"
-          onClick={handleAssignAllZips}
-          disabled={isSavingZip}
-          className="rounded border border-black/15 px-3 py-1 text-sm disabled:opacity-50 dark:border-white/20"
-        >
-          Assign All Zips
-        </button>
-        {zipError && <span className="text-xs text-red-600 dark:text-red-400">{zipError}</span>}
-      </form>
-
-      {zipHistory.length > 0 && (
-        <div className="mt-3">
-          <button
-            type="button"
-            onClick={() => setShowHistory((v) => !v)}
-            className="text-xs text-black/50 hover:text-black dark:text-white/50 dark:hover:text-white"
-          >
-            {showHistory ? "Hide" : "Show"} zip history ({zipHistory.length})
-          </button>
-          {showHistory && (
-            <ul className="mt-2 space-y-1 border-t border-black/10 pt-2 text-xs text-black/60 dark:border-white/10 dark:text-white/60">
-              {zipHistory.map((h) => (
-                <li key={h.id}>
-                  <span className="font-medium">{h.zipcode}</span> — assigned{" "}
-                  {new Date(h.assignedAt).toLocaleDateString()}
-                  {h.assignedByName ? ` by ${h.assignedByName}` : ""}
-                  {h.unassignedAt ? (
-                    <>
-                      {" "}
-                      → removed {new Date(h.unassignedAt).toLocaleDateString()}
-                      {h.unassignedByName ? ` by ${h.unassignedByName}` : ""}
-                    </>
-                  ) : (
-                    <span className="text-green-700 dark:text-green-500"> — currently active</span>
-                  )}
-                </li>
-              ))}
-            </ul>
+        <div className="mt-3 flex flex-wrap gap-2">
+          {assignments.length === 0 && (
+            <span className="text-sm italic text-black/40 dark:text-white/40">
+              No active zip assignments
+            </span>
           )}
+          {assignments.map((a) => (
+            <button
+              key={a.id}
+              type="button"
+              disabled={isSavingZip}
+              onClick={() => handleRemoveZip(a.id)}
+              className="rounded-full border border-black/15 px-3 py-1 text-xs disabled:opacity-50 dark:border-white/20"
+              title="Remove assignment"
+            >
+              {a.zipcode} ×
+            </button>
+          ))}
         </div>
-      )}
+
+        <form onSubmit={handleAssignZip} className="mt-3 flex flex-wrap items-center gap-2">
+          <input
+            value={zipInput}
+            onChange={(e) => setZipInput(e.target.value)}
+            placeholder="Zip code"
+            inputMode="numeric"
+            pattern="\d{5}"
+            maxLength={5}
+            required
+            className="w-28 rounded border border-black/15 px-2 py-1 text-sm dark:border-white/20 dark:bg-transparent"
+          />
+          <button
+            type="submit"
+            disabled={isSavingZip}
+            className="rounded border border-black/15 px-3 py-1 text-sm disabled:opacity-50 dark:border-white/20"
+          >
+            Assign
+          </button>
+          <button
+            type="button"
+            onClick={handleAssignAllZips}
+            disabled={isSavingZip}
+            className="rounded border border-black/15 px-3 py-1 text-sm disabled:opacity-50 dark:border-white/20"
+          >
+            Assign All Zips
+          </button>
+          {zipError && <span className="text-xs text-red-600 dark:text-red-400">{zipError}</span>}
+        </form>
+
+        {zipHistory.length > 0 && (
+          <div className="mt-3">
+            <button
+              type="button"
+              onClick={() => setShowHistory((v) => !v)}
+              className="text-xs text-black/50 hover:text-black dark:text-white/50 dark:hover:text-white"
+            >
+              {showHistory ? "Hide" : "Show"} zip history ({zipHistory.length})
+            </button>
+            {showHistory && (
+              <ul className="mt-2 space-y-1 border-t border-black/10 pt-2 text-xs text-black/60 dark:border-white/10 dark:text-white/60">
+                {zipHistory.map((h) => (
+                  <li key={h.id}>
+                    <span className="font-medium">{h.zipcode}</span> — assigned{" "}
+                    {new Date(h.assignedAt).toLocaleDateString()}
+                    {h.assignedByName ? ` by ${h.assignedByName}` : ""}
+                    {h.unassignedAt ? (
+                      <>
+                        {" "}
+                        → removed {new Date(h.unassignedAt).toLocaleDateString()}
+                        {h.unassignedByName ? ` by ${h.unassignedByName}` : ""}
+                      </>
+                    ) : (
+                      <span className="text-green-700 dark:text-green-500"> — currently active</span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+      </details>
     </div>
   );
 }
