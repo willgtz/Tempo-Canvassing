@@ -222,12 +222,23 @@ export async function addMyManualAppointment(
     return { ok: false, error: apptError?.message ?? "Failed to create appointment." };
   }
 
-  const { error: assignError } = await adminClient.from("appointment_assignments").insert({
-    appointment_id: appointment.id,
-    user_id: session.userId,
-    role: "opener",
-    assigned_by: session.userId,
-  });
+  // upsert + ignoreDuplicates, not a plain insert — a live-only
+  // auto_assign_opener trigger (exists on the database, discovered
+  // 2026-09-03, not in tracked schema.sql) already self-assigns the
+  // creator as opener on every appointments insert, so this can
+  // legitimately race with a row that already exists by the time this
+  // runs. Making this idempotent means it's correct regardless of
+  // whether that trigger exists — this code doesn't depend on an
+  // untracked, undocumented piece of the live database to behave.
+  const { error: assignError } = await adminClient.from("appointment_assignments").upsert(
+    {
+      appointment_id: appointment.id,
+      user_id: session.userId,
+      role: "opener",
+      assigned_by: session.userId,
+    },
+    { onConflict: "appointment_id,user_id,role", ignoreDuplicates: true }
+  );
 
   if (assignError) {
     // The appointment itself was created successfully — say so, rather
