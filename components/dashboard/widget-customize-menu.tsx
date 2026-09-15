@@ -28,7 +28,20 @@ export function WidgetCustomizeMenu({
   }, []);
 
   return (
-    <div className="relative" ref={containerRef}>
+    <div
+      // ml-auto + shrink-0: the admin dashboard's header row uses
+      // flex-wrap, so on a narrow viewport this button can wrap onto its
+      // own line — where, as the sole item on that line,
+      // justify-content: space-between degenerates to flex-start
+      // (left-aligned). Without ml-auto, the dropdown below (anchored
+      // via right-0 to this div) would then render flush against a
+      // button sitting at the LEFT of the screen, pushing its left edge
+      // off-screen. ml-auto pins this to the right edge of whatever line
+      // it ends up on regardless of wrap; shrink-0 stops it from being
+      // squeezed narrower than its content.
+      className="relative ml-auto shrink-0"
+      ref={containerRef}
+    >
       <Button type="button" variant="secondary" size="sm" onClick={() => setOpen((o) => !o)}>
         Customize
       </Button>
