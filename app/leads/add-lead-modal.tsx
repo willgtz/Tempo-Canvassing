@@ -61,7 +61,7 @@ export function AddLeadModal({
       />
       <div
         className={cn(
-          "fixed left-1/2 top-1/2 z-30 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-lg border border-black/10 bg-white p-6 shadow-xl transition-all duration-200 ease-out dark:border-white/10 dark:bg-neutral-950",
+          "fixed left-1/2 top-1/2 z-30 max-h-[85vh] w-full max-w-md overflow-y-auto -translate-x-1/2 -translate-y-1/2 rounded-lg border border-black/10 bg-white p-6 shadow-xl transition-all duration-200 ease-out dark:border-white/10 dark:bg-neutral-950",
           visible ? "scale-100 opacity-100" : "scale-95 opacity-0"
         )}
       >
@@ -80,6 +80,21 @@ export function AddLeadModal({
         </p>
 
         <form onSubmit={handleSubmit} className="mt-4 space-y-3">
+          {/* Submit lives up here, not below Notes — on mobile, filling in
+              Notes (the last field) means the keyboard is open covering
+              the bottom of the screen, right where a bottom-placed button
+              would be. The keyboard leaves the top of the screen clear,
+              so this stays reachable no matter which field has focus. */}
+          <div className="flex items-center gap-3">
+            <button
+              type="submit"
+              disabled={isPending}
+              className="rounded bg-black px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50 dark:bg-white dark:text-black"
+            >
+              {isPending ? "Adding…" : "Add Lead"}
+            </button>
+            {error && <span className="text-sm text-red-600 dark:text-red-400">{error}</span>}
+          </div>
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1">
               <label className="text-xs font-medium">First name</label>
@@ -166,17 +181,6 @@ export function AddLeadModal({
                 className="w-full rounded border border-black/15 px-2 py-1 text-sm dark:border-white/20 dark:bg-transparent"
               />
             </div>
-          </div>
-
-          <div className="flex items-center gap-3 pt-1">
-            <button
-              type="submit"
-              disabled={isPending}
-              className="rounded bg-black px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50 dark:bg-white dark:text-black"
-            >
-              {isPending ? "Adding…" : "Add Lead"}
-            </button>
-            {error && <span className="text-sm text-red-600 dark:text-red-400">{error}</span>}
           </div>
         </form>
       </div>
