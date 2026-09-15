@@ -7,6 +7,7 @@ import { cn } from "@/components/ui/cn";
 import { AddressActionsMenu } from "@/components/address-actions-menu";
 import {
   addAppointmentNote,
+  deleteAppointment,
   markDealSubmitted,
   rescheduleAppointment,
   saveAppointmentAssignments,
@@ -61,6 +62,7 @@ export function AppointmentDetailPanel({
   onAssignmentsUpdated,
   onNoteAdded,
   onLeadNameUpdated,
+  onDeleted,
 }: {
   appointment: Appointment;
   lead: AppointmentLead | null;
@@ -75,6 +77,7 @@ export function AppointmentDetailPanel({
   onAssignmentsUpdated: (newAssignments: AppointmentAssignment[]) => void;
   onNoteAdded: (note: AppointmentNote) => void;
   onLeadNameUpdated: (leadId: string, firstName: string | null, lastName: string | null) => void;
+  onDeleted: (appointmentId: string) => void;
 }) {
   const visible = useSlideIn();
   const originalName = [lead?.first_name, lead?.last_name].filter(Boolean).join(" ");
@@ -103,6 +106,27 @@ export function AppointmentDetailPanel({
   const [noteError, setNoteError] = useState<string | null>(null);
 
   const [isMarkingDeal, startMarkDeal] = useTransition();
+
+  const [isDeleting, startDelete] = useTransition();
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  function handleDelete() {
+    const leadName = [lead?.first_name, lead?.last_name].filter(Boolean).join(" ") || "this lead";
+    const ok = confirm(
+      `Delete this appointment for ${leadName}? This can't be undone — its notes and assignment history will be deleted too. The lead itself is not affected.`
+    );
+    if (!ok) return;
+
+    setDeleteError(null);
+    startDelete(async () => {
+      const result = await deleteAppointment(appointment.id);
+      if (!result.ok) {
+        setDeleteError(result.error);
+        return;
+      }
+      onDeleted(appointment.id);
+    });
+  }
 
   const hasUnsavedAssignmentChanges =
     JSON.stringify([...stagedOpenerIds].sort()) !== JSON.stringify(openers.map((a) => a.user_id).sort()) ||
@@ -564,6 +588,17 @@ export function AppointmentDetailPanel({
             {sectionContent[key] ?? null}
           </div>
         ))}
+
+        <div className="mt-6 border-t border-black/10 pt-4 dark:border-white/10">
+          <button
+            onClick={handleDelete}
+            disabled={isDeleting}
+            className="rounded border border-red-300 px-2 py-1 text-xs text-red-600 disabled:opacity-50 dark:border-red-800 dark:text-red-400"
+          >
+            {isDeleting ? "Deleting…" : "Delete Appointment"}
+          </button>
+          {deleteError && <p className="mt-1 text-xs text-red-600 dark:text-red-400">{deleteError}</p>}
+        </div>
       </div>
     </>
   );

@@ -8,6 +8,24 @@ import type { AppointmentRole } from "./types";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
+// appointments_delete_admin RLS (schema.sql, 2026-09-15) is what actually
+// enforces admin-only here — plain session-scoped client, no service role
+// needed. Cascades (appointment_assignments/appointment_history/
+// appointment_notes/notifications.appointment_id) clean up automatically;
+// appointments.lead_id -> leads.id is the only FK between the two tables
+// and points the other way, so this never touches the underlying lead.
+export async function deleteAppointment(appointmentId: string): Promise<ActionResult> {
+  const session = await getAdminSession();
+  if (!session) return { ok: false, error: "Unauthorized" };
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("appointments").delete().eq("id", appointmentId);
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath("/admin/appointments");
+  return { ok: true };
+}
+
 // Admin-only page, so every action here re-checks getAdminSession rather
 // than the plainer getSession() the rep-facing app/leads/actions.ts uses —
 // appointments_update RLS (schema.sql) would also allow an assigned closer,
@@ -45,12 +63,35 @@ export async function rescheduleAppointment(
   if (!session) return { ok: false, error: "Unauthorized" };
 
   const supabase = await createClient();
+
+  const { data: current } = await supabase
+    .from("appointments")
+    .select("scheduled_at")
+    .eq("id", appointmentId)
+    .single();
+
   const { error } = await supabase
     .from("appointments")
     .update({ status_id: statusId, scheduled_at: newScheduledAt, updated_at: new Date().toISOString() })
     .eq("id", appointmentId);
 
   if (error) return { ok: false, error: error.message };
+
+  // Same appointment_history logging update_appointment_scheduled_at_for_assignee
+  // (schema.sql) writes for the rep-facing date edit — kept consistent
+  // here rather than only the newer path recording history.
+  if (current) {
+    const { error: historyError } = await supabase.from("appointment_history").insert({
+      appointment_id: appointmentId,
+      user_id: session.userId,
+      field_changed: "scheduled_at",
+      old_value: current.scheduled_at,
+      new_value: newScheduledAt,
+    });
+    if (historyError) {
+      return { ok: false, error: `Saved, but failed to record history: ${historyError.message}` };
+    }
+  }
 
   revalidatePath("/admin/appointments");
   return { ok: true };
@@ -67,12 +108,35 @@ export async function updateAppointmentScheduledAt(
   if (!session) return { ok: false, error: "Unauthorized" };
 
   const supabase = await createClient();
+
+  const { data: current } = await supabase
+    .from("appointments")
+    .select("scheduled_at")
+    .eq("id", appointmentId)
+    .single();
+
   const { error } = await supabase
     .from("appointments")
     .update({ scheduled_at: newScheduledAt, updated_at: new Date().toISOString() })
     .eq("id", appointmentId);
 
   if (error) return { ok: false, error: error.message };
+
+  // Same appointment_history logging update_appointment_scheduled_at_for_assignee
+  // (schema.sql) writes for the rep-facing date edit — kept consistent
+  // here rather than only the newer path recording history.
+  if (current) {
+    const { error: historyError } = await supabase.from("appointment_history").insert({
+      appointment_id: appointmentId,
+      user_id: session.userId,
+      field_changed: "scheduled_at",
+      old_value: current.scheduled_at,
+      new_value: newScheduledAt,
+    });
+    if (historyError) {
+      return { ok: false, error: `Saved, but failed to record history: ${historyError.message}` };
+    }
+  }
 
   revalidatePath("/admin/appointments");
   return { ok: true };

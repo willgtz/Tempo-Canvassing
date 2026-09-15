@@ -8,6 +8,7 @@ import {
   countWithoutLocation,
   countManual,
   dailyCounts,
+  laDateOnly,
 } from "@/lib/dashboard/stats";
 import { RepDashboardClient } from "./rep-dashboard-client";
 
@@ -38,15 +39,19 @@ export default async function DashboardPage() {
   const now = new Date();
   const thirtyDaysAgo = new Date(now);
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+  const laToday = laDateOnly(now);
 
   // No manual zip filtering — leads_select RLS already scopes this to
   // whatever the signed-in user can currently see, same as app/leads.
   // door_knock_counts (schema.sql) replaces the old raw lead_history
   // count — it's location-verified server-side and always includes this
-  // caller's own row regardless of any grant/leaderboard flag.
+  // caller's own row regardless of any grant/leaderboard flag. Called
+  // twice: the existing 30-day rolling window, and a second call scoped
+  // to just today (laToday for both from/to) for the daily counter.
   const [
     { data: leads, error: leadsError },
     { data: doorKnockCounts, error: doorKnockError },
+    { data: doorKnockCountsToday, error: doorKnockTodayError },
     { data: dispositions, error: dispositionsError },
   ] = await Promise.all([
     fetchAllRows<DashboardLeadRow>((from, to) =>
@@ -60,14 +65,15 @@ export default async function DashboardPage() {
       from_date: dateOnly(thirtyDaysAgo),
       to_date: dateOnly(now),
     }),
+    supabase.rpc("door_knock_counts", { from_date: laToday, to_date: laToday }),
     supabase.from("dispositions").select("id, name, color, sort_order").order("sort_order"),
   ]);
 
-  if (leadsError || doorKnockError || dispositionsError) {
+  if (leadsError || doorKnockError || doorKnockTodayError || dispositionsError) {
     return (
       <div className="mx-auto w-full max-w-5xl p-6 text-sm text-red-600 dark:text-red-400">
         Failed to load dashboard:{" "}
-        {leadsError?.message ?? doorKnockError?.message ?? dispositionsError?.message}
+        {leadsError?.message ?? doorKnockError?.message ?? doorKnockTodayError?.message ?? dispositionsError?.message}
       </div>
     );
   }
@@ -75,6 +81,9 @@ export default async function DashboardPage() {
   const leadsList = leads ?? [];
   const dispositionById = new Map((dispositions ?? []).map((d) => [d.id, d]));
   const myDoorKnocks = ((doorKnockCounts ?? []) as DoorKnockCount[]).find(
+    (row) => row.user_id === session.userId
+  );
+  const myDoorKnocksToday = ((doorKnockCountsToday ?? []) as DoorKnockCount[]).find(
     (row) => row.user_id === session.userId
   );
 
@@ -95,6 +104,8 @@ export default async function DashboardPage() {
     last30: countInLastDays(leadsList, 30),
     doorsKnocked30: myDoorKnocks?.verified_count ?? 0,
     doorsKnockedTotal30: myDoorKnocks?.total_count ?? 0,
+    doorsKnockedToday: myDoorKnocksToday?.verified_count ?? 0,
+    doorsKnockedTotalToday: myDoorKnocksToday?.total_count ?? 0,
     withoutLocation: countWithoutLocation(leadsList),
     manual: countManual(leadsList),
     trend30: dailyCounts(leadsList, 30),

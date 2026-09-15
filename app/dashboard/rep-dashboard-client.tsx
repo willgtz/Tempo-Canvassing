@@ -13,6 +13,8 @@ type Stats = {
   last30: number;
   doorsKnocked30: number;
   doorsKnockedTotal30: number;
+  doorsKnockedToday: number;
+  doorsKnockedTotalToday: number;
   withoutLocation: number;
   manual: number;
   trend30: { date: string; count: number }[];
@@ -24,6 +26,7 @@ const WIDGETS = [
   { id: "total", label: "Total leads assigned" },
   { id: "last7", label: "Created in last 7 days" },
   { id: "last30", label: "Created in last 30 days" },
+  { id: "doorsKnockedToday", label: "Doors knocked (today)" },
   { id: "doorsKnocked", label: "Doors knocked (30 days)" },
   { id: "withoutLocation", label: "Leads without a location" },
   { id: "manual", label: "Manually entered leads" },
@@ -51,6 +54,17 @@ export function RepDashboardClient({ stats }: { stats: Stats }) {
         {isVisible("total") && <StatTile label="Total leads assigned" value={stats.total} />}
         {isVisible("last7") && <StatTile label="Created in last 7 days" value={stats.last7} />}
         {isVisible("last30") && <StatTile label="Created in last 30 days" value={stats.last30} />}
+        {isVisible("doorsKnockedToday") && (
+          <StatTile
+            label="Doors knocked (today)"
+            value={stats.doorsKnockedToday}
+            hint={
+              stats.doorsKnockedTotalToday > stats.doorsKnockedToday
+                ? `${stats.doorsKnockedTotalToday - stats.doorsKnockedToday} more not counted — too far from the lead's saved location`
+                : undefined
+            }
+          />
+        )}
         {isVisible("doorsKnocked") && (
           <StatTile
             label="Doors knocked (30 days)"

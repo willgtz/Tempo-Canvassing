@@ -124,16 +124,23 @@ export async function POST(request: Request) {
 
   // Logged for Route History (routes table, schema.sql — already existed
   // unused: nothing ever wrote to it before this). Best-effort: a failure
-  // here shouldn't fail the route the rep is actually waiting on.
+  // here shouldn't fail the route the rep is actually waiting on. Also
+  // selects the new row's id back — needed so the client can toggle
+  // visited_lead_ids against this specific route (previously discarded
+  // entirely, so there was no way to reference this row after creation).
   const orderedLeadIds = stops.map((s) => s.leadId).filter((id): id is string => id !== null);
-  const { error: historyError } = await supabase.from("routes").insert({
-    user_id: session.userId,
-    lead_ids: leadIds,
-    ordered_lead_ids: orderedLeadIds,
-  });
+  const { data: routeRow, error: historyError } = await supabase
+    .from("routes")
+    .insert({
+      user_id: session.userId,
+      lead_ids: leadIds,
+      ordered_lead_ids: orderedLeadIds,
+    })
+    .select("id")
+    .single();
   if (historyError) {
     console.error("Failed to save route history:", historyError.message);
   }
 
-  return NextResponse.json({ stops, skippedCount });
+  return NextResponse.json({ stops, skippedCount, routeId: routeRow?.id ?? null });
 }

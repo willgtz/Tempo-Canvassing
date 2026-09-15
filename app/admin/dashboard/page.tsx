@@ -1,6 +1,7 @@
 import { getAdminSession } from "@/lib/auth/admin";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllRows } from "@/lib/supabase/fetch-all-rows";
+import { laDateOnly } from "@/lib/dashboard/stats";
 import { AdminDashboardClient } from "./admin-dashboard-client";
 
 type DashboardLeadRow = {
@@ -28,6 +29,7 @@ export default async function AdminDashboardPage() {
   const thirtyDaysAgo = new Date(now);
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
   const dateOnly = (d: Date) => d.toISOString().slice(0, 10);
+  const laToday = laDateOnly(now);
 
   // is_admin(auth.uid()) bypasses zip-based RLS on leads, and
   // subordinate_zip_assignments(admin_id) returns every active assignment
@@ -40,6 +42,7 @@ export default async function AdminDashboardPage() {
   const [
     { data: leads, error: leadsError },
     { data: doorKnockCounts, error: doorKnockError },
+    { data: doorKnockCountsToday, error: doorKnockTodayError },
     { data: dispositions, error: dispositionsError },
     { data: profiles, error: profilesError },
     { data: teamZips, error: teamZipsError },
@@ -59,17 +62,22 @@ export default async function AdminDashboardPage() {
       from_date: dateOnly(thirtyDaysAgo),
       to_date: dateOnly(now),
     }),
+    // Same RPC, today only (LA-time boundary — see laDateOnly's comment
+    // on why toISOString() would be wrong here) — the "who's knocking
+    // right now, today" companion to the 30-day rolling view above.
+    supabase.rpc("door_knock_counts", { from_date: laToday, to_date: laToday }),
     supabase.from("dispositions").select("id, name, color, sort_order").order("sort_order"),
     supabase.from("profiles").select("id, full_name, role, active").order("full_name"),
     supabase.rpc("subordinate_zip_assignments", { root_user_id: session.userId }),
   ]);
 
-  if (leadsError || doorKnockError || dispositionsError || profilesError || teamZipsError) {
+  if (leadsError || doorKnockError || doorKnockTodayError || dispositionsError || profilesError || teamZipsError) {
     return (
       <div className="mx-auto w-full max-w-6xl p-6 text-sm text-red-600 dark:text-red-400">
         Failed to load dashboard:{" "}
         {leadsError?.message ??
           doorKnockError?.message ??
+          doorKnockTodayError?.message ??
           dispositionsError?.message ??
           profilesError?.message ??
           teamZipsError?.message}
@@ -81,6 +89,7 @@ export default async function AdminDashboardPage() {
     <AdminDashboardClient
       leads={leads ?? []}
       doorKnockCounts={doorKnockCounts ?? []}
+      doorKnockCountsToday={doorKnockCountsToday ?? []}
       dispositions={dispositions ?? []}
       profiles={profiles ?? []}
       teamZips={teamZips ?? []}

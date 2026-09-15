@@ -68,6 +68,7 @@ export function LeadsExplorer({
   const [selectedLeadIds, setSelectedLeadIds] = useState<string[]>([]);
   const [routeStops, setRouteStops] = useState<RouteStop[] | null>(null);
   const [routeSkipped, setRouteSkipped] = useState(0);
+  const [routeId, setRouteId] = useState<string | null>(null);
   const [routeError, setRouteError] = useState<string | null>(null);
   const [isRouting, startRouting] = useTransition();
   const [showMobileFilters, setShowMobileFilters] = useState(false);
@@ -194,6 +195,7 @@ export function LeadsExplorer({
       }
       setRouteStops(data.stops);
       setRouteSkipped(data.skippedCount ?? 0);
+      setRouteId(data.routeId ?? null);
       setSelectMode(false);
       setSelectedLeadIds([]);
     });
@@ -703,7 +705,11 @@ export function LeadsExplorer({
         <RouteResultPanel
           stops={routeStops}
           skippedCount={routeSkipped}
-          onClose={() => setRouteStops(null)}
+          routeId={routeId}
+          onClose={() => {
+            setRouteStops(null);
+            setRouteId(null);
+          }}
           onSelectLead={setSelectedLeadId}
         />
       )}

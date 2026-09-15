@@ -399,3 +399,44 @@ export async function addLeadNote(
     },
   };
 }
+
+export type ToggleRouteStopVisitedResult = { ok: true } | { ok: false; error: string };
+
+// Route stop visited-tracking, scoped to the live route panel only (not
+// surfaced in Route History) — saved to the DB so a page refresh mid-route
+// doesn't lose progress. Gated purely by routes_own RLS (owner or admin),
+// normal session-scoped client, no admin client needed. Read-modify-write
+// on one small array is fine at this scale (one rep's own route); a
+// double-tap from two tabs at once is a low-stakes race, not worth a
+// separate RPC just to avoid.
+export async function toggleRouteStopVisited(
+  routeId: string,
+  leadId: string,
+  visited: boolean
+): Promise<ToggleRouteStopVisitedResult> {
+  const session = await getSession();
+  if (!session) return { ok: false, error: "Unauthorized" };
+
+  const supabase = await createClient();
+
+  const { data: route, error: fetchError } = await supabase
+    .from("routes")
+    .select("visited_lead_ids")
+    .eq("id", routeId)
+    .single();
+  if (fetchError || !route) {
+    return { ok: false, error: fetchError?.message ?? "Route not found." };
+  }
+
+  const current = new Set(route.visited_lead_ids as string[]);
+  if (visited) current.add(leadId);
+  else current.delete(leadId);
+
+  const { error } = await supabase
+    .from("routes")
+    .update({ visited_lead_ids: Array.from(current) })
+    .eq("id", routeId);
+  if (error) return { ok: false, error: error.message };
+
+  return { ok: true };
+}

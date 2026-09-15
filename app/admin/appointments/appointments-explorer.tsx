@@ -510,6 +510,10 @@ export function AppointmentsExplorer({
               prev.map((l) => (l.id === leadId ? { ...l, first_name: firstName, last_name: lastName } : l))
             );
           }}
+          onDeleted={(id) => {
+            setAppointments((prev) => prev.filter((a) => a.id !== id));
+            setSelectedId(null);
+          }}
         />
       )}
 

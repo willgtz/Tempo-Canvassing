@@ -115,6 +115,11 @@ export function AppointmentsClient({
               prev.map((a) => (a.id === appointmentId ? { ...a, status_id: statusId } : a))
             );
           }}
+          onScheduledAtChanged={(appointmentId, scheduledAt) => {
+            setAppointmentsState((prev) =>
+              prev.map((a) => (a.id === appointmentId ? { ...a, scheduled_at: scheduledAt } : a))
+            );
+          }}
           onNoteAdded={(note) => setNotes((prev) => [note, ...prev])}
         />
       )}

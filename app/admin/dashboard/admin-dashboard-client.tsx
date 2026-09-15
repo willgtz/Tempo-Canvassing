@@ -41,6 +41,7 @@ const WIDGETS = [
   { id: "trend", label: "Leads created — 30-day trend" },
   { id: "disposition", label: "Leads by disposition" },
   { id: "byRep", label: "Leads by rep" },
+  { id: "doorsKnockedToday", label: "Doors knocked by rep (today)" },
   { id: "doorsKnocked", label: "Doors knocked by rep (30 days)" },
   { id: "zip", label: "Leads by zip" },
 ];
@@ -48,12 +49,14 @@ const WIDGETS = [
 export function AdminDashboardClient({
   leads,
   doorKnockCounts,
+  doorKnockCountsToday,
   dispositions,
   profiles,
   teamZips,
 }: {
   leads: StatLead[];
   doorKnockCounts: DoorKnockCount[];
+  doorKnockCountsToday: DoorKnockCount[];
   dispositions: Disposition[];
   profiles: Profile[];
   teamZips: TeamZip[];
@@ -138,6 +141,16 @@ export function AdminDashboardClient({
       .map((r) => ({ label: r.full_name, value: r.verified_count }))
       .sort((a, b) => b.value - a.value);
   }, [doorKnockCounts, repFilter]);
+
+  const doorsKnockedTodayBreakdown = useMemo(() => {
+    const rows =
+      repFilter === "all"
+        ? doorKnockCountsToday
+        : doorKnockCountsToday.filter((r) => r.user_id === repFilter);
+    return rows
+      .map((r) => ({ label: r.full_name, value: r.verified_count }))
+      .sort((a, b) => b.value - a.value);
+  }, [doorKnockCountsToday, repFilter]);
 
   const activeRepsCount = useMemo(
     () => profiles.filter((p) => p.role === "rep" && p.active).length,
@@ -262,6 +275,14 @@ export function AdminDashboardClient({
             <h2 className="text-sm font-medium">Leads by rep</h2>
             <div className="mt-3">
               <BarChart items={byRepBreakdown} />
+            </div>
+          </Card>
+        )}
+        {isVisible("doorsKnockedToday") && showRepBreakdown && (
+          <Card className="p-4">
+            <h2 className="text-sm font-medium">Doors knocked by rep (today)</h2>
+            <div className="mt-3">
+              <BarChart items={doorsKnockedTodayBreakdown} />
             </div>
           </Card>
         )}

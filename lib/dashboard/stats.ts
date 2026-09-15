@@ -11,6 +11,17 @@ export type StatLead = {
   created_at: string;
 };
 
+// The door_knock_counts RPC (schema.sql) buckets events by calendar day
+// in America/Los_Angeles specifically — a plain `toISOString().slice(0,10)`
+// gives the UTC date instead, which is wrong for a single-day query: for
+// roughly 7-8 hours of every LA day (LA midnight until UTC catches up),
+// the UTC date is already tomorrow, so a rep's evening activity would
+// query the wrong day and show 0 despite real knocks. en-CA formats as
+// YYYY-MM-DD, matching what the RPC's `date` param expects.
+export function laDateOnly(d: Date): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Los_Angeles" }).format(d);
+}
+
 function cutoffIso(days: number, now: Date): string {
   const cutoff = new Date(now);
   cutoff.setDate(cutoff.getDate() - days);

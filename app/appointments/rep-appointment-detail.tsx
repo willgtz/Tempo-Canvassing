@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
-import { updateMyAppointmentStatus, addMyAppointmentNote } from "./actions";
+import { updateMyAppointmentStatus, updateMyAppointmentScheduledAt, addMyAppointmentNote } from "./actions";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -24,6 +24,16 @@ import type {
 // its status (editable only if this rep is the assigned closer — enforced
 // for real by appointments_update RLS, this UI just avoids offering a
 // control that would fail), and notes.
+
+// datetime-local wants "YYYY-MM-DDTHH:mm" in local time, no seconds/Z —
+// same conversion app/admin/appointments/appointment-detail-panel.tsx
+// already uses for the exact same control.
+function toDatetimeLocal(iso: string): string {
+  const d = new Date(iso);
+  d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+  return d.toISOString().slice(0, 16);
+}
+
 export function RepAppointmentDetail({
   appointment,
   lead,
@@ -33,6 +43,7 @@ export function RepAppointmentDetail({
   notes,
   onClose,
   onStatusChanged,
+  onScheduledAtChanged,
   onNoteAdded,
 }: {
   appointment: Appointment;
@@ -43,9 +54,14 @@ export function RepAppointmentDetail({
   notes: AppointmentNote[];
   onClose: () => void;
   onStatusChanged: (appointmentId: string, statusId: string) => void;
+  onScheduledAtChanged: (appointmentId: string, scheduledAt: string) => void;
   onNoteAdded: (note: AppointmentNote) => void;
 }) {
   const isMyCloseJob = assignments.some((a) => a.role === "closer" && a.user_id === currentUserId);
+  // Broader than isMyCloseJob — any role, opener or closer. The date/time
+  // fix is deliberately available to whoever's assigned, unlike status
+  // (still closer-only, matching appointments_update RLS).
+  const isAssignedToThis = assignments.some((a) => a.user_id === currentUserId);
   const openers = assignments.filter((a) => a.role === "opener");
   const closers = assignments.filter((a) => a.role === "closer");
   const currentStatus = statuses.find((s) => s.id === appointment.status_id);
@@ -54,6 +70,11 @@ export function RepAppointmentDetail({
   const [statusId, setStatusId] = useState(appointment.status_id);
   const [statusError, setStatusError] = useState<string | null>(null);
   const [isSavingStatus, startStatusSave] = useTransition();
+
+  const [isEditingDate, setIsEditingDate] = useState(false);
+  const [dateEditDraft, setDateEditDraft] = useState(() => toDatetimeLocal(appointment.scheduled_at));
+  const [dateError, setDateError] = useState<string | null>(null);
+  const [isSavingDate, startDateSave] = useTransition();
 
   const [noteText, setNoteText] = useState("");
   const [noteError, setNoteError] = useState<string | null>(null);
@@ -70,6 +91,20 @@ export function RepAppointmentDetail({
         return;
       }
       onStatusChanged(appointment.id, newStatusId);
+    });
+  }
+
+  function handleSaveDate() {
+    setDateError(null);
+    startDateSave(async () => {
+      const iso = new Date(dateEditDraft).toISOString();
+      const result = await updateMyAppointmentScheduledAt(appointment.id, iso);
+      if (!result.ok) {
+        setDateError(result.error);
+        return;
+      }
+      onScheduledAtChanged(appointment.id, iso);
+      setIsEditingDate(false);
     });
   }
 
@@ -135,12 +170,45 @@ export function RepAppointmentDetail({
           </Button>
         </div>
 
-        <p className="mt-4 border-t border-black/10 pt-4 text-sm dark:border-white/10">
-          {new Date(appointment.scheduled_at).toLocaleString(undefined, {
-            dateStyle: "medium",
-            timeStyle: "short",
-          })}
-        </p>
+        <div className="mt-4 border-t border-black/10 pt-4 dark:border-white/10">
+          {isEditingDate ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <input
+                type="datetime-local"
+                value={dateEditDraft}
+                onChange={(e) => setDateEditDraft(e.target.value)}
+                className="rounded border border-black/15 px-2 py-1 text-sm dark:border-white/20 dark:bg-transparent"
+              />
+              <Button size="sm" onClick={handleSaveDate} disabled={isSavingDate}>
+                {isSavingDate ? "Saving…" : "Save"}
+              </Button>
+              <Button variant="secondary" size="sm" onClick={() => setIsEditingDate(false)} disabled={isSavingDate}>
+                Cancel
+              </Button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <span className="text-sm">
+                {new Date(appointment.scheduled_at).toLocaleString(undefined, {
+                  dateStyle: "medium",
+                  timeStyle: "short",
+                })}
+              </span>
+              {isAssignedToThis && (
+                <button
+                  onClick={() => {
+                    setDateEditDraft(toDatetimeLocal(appointment.scheduled_at));
+                    setIsEditingDate(true);
+                  }}
+                  className="text-xs text-black/50 hover:text-black dark:text-white/50 dark:hover:text-white"
+                >
+                  Edit
+                </button>
+              )}
+            </div>
+          )}
+          {dateError && <p className="mt-1 text-xs text-red-600 dark:text-red-400">{dateError}</p>}
+        </div>
 
         <div className="mt-4 space-y-1 border-t border-black/10 pt-4 dark:border-white/10">
           <p className="text-xs font-medium text-black/50 dark:text-white/50">Opener{openers.length === 1 ? "" : "s"}</p>

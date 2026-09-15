@@ -40,6 +40,31 @@ export async function updateMyAppointmentStatus(
   return { ok: true };
 }
 
+// Unlike updateMyAppointmentStatus above, this is NOT gated by
+// appointments_update RLS (admin or closer only) — it goes through
+// update_appointment_scheduled_at_for_assignee (schema.sql), a
+// SECURITY DEFINER function scoped to just this one field that also
+// allows the opener. Real authorization is the function's own inline
+// check (admin or is_assigned_to_appointment); it raises an exception
+// (surfaced as `error` below) for anyone not assigned.
+export async function updateMyAppointmentScheduledAt(
+  appointmentId: string,
+  newScheduledAt: string
+): Promise<ActionResult> {
+  await requireSession();
+  const supabase = await createClient();
+
+  const { error } = await supabase.rpc("update_appointment_scheduled_at_for_assignee", {
+    p_appointment_id: appointmentId,
+    p_scheduled_at: newScheduledAt,
+  });
+
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath("/appointments");
+  return { ok: true };
+}
+
 export type AddAppointmentNoteResult =
   | { ok: true; note: { id: string; appointment_id: string; note: string; created_at: string; author_name: string } }
   | { ok: false; error: string };
