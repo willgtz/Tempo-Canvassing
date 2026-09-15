@@ -106,6 +106,7 @@ export function AppointmentsClient({
           appointment={selected}
           lead={leadById.get(selected.lead_id) ?? null}
           statuses={statuses}
+          formFields={formFields}
           currentUserId={currentUserId}
           assignments={assignments.filter((a) => a.appointment_id === selected.id)}
           notes={notes.filter((n) => n.appointment_id === selected.id)}

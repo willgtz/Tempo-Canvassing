@@ -16,14 +16,15 @@ import type {
   AppointmentNote,
   AppointmentStatus,
 } from "@/app/admin/appointments/types";
+import type { AppointmentFormField } from "@/app/leads/types";
 
 // Deliberately simpler than app/admin/appointments/appointment-detail-panel.tsx
 // — no assignment editing (that's an admin-only action either way, per
-// appointment_assignments_admin_write RLS), no reschedule, no submission-
-// form answers. Just what a rep actually needs: who's on it, when it is,
-// its status (editable only if this rep is the assigned closer — enforced
-// for real by appointments_update RLS, this UI just avoids offering a
-// control that would fail), and notes.
+// appointment_assignments_admin_write RLS). Does show submission-form
+// answers (added 2026-09-16 — previously admin-only, but any assignee
+// can already see the whole appointment row via appointments_select RLS;
+// this was a missing-UI gap, not a real permission boundary) using the
+// same notesFormField/otherFormFields split as the admin panel.
 
 // datetime-local wants "YYYY-MM-DDTHH:mm" in local time, no seconds/Z —
 // same conversion app/admin/appointments/appointment-detail-panel.tsx
@@ -38,6 +39,7 @@ export function RepAppointmentDetail({
   appointment,
   lead,
   statuses,
+  formFields,
   currentUserId,
   assignments,
   notes,
@@ -49,6 +51,7 @@ export function RepAppointmentDetail({
   appointment: Appointment;
   lead: AppointmentLead | null;
   statuses: AppointmentStatus[];
+  formFields: AppointmentFormField[];
   currentUserId: string;
   assignments: AppointmentAssignment[];
   notes: AppointmentNote[];
@@ -65,6 +68,22 @@ export function RepAppointmentDetail({
   const openers = assignments.filter((a) => a.role === "opener");
   const closers = assignments.filter((a) => a.role === "closer");
   const currentStatus = statuses.find((s) => s.id === appointment.status_id);
+
+  // Same notesFormField/otherFormFields split as
+  // app/admin/appointments/appointment-detail-panel.tsx — matched by
+  // label containing "notes" (no dedicated is_notes flag on the field).
+  const notesFormField = formFields.find((f) => f.label.toLowerCase().includes("notes"));
+  const otherFormFields = formFields.filter((f) => f.id !== notesFormField?.id);
+  const submissionNoteText = notesFormField
+    ? (appointment.custom_field_responses[notesFormField.id] ?? "").trim() || null
+    : null;
+
+  function submissionAnswer(field: AppointmentFormField): string {
+    const raw = (appointment.custom_field_responses[field.id] ?? "").trim();
+    if (!raw) return "—";
+    if (field.field_type === "checkbox") return raw === "true" ? "Yes" : "No";
+    return raw;
+  }
 
   const visible = useSlideIn();
   const [statusId, setStatusId] = useState(appointment.status_id);
@@ -217,6 +236,18 @@ export function RepAppointmentDetail({
           <p className="text-sm">{closers.map((a) => a.full_name).join(", ") || "Unassigned"}</p>
         </div>
 
+        {otherFormFields.length > 0 && (
+          <div className="mt-4 space-y-1 border-t border-black/10 pt-4 dark:border-white/10">
+            <p className="text-xs font-medium text-black/50 dark:text-white/50">Submission Details</p>
+            {otherFormFields.map((field) => (
+              <div key={field.id} className="flex justify-between text-sm">
+                <span className="text-black/60 dark:text-white/60">{field.label}</span>
+                <span>{submissionAnswer(field)}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
         <div className="mt-4 space-y-1 border-t border-black/10 pt-4 dark:border-white/10">
           <p className="text-xs font-medium text-black/50 dark:text-white/50">Status</p>
           {isMyCloseJob ? (
@@ -249,9 +280,22 @@ export function RepAppointmentDetail({
           {noteError && <p className="text-xs text-red-600 dark:text-red-400">{noteError}</p>}
 
           <div className="space-y-2 pt-1">
-            {notes.length === 0 && (
+            {!submissionNoteText && notes.length === 0 && (
               <p className="text-sm italic text-black/40 dark:text-white/40">No notes yet.</p>
             )}
+
+            {/* The note typed into the submission form itself — same card
+                treatment as the admin panel, so it visually reads as the
+                appointment's own note rather than a regular note. */}
+            {submissionNoteText && (
+              <div className="rounded-md bg-black/[0.03] p-3 text-sm dark:bg-white/[0.06]">
+                <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-black/50 dark:text-white/50">
+                  Appointment Note
+                </p>
+                <p className="whitespace-pre-wrap">{submissionNoteText}</p>
+              </div>
+            )}
+
             {notes.map((note) => (
               <div key={note.id} className="text-sm">
                 <p className="text-xs text-black/50 dark:text-white/50">
