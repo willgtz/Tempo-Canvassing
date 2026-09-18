@@ -1,9 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { StatTile } from "@/components/dashboard/stat-tile";
 import { BarChart } from "@/components/dashboard/bar-chart";
 import { TrendChart } from "@/components/dashboard/trend-chart";
+import { DoorKnockGoalsTable } from "@/components/dashboard/door-knock-goals-table";
 import { WidgetCustomizeMenu } from "@/components/dashboard/widget-customize-menu";
 import { useWidgetVisibility } from "@/components/dashboard/use-widget-visibility";
 import { Card } from "@/components/ui/card";
@@ -29,6 +30,15 @@ type DoorKnockCount = {
 type Disposition = { id: string; name: string; color: string; sort_order: number };
 type Profile = { id: string; full_name: string; role: string; active: boolean };
 type TeamZip = { user_id: string; full_name: string; zipcode: string };
+type GoalRow = {
+  goal_id: string;
+  user_id: string;
+  full_name: string;
+  target_count: number;
+  start_date: string;
+  end_date: string;
+  verified_count: number;
+};
 
 const WIDGETS = [
   { id: "total", label: "Total leads" },
@@ -43,6 +53,7 @@ const WIDGETS = [
   { id: "byRep", label: "Leads by rep" },
   { id: "doorsKnockedToday", label: "Doors knocked by rep (today)" },
   { id: "doorsKnocked", label: "Doors knocked by rep (30 days)" },
+  { id: "doorKnockGoals", label: "Door-knock goals by rep" },
   { id: "zip", label: "Leads by zip" },
 ];
 
@@ -53,6 +64,8 @@ export function AdminDashboardClient({
   dispositions,
   profiles,
   teamZips,
+  doorKnockGoals,
+  today,
 }: {
   leads: StatLead[];
   doorKnockCounts: DoorKnockCount[];
@@ -60,6 +73,8 @@ export function AdminDashboardClient({
   dispositions: Disposition[];
   profiles: Profile[];
   teamZips: TeamZip[];
+  doorKnockGoals: GoalRow[];
+  today: string;
 }) {
   const [repFilter, setRepFilter] = useState("all");
   const [zipFilter, setZipFilter] = useState("all");
@@ -70,31 +85,81 @@ export function AdminDashboardClient({
     [dispositions]
   );
 
+  // Every active profile, not just reps who hold a direct zip
+  // assignment — a rep can now also see leads purely through team-based
+  // sharing, so they need to be selectable here too.
   const repOptions = useMemo(() => {
-    const seen = new Map<string, string>();
-    for (const tz of teamZips) seen.set(tz.user_id, tz.full_name);
-    return Array.from(seen, ([id, name]) => ({ id, name })).sort((a, b) =>
-      a.name.localeCompare(b.name)
-    );
-  }, [teamZips]);
+    return profiles
+      .filter((p) => p.active)
+      .map((p) => ({ id: p.id, name: p.full_name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [profiles]);
 
-  const zipOptions = useMemo(
-    () => Array.from(new Set(teamZips.map((tz) => tz.zipcode))).sort(),
-    [teamZips]
-  );
+  // Every zipcode actually present among the loaded leads — for an
+  // admin this is already every zip company-wide (is_admin bypasses
+  // leads_select entirely), so this naturally includes zips with no
+  // direct assignment.
+  const zipOptions = useMemo(() => Array.from(new Set(leads.map((l) => l.zipcode))).sort(), [leads]);
 
-  const repZips = useMemo(() => {
-    if (repFilter === "all") return null;
-    return new Set(teamZips.filter((tz) => tz.user_id === repFilter).map((tz) => tz.zipcode));
-  }, [teamZips, repFilter]);
+  // The selected rep's TRUE effective visibility, computed live via
+  // visible_zipcodes/teammate_ids (same route the leads map/list uses) —
+  // teamZips only ever reflects direct zip_assignments and was never
+  // updated for Teams-based lateral sharing.
+  // Tagged with the repId it was fetched for, so a stale response from
+  // whichever rep was PREVIOUSLY selected is never mistaken for the
+  // current one while a new fetch is in flight — "loading" and "stale"
+  // are both just derived from this not matching repFilter, no separate
+  // boolean needed.
+  const [effectiveRepData, setEffectiveRepData] = useState<{
+    repId: string;
+    zips: Set<string>;
+    teammates: Set<string>;
+  } | null>(null);
+  const [repPreviewError, setRepPreviewError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (repFilter === "all") return;
+    let cancelled = false;
+    fetch(`/api/reps/${repFilter}/effective-zips`)
+      .then(async (res) => {
+        if (!res.ok) throw new Error((await res.json()).error ?? "Failed to load rep's visibility.");
+        return res.json() as Promise<{ zipcodes: string[]; teammateIds: string[] }>;
+      })
+      .then((data) => {
+        if (cancelled) return;
+        setEffectiveRepData({
+          repId: repFilter,
+          zips: new Set(data.zipcodes),
+          teammates: new Set(data.teammateIds),
+        });
+        setRepPreviewError(null);
+      })
+      .catch((err: Error) => {
+        if (!cancelled) setRepPreviewError(err.message);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [repFilter]);
+
+  const effectiveRepZips =
+    repFilter !== "all" && effectiveRepData?.repId === repFilter ? effectiveRepData.zips : null;
+  const effectiveRepTeammates =
+    repFilter !== "all" && effectiveRepData?.repId === repFilter ? effectiveRepData.teammates : null;
+  const loadingRepPreview = repFilter !== "all" && effectiveRepZips === null && !repPreviewError;
 
   const filteredLeads = useMemo(() => {
     return leads.filter((l) => {
-      if (repZips && !repZips.has(l.zipcode)) return false;
+      if (repFilter !== "all" && effectiveRepZips) {
+        const isManualCarveOut =
+          l.is_manual &&
+          (l.entered_by === repFilter || (l.entered_by != null && effectiveRepTeammates?.has(l.entered_by)) === true);
+        if (!effectiveRepZips.has(l.zipcode) && !isManualCarveOut) return false;
+      }
       if (zipFilter !== "all" && l.zipcode !== zipFilter) return false;
       return true;
     });
-  }, [leads, repZips, zipFilter]);
+  }, [leads, repFilter, effectiveRepZips, effectiveRepTeammates, zipFilter]);
 
   const dispositionBreakdown = useMemo(() => {
     return Array.from(countByDisposition(filteredLeads), ([id, count]) => ({
@@ -152,6 +217,14 @@ export function AdminDashboardClient({
       .sort((a, b) => b.value - a.value);
   }, [doorKnockCountsToday, repFilter]);
 
+  // Unlike the BarChart breakdowns above, this doesn't hide behind
+  // showRepBreakdown when a single rep is selected — a single rep's own
+  // goal-vs-progress is still meaningful with one row, unlike a one-bar
+  // chart.
+  const doorKnockGoalsFiltered = useMemo(() => {
+    return repFilter === "all" ? doorKnockGoals : doorKnockGoals.filter((g) => g.user_id === repFilter);
+  }, [doorKnockGoals, repFilter]);
+
   const activeRepsCount = useMemo(
     () => profiles.filter((p) => p.role === "rep" && p.active).length,
     [profiles]
@@ -194,6 +267,12 @@ export function AdminDashboardClient({
               </option>
             ))}
           </Select>
+          {repFilter !== "all" && loadingRepPreview && (
+            <p className="text-xs text-black/50 dark:text-white/50">Loading…</p>
+          )}
+          {repFilter !== "all" && repPreviewError && (
+            <p className="text-xs text-red-600 dark:text-red-400">{repPreviewError}</p>
+          )}
         </div>
         <div className="space-y-1">
           <label className="text-xs font-medium">Zip</label>
@@ -291,6 +370,14 @@ export function AdminDashboardClient({
             <h2 className="text-sm font-medium">Doors knocked by rep (30 days)</h2>
             <div className="mt-3">
               <BarChart items={doorsKnockedBreakdown} />
+            </div>
+          </Card>
+        )}
+        {isVisible("doorKnockGoals") && (
+          <Card className="overflow-x-auto p-4">
+            <h2 className="text-sm font-medium">Door-knock goals by rep</h2>
+            <div className="mt-3">
+              <DoorKnockGoalsTable goals={doorKnockGoalsFiltered} today={today} />
             </div>
           </Card>
         )}

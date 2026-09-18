@@ -21,6 +21,8 @@ export function AllLeadsExplorer({
   const [zipQuery, setZipQuery] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  const [updatedFrom, setUpdatedFrom] = useState("");
+  const [updatedTo, setUpdatedTo] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [appliedSearchQuery, setAppliedSearchQuery] = useState("");
   const [editingLeadId, setEditingLeadId] = useState<string | null>(null);
@@ -48,6 +50,10 @@ export function AllLeadsExplorer({
       if (dateFrom && leadDate < dateFrom) return false;
       if (dateTo && leadDate > dateTo) return false;
 
+      const leadUpdatedDate = lead.updated_at.slice(0, 10);
+      if (updatedFrom && leadUpdatedDate < updatedFrom) return false;
+      if (updatedTo && leadUpdatedDate > updatedTo) return false;
+
       if (search) {
         const haystack = [
           lead.first_name,
@@ -64,7 +70,17 @@ export function AllLeadsExplorer({
 
       return true;
     });
-  }, [leadsState, dispositionFilter, sourceFilter, zipQuery, dateFrom, dateTo, appliedSearchQuery]);
+  }, [
+    leadsState,
+    dispositionFilter,
+    sourceFilter,
+    zipQuery,
+    dateFrom,
+    dateTo,
+    updatedFrom,
+    updatedTo,
+    appliedSearchQuery,
+  ]);
 
   const editingLead = editingLeadId ? (leadsState.find((l) => l.id === editingLeadId) ?? null) : null;
 
@@ -84,6 +100,8 @@ export function AllLeadsExplorer({
     setZipQuery("");
     setDateFrom("");
     setDateTo("");
+    setUpdatedFrom("");
+    setUpdatedTo("");
     setSearchQuery("");
     setAppliedSearchQuery("");
   }
@@ -202,7 +220,7 @@ export function AllLeadsExplorer({
         </div>
 
         <div className="space-y-1">
-          <label className="text-xs font-medium">From</label>
+          <label className="text-xs font-medium">Created from</label>
           <input
             type="date"
             value={dateFrom}
@@ -211,11 +229,29 @@ export function AllLeadsExplorer({
           />
         </div>
         <div className="space-y-1">
-          <label className="text-xs font-medium">To</label>
+          <label className="text-xs font-medium">Created to</label>
           <input
             type="date"
             value={dateTo}
             onChange={(e) => setDateTo(e.target.value)}
+            className="block rounded border border-black/15 px-2 py-1 text-sm dark:border-white/20 dark:bg-transparent"
+          />
+        </div>
+        <div className="space-y-1">
+          <label className="text-xs font-medium">Updated from</label>
+          <input
+            type="date"
+            value={updatedFrom}
+            onChange={(e) => setUpdatedFrom(e.target.value)}
+            className="block rounded border border-black/15 px-2 py-1 text-sm dark:border-white/20 dark:bg-transparent"
+          />
+        </div>
+        <div className="space-y-1">
+          <label className="text-xs font-medium">Updated to</label>
+          <input
+            type="date"
+            value={updatedTo}
+            onChange={(e) => setUpdatedTo(e.target.value)}
             className="block rounded border border-black/15 px-2 py-1 text-sm dark:border-white/20 dark:bg-transparent"
           />
         </div>

@@ -5,12 +5,15 @@ import { addManualLead } from "./actions";
 import { useSlideIn } from "@/lib/use-slide-in";
 import { cn } from "@/components/ui/cn";
 import { AddressAutocomplete } from "@/components/address-autocomplete";
-import type { Lead } from "./types";
+import { DispositionSelect } from "./disposition-select";
+import type { Disposition, Lead } from "./types";
 
 export function AddLeadModal({
+  dispositions,
   onClose,
   onAdded,
 }: {
+  dispositions: Disposition[];
   onClose: () => void;
   onAdded: (lead: Lead) => void;
 }) {
@@ -24,6 +27,7 @@ export function AddLeadModal({
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [notes, setNotes] = useState("");
+  const [dispositionId, setDispositionId] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -41,6 +45,7 @@ export function AddLeadModal({
         phone: phone || null,
         email: email || null,
         notes: notes || null,
+        dispositionId: dispositionId || null,
       });
       if (!result.ok) {
         setError(result.error);
@@ -85,7 +90,7 @@ export function AddLeadModal({
               the bottom of the screen, right where a bottom-placed button
               would be. The keyboard leaves the top of the screen clear,
               so this stays reachable no matter which field has focus. */}
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <button
               type="submit"
               disabled={isPending}
@@ -93,6 +98,7 @@ export function AddLeadModal({
             >
               {isPending ? "Adding…" : "Add Lead"}
             </button>
+            <DispositionSelect dispositions={dispositions} value={dispositionId} onChange={setDispositionId} />
             {error && <span className="text-sm text-red-600 dark:text-red-400">{error}</span>}
           </div>
           <div className="grid gap-3 sm:grid-cols-2">

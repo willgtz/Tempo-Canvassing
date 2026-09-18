@@ -3,6 +3,7 @@
 import { StatTile } from "@/components/dashboard/stat-tile";
 import { BarChart, type BarChartItem } from "@/components/dashboard/bar-chart";
 import { TrendChart } from "@/components/dashboard/trend-chart";
+import { DoorKnockGoalCard } from "@/components/dashboard/door-knock-goal-card";
 import { WidgetCustomizeMenu } from "@/components/dashboard/widget-customize-menu";
 import { useWidgetVisibility } from "@/components/dashboard/use-widget-visibility";
 import { Card } from "@/components/ui/card";
@@ -22,12 +23,21 @@ type Stats = {
   zipBreakdown: BarChartItem[];
 };
 
+type GoalRow = {
+  goal_id: string;
+  target_count: number;
+  start_date: string;
+  end_date: string;
+  verified_count: number;
+};
+
 const WIDGETS = [
   { id: "total", label: "Total leads assigned" },
   { id: "last7", label: "Created in last 7 days" },
   { id: "last30", label: "Created in last 30 days" },
   { id: "doorsKnockedToday", label: "Doors knocked (today)" },
   { id: "doorsKnocked", label: "Doors knocked (30 days)" },
+  { id: "doorKnockGoal", label: "Door-Knock Goal" },
   { id: "withoutLocation", label: "Leads without a location" },
   { id: "manual", label: "Manually entered leads" },
   { id: "trend", label: "Leads created — 30-day trend" },
@@ -35,7 +45,17 @@ const WIDGETS = [
   { id: "zip", label: "Leads by zip" },
 ];
 
-export function RepDashboardClient({ stats }: { stats: Stats }) {
+export function RepDashboardClient({
+  stats,
+  currentGoal,
+  pastGoals,
+  today,
+}: {
+  stats: Stats;
+  currentGoal: GoalRow | null;
+  pastGoals: GoalRow[];
+  today: string;
+}) {
   const { isVisible, toggle } = useWidgetVisibility("rep-dashboard-hidden-widgets");
 
   return (
@@ -81,6 +101,10 @@ export function RepDashboardClient({ stats }: { stats: Stats }) {
         )}
         {isVisible("manual") && <StatTile label="Manually entered leads" value={stats.manual} />}
       </div>
+
+      {isVisible("doorKnockGoal") && (
+        <DoorKnockGoalCard currentGoal={currentGoal} pastGoals={pastGoals} today={today} />
+      )}
 
       {isVisible("trend") && (
         <Card className="p-4">

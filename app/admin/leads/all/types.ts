@@ -17,6 +17,7 @@ export type AdminLead = {
   batch_id: string | null;
   batch_filename: string | null;
   created_at: string;
+  updated_at: string;
 };
 
 export type Disposition = {

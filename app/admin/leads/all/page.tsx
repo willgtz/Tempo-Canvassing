@@ -16,7 +16,7 @@ export default async function AllLeadsPage() {
         supabase
           .from("leads")
           .select(
-            "id, first_name, last_name, address_line, city, state, zipcode, phone, email, lat, lng, geocode_precision, disposition_id, prior_sale_date, is_manual, batch_id, lead_batches(filename), created_at"
+            "id, first_name, last_name, address_line, city, state, zipcode, phone, email, lat, lng, geocode_precision, disposition_id, prior_sale_date, is_manual, batch_id, lead_batches(filename), created_at, updated_at"
           )
           // id as a secondary, unique sort key — a bulk CSV insert commonly
           // gives every row in the batch the same created_at (Postgres

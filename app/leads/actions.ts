@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { getSession } from "@/lib/auth/session";
-import { getAdminSession } from "@/lib/auth/admin";
+import { getAdminSession, getTeamLeadSession } from "@/lib/auth/admin";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { geocodeAddress } from "@/lib/geocode/google";
@@ -169,6 +169,7 @@ export type AddManualLeadInput = {
   phone: string | null;
   email: string | null;
   notes: string | null;
+  dispositionId: string | null;
 };
 
 export type AddManualLeadResult = { ok: true; lead: Lead } | { ok: false; error: string };
@@ -227,9 +228,10 @@ export async function addManualLead(input: AddManualLeadInput): Promise<AddManua
       geocoded_at: new Date().toISOString(),
       is_manual: true,
       entered_by: session.userId,
+      disposition_id: input.dispositionId,
     })
     .select(
-      "id, first_name, last_name, address_line, city, state, zipcode, lat, lng, geocode_precision, disposition_id, prior_sale_date, is_manual, entered_by, created_at"
+      "id, first_name, last_name, address_line, city, state, zipcode, lat, lng, geocode_precision, disposition_id, prior_sale_date, is_manual, entered_by, created_at, updated_at"
     )
     .single();
 
@@ -328,7 +330,7 @@ export async function submitAppointment(
   const { data: refreshed, error: refetchError } = await supabase
     .from("leads")
     .select(
-      "id, first_name, last_name, address_line, city, state, zipcode, lat, lng, geocode_precision, disposition_id, prior_sale_date, is_manual, entered_by, profiles!entered_by(full_name), created_at"
+      "id, first_name, last_name, address_line, city, state, zipcode, lat, lng, geocode_precision, disposition_id, prior_sale_date, is_manual, entered_by, profiles!entered_by(full_name), created_at, updated_at"
     )
     .eq("id", input.leadId)
     .single();
@@ -438,5 +440,25 @@ export async function toggleRouteStopVisited(
     .eq("id", routeId);
   if (error) return { ok: false, error: error.message };
 
+  return { ok: true };
+}
+
+export type ArchiveLeadResult = { ok: true } | { ok: false; error: string };
+
+// team_lead or higher (getTeamLeadSession) — a fresh permission tier,
+// distinct from getAdminSession's admin-only gate used elsewhere in this
+// file. The real security boundary is archive_lead's own inline role
+// check (schema.sql, security definer) — this is just a clean UI gate/
+// error instead of letting a rep's attempt fail silently at the DB.
+export async function archiveLead(leadId: string): Promise<ArchiveLeadResult> {
+  const session = await getTeamLeadSession();
+  if (!session) return { ok: false, error: "Not authorized to archive leads." };
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("archive_lead", { p_lead_id: leadId });
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath("/leads");
+  revalidatePath("/admin/leads/archived");
   return { ok: true };
 }

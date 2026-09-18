@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { LeadsMap } from "./leads-map";
@@ -14,7 +14,8 @@ import { Input, Select } from "@/components/ui/input";
 import { cn } from "@/components/ui/cn";
 import { MobileTabBarSpacer } from "@/components/mobile-tab-bar";
 import { getCurrentLocation } from "@/lib/geo";
-import type { AppointmentFormField, Disposition, Lead, RouteStop, TeamZip } from "./types";
+import { usePersistedLeadsFilters } from "./use-persisted-leads-filters";
+import type { AppointmentFormField, Disposition, Lead, Profile, RouteStop } from "./types";
 
 type ViewMode = "map" | "list";
 
@@ -26,21 +27,23 @@ const MAX_ROUTE_STOPS = 24;
 export function LeadsExplorer({
   leads,
   dispositions,
-  teamZips,
+  profiles,
   appointmentFormFields,
   currentUserId,
   canFilterByRep,
   isAdmin,
+  canArchive,
   mapboxAccessToken,
   doorKnockRadiusFeet,
 }: {
   leads: Lead[];
   dispositions: Disposition[];
-  teamZips: TeamZip[];
+  profiles: Profile[];
   appointmentFormFields: AppointmentFormField[];
   currentUserId: string;
   canFilterByRep: boolean;
   isAdmin: boolean;
+  canArchive: boolean;
   mapboxAccessToken: string;
   doorKnockRadiusFeet: number;
 }) {
@@ -53,6 +56,8 @@ export function LeadsExplorer({
   const [repFilter, setRepFilter] = useState("all");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  const [updatedFrom, setUpdatedFrom] = useState("");
+  const [updatedTo, setUpdatedTo] = useState("");
   const [addressQuery, setAddressQuery] = useState("");
   const [appliedAddressQuery, setAppliedAddressQuery] = useState("");
   const [leadsState, setLeadsState] = useState(leads);
@@ -74,35 +79,136 @@ export function LeadsExplorer({
   const [showMobileFilters, setShowMobileFilters] = useState(false);
   const [showMobileSearch, setShowMobileSearch] = useState(false);
 
+  // Filters (and view mode) survive a refresh/reopen — restored once on
+  // mount below, written back on every subsequent change. Scoped to
+  // this browser/device, not shared data, so localStorage (via the
+  // usePersistedLeadsFilters hook) is the right store, same reasoning
+  // as useWidgetVisibility.
+  const { restored: restoredFilters, save: savePersistedFilters } = usePersistedLeadsFilters();
+  const hasHydratedFilters = useRef(false);
+
+  useEffect(() => {
+    if (!restoredFilters || hasHydratedFilters.current) return;
+    hasHydratedFilters.current = true;
+    // Deep-link (?lead=) selection already seeded viewMode/etc from props
+    // at mount — restoring here can still safely override viewMode itself
+    // (which tab was open), just not selectedLeadId (left untouched).
+    setDispositionFilter(new Set(restoredFilters.dispositionFilter));
+    setZipFilter(restoredFilters.zipFilter);
+    setRepFilter(restoredFilters.repFilter);
+    setDateFrom(restoredFilters.dateFrom);
+    setDateTo(restoredFilters.dateTo);
+    setUpdatedFrom(restoredFilters.updatedFrom);
+    setUpdatedTo(restoredFilters.updatedTo);
+    setAppliedAddressQuery(restoredFilters.appliedAddressQuery);
+    setAddressQuery(restoredFilters.appliedAddressQuery);
+    setViewMode(restoredFilters.viewMode);
+  }, [restoredFilters]);
+
+  useEffect(() => {
+    savePersistedFilters({
+      dispositionFilter: Array.from(dispositionFilter),
+      zipFilter,
+      repFilter,
+      dateFrom,
+      dateTo,
+      updatedFrom,
+      updatedTo,
+      appliedAddressQuery,
+      viewMode,
+    });
+  }, [
+    dispositionFilter,
+    zipFilter,
+    repFilter,
+    dateFrom,
+    dateTo,
+    updatedFrom,
+    updatedTo,
+    appliedAddressQuery,
+    viewMode,
+    savePersistedFilters,
+  ]);
+
   const dispositionById = useMemo(
     () => new Map(dispositions.map((d) => [d.id, d])),
     [dispositions]
   );
 
+  // Every active profile, not just reps who hold a direct zip
+  // assignment — a rep can now also see leads purely through team-based
+  // sharing, so they need to be selectable here too, in order to preview
+  // what they can see at all.
   const repOptions = useMemo(() => {
-    const seen = new Map<string, string>();
-    for (const tz of teamZips) seen.set(tz.user_id, tz.full_name);
-    return Array.from(seen, ([id, name]) => ({ id, name })).sort((a, b) =>
-      a.name.localeCompare(b.name)
-    );
-  }, [teamZips]);
+    return profiles
+      .filter((p) => p.active)
+      .map((p) => ({ id: p.id, name: p.full_name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [profiles]);
 
-  // Permission-scoped: these are always derived from teamZips (the
-  // subordinate_zip_assignments RPC), which itself only ever returns zips
-  // the current user is allowed to see — their own for a rep, their
-  // subtree's for a team_lead, everyone's for admin/super_admin. Narrows
-  // further to the selected rep's zips when one is picked.
+  // Every zipcode actually present among the currently-loaded leads —
+  // for this viewer (a team_lead/admin, per canFilterByRep), leads is
+  // already everything leads_select lets them see, so this naturally
+  // includes zips with no direct assignment. Narrowed to the selected
+  // rep's effective zips below once that fetch resolves.
   const zipOptions = useMemo(() => {
-    const relevant = repFilter === "all" ? teamZips : teamZips.filter((tz) => tz.user_id === repFilter);
-    return Array.from(new Set(relevant.map((tz) => tz.zipcode)))
+    return Array.from(new Set(leads.map((l) => l.zipcode)))
       .sort()
       .map((z) => ({ value: z, label: z }));
-  }, [teamZips, repFilter]);
+  }, [leads]);
 
-  const selectedRepZips = useMemo(() => {
-    if (repFilter === "all") return null;
-    return new Set(teamZips.filter((tz) => tz.user_id === repFilter).map((tz) => tz.zipcode));
-  }, [teamZips, repFilter]);
+  // The selected rep's TRUE effective visibility — their own zip
+  // assignments plus their manager-hierarchy subtree plus (since Teams)
+  // their teammates' zips, computed live via visible_zipcodes/
+  // teammate_ids.
+  // Tagged with the repId it was fetched for, so a stale response from
+  // whichever rep was PREVIOUSLY selected is never mistaken for the
+  // current one while a new fetch is in flight — "loading" and "stale"
+  // are both just derived from this not matching repFilter, no separate
+  // boolean needed.
+  const [effectiveRepData, setEffectiveRepData] = useState<{
+    repId: string;
+    zips: Set<string>;
+    teammates: Set<string>;
+  } | null>(null);
+  const [repPreviewError, setRepPreviewError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (repFilter === "all") return;
+    let cancelled = false;
+    fetch(`/api/reps/${repFilter}/effective-zips`)
+      .then(async (res) => {
+        if (!res.ok) throw new Error((await res.json()).error ?? "Failed to load rep's visibility.");
+        return res.json() as Promise<{ zipcodes: string[]; teammateIds: string[] }>;
+      })
+      .then((data) => {
+        if (cancelled) return;
+        setEffectiveRepData({
+          repId: repFilter,
+          zips: new Set(data.zipcodes),
+          teammates: new Set(data.teammateIds),
+        });
+        setRepPreviewError(null);
+      })
+      .catch((err: Error) => {
+        if (!cancelled) setRepPreviewError(err.message);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [repFilter]);
+
+  const effectiveRepZips =
+    repFilter !== "all" && effectiveRepData?.repId === repFilter ? effectiveRepData.zips : null;
+  const effectiveRepTeammates =
+    repFilter !== "all" && effectiveRepData?.repId === repFilter ? effectiveRepData.teammates : null;
+  const loadingRepPreview = repFilter !== "all" && effectiveRepZips === null && !repPreviewError;
+
+  // Zip dropdown options narrow to the selected rep's effective zips.
+  const zipOptionsForRep = useMemo(() => {
+    if (repFilter === "all" || !effectiveRepZips) return zipOptions;
+    return zipOptions.filter((o) => effectiveRepZips.has(o.value));
+  }, [zipOptions, repFilter, effectiveRepZips]);
 
   const filteredLeads = useMemo(() => {
     const zipSet = zipFilter.length > 0 ? new Set(zipFilter) : null;
@@ -111,11 +217,27 @@ export function LeadsExplorer({
     return leadsState.filter((lead) => {
       if (dispositionFilter.size > 0 && !dispositionFilter.has(lead.disposition_id ?? "")) return false;
       if (zipSet && !zipSet.has(lead.zipcode)) return false;
-      if (selectedRepZips && !selectedRepZips.has(lead.zipcode)) return false;
+
+      // Mirrors leads_select's real logic (zip visibility OR own/teammate
+      // manual entry) minus its appointment-assignment clause — a lead
+      // visible to this rep ONLY because they're assigned to an
+      // appointment on it won't show up here. Accepted simplification
+      // for a "what can they broadly see" preview.
+      if (repFilter !== "all" && effectiveRepZips) {
+        const isManualCarveOut =
+          lead.is_manual &&
+          (lead.entered_by === repFilter ||
+            (lead.entered_by != null && effectiveRepTeammates?.has(lead.entered_by)) === true);
+        if (!effectiveRepZips.has(lead.zipcode) && !isManualCarveOut) return false;
+      }
 
       const leadDate = lead.created_at.slice(0, 10);
       if (dateFrom && leadDate < dateFrom) return false;
       if (dateTo && leadDate > dateTo) return false;
+
+      const leadUpdatedDate = lead.updated_at.slice(0, 10);
+      if (updatedFrom && leadUpdatedDate < updatedFrom) return false;
+      if (updatedTo && leadUpdatedDate > updatedTo) return false;
 
       if (addressQueryLower) {
         const haystack = `${lead.address_line} ${lead.city ?? ""}`.toLowerCase();
@@ -124,7 +246,19 @@ export function LeadsExplorer({
 
       return true;
     });
-  }, [leadsState, dispositionFilter, zipFilter, selectedRepZips, dateFrom, dateTo, appliedAddressQuery]);
+  }, [
+    leadsState,
+    dispositionFilter,
+    zipFilter,
+    repFilter,
+    effectiveRepZips,
+    effectiveRepTeammates,
+    dateFrom,
+    dateTo,
+    updatedFrom,
+    updatedTo,
+    appliedAddressQuery,
+  ]);
 
   const withoutLocation = filteredLeads.filter((l) => l.lat == null || l.lng == null).length;
 
@@ -133,7 +267,9 @@ export function LeadsExplorer({
     (repFilter !== "all" ? 1 : 0) +
     (zipFilter.length > 0 ? 1 : 0) +
     (dateFrom ? 1 : 0) +
-    (dateTo ? 1 : 0);
+    (dateTo ? 1 : 0) +
+    (updatedFrom ? 1 : 0) +
+    (updatedTo ? 1 : 0);
 
   const selectedLead = selectedLeadId
     ? (leadsState.find((l) => l.id === selectedLeadId) ?? null)
@@ -145,6 +281,8 @@ export function LeadsExplorer({
     setRepFilter("all");
     setDateFrom("");
     setDateTo("");
+    setUpdatedFrom("");
+    setUpdatedTo("");
     setAddressQuery("");
     setAppliedAddressQuery("");
   }
@@ -404,12 +542,18 @@ export function LeadsExplorer({
                     </option>
                   ))}
                 </Select>
+                {repFilter !== "all" && loadingRepPreview && (
+                  <p className="text-xs text-black/50 dark:text-white/50">Loading…</p>
+                )}
+                {repFilter !== "all" && repPreviewError && (
+                  <p className="text-xs text-red-600 dark:text-red-400">{repPreviewError}</p>
+                )}
               </div>
             )}
 
             <SearchableMultiSelect
               label="Zip"
-              options={zipOptions}
+              options={zipOptionsForRep}
               selected={zipFilter}
               onChange={setZipFilter}
               emptyMessage="No zips assigned yet"
@@ -426,12 +570,20 @@ export function LeadsExplorer({
                 a wide date input overflow its track. */}
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="min-w-0 space-y-1">
-                <label className="text-xs font-medium">From</label>
+                <label className="text-xs font-medium">Created from</label>
                 <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="block w-full" />
               </div>
               <div className="min-w-0 space-y-1">
-                <label className="text-xs font-medium">To</label>
+                <label className="text-xs font-medium">Created to</label>
                 <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="block w-full" />
+              </div>
+              <div className="min-w-0 space-y-1">
+                <label className="text-xs font-medium">Updated from</label>
+                <Input type="date" value={updatedFrom} onChange={(e) => setUpdatedFrom(e.target.value)} className="block w-full" />
+              </div>
+              <div className="min-w-0 space-y-1">
+                <label className="text-xs font-medium">Updated to</label>
+                <Input type="date" value={updatedTo} onChange={(e) => setUpdatedTo(e.target.value)} className="block w-full" />
               </div>
             </div>
 
@@ -510,24 +662,38 @@ export function LeadsExplorer({
                   </option>
                 ))}
               </Select>
+              {loadingRepPreview && (
+                <p className="text-xs text-black/50 dark:text-white/50">Loading…</p>
+              )}
+              {repPreviewError && (
+                <p className="text-xs text-red-600 dark:text-red-400">{repPreviewError}</p>
+              )}
             </div>
           )}
 
           <SearchableMultiSelect
             label="Zip"
-            options={zipOptions}
+            options={zipOptionsForRep}
             selected={zipFilter}
             onChange={setZipFilter}
             emptyMessage="No zips assigned yet"
           />
 
         <div className="space-y-1">
-          <label className="text-xs font-medium">From</label>
+          <label className="text-xs font-medium">Created from</label>
           <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="block" />
         </div>
         <div className="space-y-1">
-          <label className="text-xs font-medium">To</label>
+          <label className="text-xs font-medium">Created to</label>
           <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="block" />
+        </div>
+        <div className="space-y-1">
+          <label className="text-xs font-medium">Updated from</label>
+          <Input type="date" value={updatedFrom} onChange={(e) => setUpdatedFrom(e.target.value)} className="block" />
+        </div>
+        <div className="space-y-1">
+          <label className="text-xs font-medium">Updated to</label>
+          <Input type="date" value={updatedTo} onChange={(e) => setUpdatedTo(e.target.value)} className="block" />
         </div>
 
         <div className="space-y-1">
@@ -673,6 +839,7 @@ export function LeadsExplorer({
           dispositions={dispositions}
           appointmentFormFields={appointmentFormFields}
           isAdmin={isAdmin}
+          canArchive={canArchive}
           doorKnockRadiusFeet={doorKnockRadiusFeet}
           onClose={() => setSelectedLeadId(null)}
           onDispositionSaved={(leadId, dispositionId) =>
@@ -688,11 +855,16 @@ export function LeadsExplorer({
           onLeadUpdated={(updatedLead) =>
             setLeadsState((prev) => prev.map((l) => (l.id === updatedLead.id ? updatedLead : l)))
           }
+          onArchived={(leadId) => {
+            setLeadsState((prev) => prev.filter((l) => l.id !== leadId));
+            setSelectedLeadId(null);
+          }}
         />
       )}
 
       {showAddLead && (
         <AddLeadModal
+          dispositions={dispositions}
           onClose={() => setShowAddLead(false)}
           onAdded={(lead) => {
             setLeadsState((prev) => [lead, ...prev]);

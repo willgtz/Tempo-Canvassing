@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
-import { updateLeadDisposition, updateLeadPriorSaleDate, updateLeadName, addLeadNote } from "./actions";
+import { updateLeadDisposition, updateLeadPriorSaleDate, updateLeadName, addLeadNote, archiveLead } from "./actions";
 import { SetAppointmentModal } from "./set-appointment-modal";
 import { DispositionSelect } from "./disposition-select";
 import { AddressActionsMenu } from "@/components/address-actions-menu";
@@ -31,21 +31,25 @@ export function LeadDetailPanel({
   dispositions,
   appointmentFormFields,
   isAdmin,
+  canArchive,
   doorKnockRadiusFeet,
   onClose,
   onDispositionSaved,
   onPriorSaleDateSaved,
   onLeadUpdated,
+  onArchived,
 }: {
   lead: Lead;
   dispositions: Disposition[];
   appointmentFormFields: AppointmentFormField[];
   isAdmin: boolean;
+  canArchive: boolean;
   doorKnockRadiusFeet: number;
   onClose: () => void;
   onDispositionSaved: (leadId: string, dispositionId: string | null) => void;
   onPriorSaleDateSaved: (leadId: string, priorSaleDate: string | null) => void;
   onLeadUpdated: (lead: Lead) => void;
+  onArchived: (leadId: string) => void;
 }) {
   const visible = useSlideIn();
   const [showSetAppointment, setShowSetAppointment] = useState(false);
@@ -71,6 +75,22 @@ export function LeadDetailPanel({
 
   const [history, setHistory] = useState<HistoryEntry[] | null>(null);
   const [historyError, setHistoryError] = useState<string | null>(null);
+
+  const [archiveError, setArchiveError] = useState<string | null>(null);
+  const [isArchiving, startArchiving] = useTransition();
+
+  function handleArchive() {
+    if (!confirm("Archive this lead? It will disappear from the map and list for everyone.")) return;
+    setArchiveError(null);
+    startArchiving(async () => {
+      const result = await archiveLead(lead.id);
+      if (!result.ok) {
+        setArchiveError(result.error);
+        return;
+      }
+      onArchived(lead.id);
+    });
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -310,6 +330,17 @@ export function LeadDetailPanel({
         >
           Set Appointment
         </button>
+
+        {canArchive && (
+          <button
+            onClick={handleArchive}
+            disabled={isArchiving}
+            className="mt-3 ml-2 rounded border border-red-300 px-3 py-1.5 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-950/30"
+          >
+            {isArchiving ? "Archiving…" : "Archive"}
+          </button>
+        )}
+        {archiveError && <p className="mt-1 text-xs text-red-600 dark:text-red-400">{archiveError}</p>}
 
         {isAdmin ? (
           <div className="mt-6 space-y-2 border-t border-black/10 pt-4 dark:border-white/10">

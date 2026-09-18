@@ -15,6 +15,7 @@ export type Lead = {
   entered_by: string | null;
   entered_by_name: string | null;
   created_at: string;
+  updated_at: string;
 };
 
 export type Disposition = {
@@ -24,13 +25,14 @@ export type Disposition = {
   sort_order: number;
 };
 
-// One row per (user, active zip). Comes from the subordinate_zip_assignments
-// RPC — for a plain rep this is just their own zips; for a team_lead/admin
-// it includes their subordinates' too (or everyone, for admins).
-export type TeamZip = {
-  user_id: string;
+// Every active profile — used to populate the rep filter dropdown so a
+// rep with zero direct zip_assignments (but who sees leads via a team)
+// still shows up as a selectable option.
+export type Profile = {
+  id: string;
   full_name: string;
-  zipcode: string;
+  role: string;
+  active: boolean;
 };
 
 // Admin-configurable submission-form question list — mirrors the iOS app's

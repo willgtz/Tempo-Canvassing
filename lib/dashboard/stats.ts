@@ -9,6 +9,10 @@ export type StatLead = {
   lat: number | null;
   is_manual: boolean;
   created_at: string;
+  // Optional — only the admin dashboard's rep-visibility preview needs
+  // this (the manual-lead teammate carve-out); the rep dashboard's own
+  // query doesn't select it and doesn't need to.
+  entered_by?: string | null;
 };
 
 // The door_knock_counts RPC (schema.sql) buckets events by calendar day
@@ -101,6 +105,23 @@ export function countByRepViaZips(
     }
   }
   return counts;
+}
+
+export type DoorKnockGoalStatus = "in_progress" | "achieved" | "failed";
+
+// Derived, not stored — a goal's status is always a pure function of its
+// own target/window plus the current verified count, evaluated fresh on
+// every read. "Achieved" fires immediately once the target's hit, even
+// before end_date arrives; "failed" only once end_date has passed with
+// the target still unmet.
+export function deriveGoalStatus(
+  goal: { start_date: string; end_date: string; target_count: number },
+  verifiedCount: number,
+  today: string // laDateOnly(new Date())
+): DoorKnockGoalStatus {
+  if (verifiedCount >= goal.target_count) return "achieved";
+  if (today > goal.end_date) return "failed";
+  return "in_progress";
 }
 
 export function formatStatValue(n: number): string {

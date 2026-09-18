@@ -8,6 +8,7 @@ const TABS = [
   { href: "/admin/leads/batches", label: "Batches" },
   { href: "/admin/leads/dispositions", label: "Dispositions" },
   { href: "/admin/leads/all", label: "All Leads" },
+  { href: "/admin/leads/archived", label: "Archived" },
 ];
 
 export function LeadsSubnav() {

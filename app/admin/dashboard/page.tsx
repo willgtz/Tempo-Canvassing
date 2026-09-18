@@ -10,6 +10,7 @@ type DashboardLeadRow = {
   zipcode: string;
   lat: number | null;
   is_manual: boolean;
+  entered_by: string | null;
   created_at: string;
 };
 
@@ -46,11 +47,12 @@ export default async function AdminDashboardPage() {
     { data: dispositions, error: dispositionsError },
     { data: profiles, error: profilesError },
     { data: teamZips, error: teamZipsError },
+    { data: goalRows, error: goalError },
   ] = await Promise.all([
     fetchAllRows<DashboardLeadRow>((from, to) =>
       supabase
         .from("leads")
-        .select("id, disposition_id, zipcode, lat, is_manual, created_at")
+        .select("id, disposition_id, zipcode, lat, is_manual, entered_by, created_at")
         // .range() pagination needs a deterministic order — this query had
         // none before since a single unpaginated fetch didn't need one,
         // but paging by an unordered set risks skipped/duplicated rows
@@ -69,9 +71,22 @@ export default async function AdminDashboardPage() {
     supabase.from("dispositions").select("id, name, color, sort_order").order("sort_order"),
     supabase.from("profiles").select("id, full_name, role, active").order("full_name"),
     supabase.rpc("subordinate_zip_assignments", { root_user_id: session.userId }),
+    // No params needed — returns every rep's progress against THEIR OWN
+    // stored goal window already; is_admin() short-circuits the internal
+    // can_view_door_knock_count check, so this admin always gets every
+    // rep's row back regardless of grants.
+    supabase.rpc("door_knock_goal_progress"),
   ]);
 
-  if (leadsError || doorKnockError || doorKnockTodayError || dispositionsError || profilesError || teamZipsError) {
+  if (
+    leadsError ||
+    doorKnockError ||
+    doorKnockTodayError ||
+    dispositionsError ||
+    profilesError ||
+    teamZipsError ||
+    goalError
+  ) {
     return (
       <div className="mx-auto w-full max-w-6xl p-6 text-sm text-red-600 dark:text-red-400">
         Failed to load dashboard:{" "}
@@ -80,7 +95,8 @@ export default async function AdminDashboardPage() {
           doorKnockTodayError?.message ??
           dispositionsError?.message ??
           profilesError?.message ??
-          teamZipsError?.message}
+          teamZipsError?.message ??
+          goalError?.message}
       </div>
     );
   }
@@ -93,6 +109,8 @@ export default async function AdminDashboardPage() {
       dispositions={dispositions ?? []}
       profiles={profiles ?? []}
       teamZips={teamZips ?? []}
+      doorKnockGoals={goalRows ?? []}
+      today={laToday}
     />
   );
 }

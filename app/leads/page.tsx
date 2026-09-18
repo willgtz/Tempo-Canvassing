@@ -2,7 +2,7 @@ import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllRows } from "@/lib/supabase/fetch-all-rows";
 import { LeadsExplorer } from "./leads-explorer";
-import type { AppointmentFormField, Disposition, Lead, TeamZip } from "./types";
+import type { AppointmentFormField, Disposition, Lead, Profile } from "./types";
 
 type RawLeadRow = Omit<Lead, "entered_by_name"> & {
   profiles: { full_name: string } | null;
@@ -19,15 +19,15 @@ export default async function LeadsPage() {
   const [
     { data: leads, error: leadsError },
     { data: dispositions, error: dispositionsError },
-    { data: teamZips, error: teamZipsError },
     { data: appointmentFormFields, error: appointmentFormFieldsError },
     { data: radiusRow, error: radiusError },
+    { data: profiles, error: profilesError },
   ] = await Promise.all([
     fetchAllRows((from, to) =>
       supabase
         .from("leads")
         .select(
-          "id, first_name, last_name, address_line, city, state, zipcode, lat, lng, geocode_precision, disposition_id, prior_sale_date, is_manual, entered_by, profiles!entered_by(full_name), created_at"
+          "id, first_name, last_name, address_line, city, state, zipcode, lat, lng, geocode_precision, disposition_id, prior_sale_date, is_manual, entered_by, profiles!entered_by(full_name), created_at, updated_at"
         )
         // id as a secondary, unique sort key — see fetch-all-rows.ts's
         // comment: .range() pagination needs a fully deterministic order,
@@ -38,7 +38,6 @@ export default async function LeadsPage() {
         .range(from, to)
     ),
     supabase.from("dispositions").select("id, name, color, sort_order").order("sort_order"),
-    supabase.rpc("subordinate_zip_assignments", { root_user_id: session.userId }),
     // Same admin-configurable question list the iOS app's NewAppointmentSheet
     // renders — fetched once here (small, mostly-static, same treatment as
     // dispositions above) rather than lazily per-lead like notes/history.
@@ -52,21 +51,19 @@ export default async function LeadsPage() {
     // regardless of what the client sends. Same app_settings row the
     // admin settings page (app/admin/reps/settings) reads/writes.
     supabase.from("app_settings").select("value").eq("key", "door_knock_radius_feet").single(),
+    // Full active-profile list — used to populate the rep filter dropdown
+    // with every rep, regardless of whether they hold a direct zip
+    // assignment, since a rep can now also see leads purely through
+    // team-based sharing. That rep's true effective zips/teammates are
+    // fetched on demand (see /api/reps/[repId]/effective-zips) once
+    // they're actually selected in the filter.
+    supabase.from("profiles").select("id, full_name, role, active").order("full_name"),
   ]);
 
   if (leadsError || dispositionsError) {
     return (
       <div className="mx-auto w-full max-w-6xl p-6 text-sm text-red-600 dark:text-red-400">
         Failed to load leads: {leadsError?.message ?? dispositionsError?.message}
-      </div>
-    );
-  }
-
-  if (teamZipsError) {
-    return (
-      <div className="mx-auto w-full max-w-6xl p-6 text-sm text-red-600 dark:text-red-400">
-        Failed to load zip assignments for filters: {teamZipsError.message}. Has the
-        subordinate_zip_assignments migration been run in Supabase?
       </div>
     );
   }
@@ -85,6 +82,12 @@ export default async function LeadsPage() {
   if (radiusError) {
     console.error("Failed to load door_knock_radius_feet:", radiusError.message);
   }
+  // Non-blocking — worst case the rep filter dropdown just won't have
+  // any options beyond "All reps", degrading gracefully rather than
+  // taking down the whole page.
+  if (profilesError) {
+    console.error("Failed to load profiles for rep filter:", profilesError.message);
+  }
 
   const transformedLeads: Lead[] = ((leads ?? []) as unknown as RawLeadRow[]).map((l) => ({
     ...l,
@@ -95,12 +98,13 @@ export default async function LeadsPage() {
     <LeadsExplorer
       leads={transformedLeads}
       dispositions={(dispositions ?? []) as Disposition[]}
-      teamZips={(teamZips ?? []) as TeamZip[]}
+      profiles={(profiles ?? []) as Profile[]}
       appointmentFormFields={(appointmentFormFields ?? []) as AppointmentFormField[]}
       doorKnockRadiusFeet={typeof radiusRow?.value === "number" ? radiusRow.value : 150}
       currentUserId={session.userId}
       canFilterByRep={session.role === "team_lead" || session.role === "admin" || session.role === "super_admin"}
       isAdmin={session.role === "admin" || session.role === "super_admin"}
+      canArchive={session.role === "team_lead" || session.role === "admin" || session.role === "super_admin"}
       mapboxAccessToken={process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN ?? ""}
     />
   );

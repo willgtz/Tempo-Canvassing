@@ -15,6 +15,32 @@ const SATELLITE_STYLE = "mapbox://styles/mapbox/satellite-streets-v12";
 const DEFAULT_COLOR = "#6B7280";
 const FALLBACK_CENTER = { lat: 39.8283, lng: -98.5795 }; // center of contiguous US
 
+const VIEWPORT_STORAGE_KEY = "leads-map-viewport-v1";
+
+type SavedViewport = { longitude: number; latitude: number; zoom: number };
+
+// Read once at mount (initialViewState is by definition only ever
+// applied once, at mount) — a pure read-on-mount/write-on-settle side
+// channel; the map itself stays fully uncontrolled otherwise, no React
+// state tracks the live camera position.
+function readSavedViewport(): SavedViewport | null {
+  try {
+    const raw = localStorage.getItem(VIEWPORT_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (
+      typeof parsed.longitude === "number" &&
+      typeof parsed.latitude === "number" &&
+      typeof parsed.zoom === "number"
+    ) {
+      return parsed;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 type LocatedLead = Lead & { lat: number; lng: number };
 
 // Mapbox's own GeoJSON clustering (GPU-rendered circle/symbol layers) is
@@ -149,6 +175,22 @@ export function LeadsMap({
   const [loaded, setLoaded] = useState(false);
   const [stuck, setStuck] = useState(false);
   const [remountKey, setRemountKey] = useState(0);
+  const [savedViewport] = useState(() => readSavedViewport());
+
+  const handleMoveEnd = useCallback((e: { viewState: SavedViewport }) => {
+    try {
+      localStorage.setItem(
+        VIEWPORT_STORAGE_KEY,
+        JSON.stringify({
+          longitude: e.viewState.longitude,
+          latitude: e.viewState.latitude,
+          zoom: e.viewState.zoom,
+        })
+      );
+    } catch {
+      // Quota/private-mode — viewport just won't persist.
+    }
+  }, []);
   const [satellite, setSatellite] = useState(false);
   const [myLocation, setMyLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [locating, setLocating] = useState(false);
@@ -357,11 +399,14 @@ export function LeadsMap({
       key={remountKey}
       ref={mapRef}
       mapboxAccessToken={apiKey}
-      initialViewState={{
-        longitude: center.lng,
-        latitude: center.lat,
-        zoom: locatedLeads.length > 0 ? 11 : 3.5,
-      }}
+      initialViewState={
+        savedViewport ?? {
+          longitude: center.lng,
+          latitude: center.lat,
+          zoom: locatedLeads.length > 0 ? 11 : 3.5,
+        }
+      }
+      onMoveEnd={handleMoveEnd}
       mapStyle={satellite ? SATELLITE_STYLE : STREETS_STYLE}
       style={{ width: "100%", height: "100%" }}
       // Bottom padding keeps pins/controls from being hidden under the

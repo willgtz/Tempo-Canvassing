@@ -63,6 +63,7 @@ export function LeadEditPanel({
         email: email || null,
         disposition_id: dispositionId || null,
         prior_sale_date: priorSaleDate || null,
+        updated_at: new Date().toISOString(),
       });
     });
   }
