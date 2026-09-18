@@ -26,6 +26,7 @@ export type UpdateUserInput = {
   role: UserRole;
   active: boolean;
   managerId: string | null;
+  teamId: string | null;
   canViewCompanyLeaderboard: boolean;
   excludedFromLeaderboard: boolean;
 };
@@ -254,6 +255,7 @@ export async function updateUser(
       role: input.role,
       active: input.active,
       manager_id: input.managerId,
+      team_id: input.teamId,
       can_view_company_leaderboard: input.canViewCompanyLeaderboard,
       excluded_from_leaderboard: input.excludedFromLeaderboard,
     })
@@ -266,6 +268,7 @@ export async function updateUser(
   revalidatePath("/admin/reps/manage");
   revalidatePath("/admin/reps/inactive");
   revalidatePath("/admin/reps/add");
+  revalidatePath("/admin/reps/teams");
   return { ok: true };
 }
 
@@ -492,6 +495,117 @@ export async function setUserPassword(
   if (error) {
     return { ok: false, error: error.message };
   }
+  return { ok: true };
+}
+
+export type Team = { id: string; name: string };
+
+export type CreateTeamResult = { ok: true; team: Team } | { ok: false; error: string };
+
+function revalidateTeamPaths() {
+  revalidatePath("/admin/reps/teams");
+  revalidatePath("/admin/reps/manage");
+  revalidatePath("/admin/reps/inactive");
+  revalidatePath("/admin/reps/add");
+}
+
+export async function createTeam(name: string): Promise<CreateTeamResult> {
+  const session = await getAdminSession();
+  if (!session) return { ok: false, error: "Unauthorized" };
+
+  const trimmed = name.trim();
+  if (!trimmed) return { ok: false, error: "Team name is required." };
+
+  const supabase = await createClient();
+
+  const { data: existing } = await supabase
+    .from("teams")
+    .select("id")
+    .ilike("name", trimmed)
+    .maybeSingle();
+  if (existing) {
+    return { ok: false, error: `A team named "${trimmed}" already exists.` };
+  }
+
+  const { data, error } = await supabase
+    .from("teams")
+    .insert({ name: trimmed })
+    .select("id, name")
+    .single();
+
+  if (error || !data) {
+    return { ok: false, error: error?.message ?? "Failed to create team." };
+  }
+
+  revalidateTeamPaths();
+  return { ok: true, team: data };
+}
+
+export type RenameTeamResult = { ok: true } | { ok: false; error: string };
+
+export async function renameTeam(teamId: string, name: string): Promise<RenameTeamResult> {
+  const session = await getAdminSession();
+  if (!session) return { ok: false, error: "Unauthorized" };
+
+  const trimmed = name.trim();
+  if (!trimmed) return { ok: false, error: "Team name is required." };
+
+  const supabase = await createClient();
+
+  const { data: existing } = await supabase
+    .from("teams")
+    .select("id")
+    .ilike("name", trimmed)
+    .neq("id", teamId)
+    .maybeSingle();
+  if (existing) {
+    return { ok: false, error: `A team named "${trimmed}" already exists.` };
+  }
+
+  const { error } = await supabase
+    .from("teams")
+    .update({ name: trimmed, updated_at: new Date().toISOString() })
+    .eq("id", teamId);
+
+  if (error) return { ok: false, error: error.message };
+
+  revalidateTeamPaths();
+  return { ok: true };
+}
+
+export type DeleteTeamResult = { ok: true } | { ok: false; error: string };
+
+// No "must be empty first" precondition — team_id's ON DELETE SET NULL
+// (schema.sql) already makes this safe, a profile can never be destroyed
+// by it. The confirm() dialog in teams-client.tsx surfaces the member
+// count before this runs, so the admin isn't surprised by it.
+export async function deleteTeam(teamId: string): Promise<DeleteTeamResult> {
+  const session = await getAdminSession();
+  if (!session) return { ok: false, error: "Unauthorized" };
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("teams").delete().eq("id", teamId);
+  if (error) return { ok: false, error: error.message };
+
+  revalidateTeamPaths();
+  return { ok: true };
+}
+
+export type SetRepTeamResult = { ok: true } | { ok: false; error: string };
+
+// Single-column write used by the Teams roster editor's add/remove-member
+// controls — a second legitimate path to the same profiles.team_id value
+// that updateUser's teamId field also writes (via RepCard's full profile
+// edit form). Same underlying row either way, so nothing can drift.
+export async function setRepTeam(userId: string, teamId: string | null): Promise<SetRepTeamResult> {
+  const session = await getAdminSession();
+  if (!session) return { ok: false, error: "Unauthorized" };
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("profiles").update({ team_id: teamId }).eq("id", userId);
+  if (error) return { ok: false, error: error.message };
+
+  revalidateTeamPaths();
   return { ok: true };
 }
 

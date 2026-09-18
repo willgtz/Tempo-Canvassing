@@ -15,7 +15,16 @@ export default async function ManageRepsPage() {
     );
   }
 
-  const { profiles, managerOptions, nameById, assignmentsByUser, historyByUser, unassignedZips } = data;
+  const {
+    profiles,
+    managerOptions,
+    nameById,
+    assignmentsByUser,
+    historyByUser,
+    unassignedZips,
+    teams,
+    teamNameById,
+  } = data;
   // Inactive reps live on their own tab now (app/admin/reps/inactive) —
   // moved out rather than just shown dimmed here, per William's request,
   // so this list stays a clean "who's currently active" view.
@@ -71,6 +80,8 @@ export default async function ManageRepsPage() {
         assignmentsByUser={assignmentsByUser}
         historyByUser={historyByUser}
         currentUserId={session.userId}
+        teams={teams}
+        teamNameById={teamNameById}
       />
     </div>
   );

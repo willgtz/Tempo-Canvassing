@@ -21,6 +21,8 @@ function matchesQuery(user: ManagedUser, query: string): boolean {
   return user.full_name.toLowerCase().includes(query) || user.email.toLowerCase().includes(query);
 }
 
+type TeamOption = { id: string; name: string };
+
 export function ManageRepsClient({
   activeProfiles,
   managerOptions,
@@ -28,6 +30,8 @@ export function ManageRepsClient({
   assignmentsByUser,
   historyByUser,
   currentUserId,
+  teams,
+  teamNameById,
 }: {
   activeProfiles: ManagedUser[];
   managerOptions: ManagerOption[];
@@ -35,6 +39,8 @@ export function ManageRepsClient({
   assignmentsByUser: Map<string, Assignment[]>;
   historyByUser: Map<string, ZipHistoryEntry[]>;
   currentUserId: string;
+  teams: TeamOption[];
+  teamNameById: Map<string, string>;
 }) {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
@@ -81,6 +87,8 @@ export function ManageRepsClient({
         managerName={p.manager_id ? (nameById.get(p.manager_id) ?? null) : null}
         initialAssignments={assignmentsByUser.get(p.id) ?? []}
         zipHistory={historyByUser.get(p.id) ?? []}
+        teams={teams}
+        teamName={p.team_id ? (teamNameById.get(p.team_id) ?? null) : null}
       />
     );
   }

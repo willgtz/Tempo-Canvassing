@@ -14,11 +14,12 @@ export async function loadRepsData() {
     { data: assignments, error: assignmentsError },
     { data: historyRows, error: historyError },
     { data: leadZipRows, error: leadZipsError },
+    { data: teams, error: teamsError },
   ] = await Promise.all([
     supabase
       .from("profiles")
       .select(
-        "id, full_name, email, phone, role, active, manager_id, can_view_company_leaderboard, excluded_from_leaderboard, name_pending"
+        "id, full_name, email, phone, role, active, manager_id, team_id, can_view_company_leaderboard, excluded_from_leaderboard, name_pending"
       )
       .order("full_name"),
     supabase
@@ -48,14 +49,16 @@ export async function loadRepsData() {
         .order("id")
         .range(from, to)
     ),
+    supabase.from("teams").select("id, name").order("name"),
   ]);
 
-  const loadError = error ?? assignmentsError ?? historyError ?? leadZipsError ?? null;
+  const loadError = error ?? assignmentsError ?? historyError ?? leadZipsError ?? teamsError ?? null;
 
   const managerOptions = (profiles ?? []).filter((p) =>
     ["team_lead", "admin", "super_admin"].includes(p.role)
   );
   const nameById = new Map((profiles ?? []).map((p) => [p.id, p.full_name]));
+  const teamNameById = new Map((teams ?? []).map((t) => [t.id, t.name]));
 
   const assignmentsByUser = new Map<string, { id: string; zipcode: string }[]>();
   for (const a of assignments ?? []) {
@@ -114,5 +117,7 @@ export async function loadRepsData() {
     assignmentsByUser,
     historyByUser,
     unassignedZips,
+    teams: teams ?? [],
+    teamNameById,
   };
 }
