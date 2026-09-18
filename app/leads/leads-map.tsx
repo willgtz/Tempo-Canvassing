@@ -16,8 +16,17 @@ const DEFAULT_COLOR = "#6B7280";
 const FALLBACK_CENTER = { lat: 39.8283, lng: -98.5795 }; // center of contiguous US
 
 const VIEWPORT_STORAGE_KEY = "leads-map-viewport-v1";
+const SATELLITE_STORAGE_KEY = "leads-map-satellite-v1";
 
 type SavedViewport = { longitude: number; latitude: number; zoom: number };
+
+function readSavedSatellite(): boolean {
+  try {
+    return localStorage.getItem(SATELLITE_STORAGE_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
 
 // Read once at mount (initialViewState is by definition only ever
 // applied once, at mount) — a pure read-on-mount/write-on-settle side
@@ -261,7 +270,24 @@ export function LeadsMap({
       // Quota/private-mode — viewport just won't persist.
     }
   }, []);
-  const [satellite, setSatellite] = useState(false);
+  const [satellite, setSatellite] = useState(() => readSavedSatellite());
+
+  function handleToggleSatellite() {
+    setSatellite((s) => {
+      const next = !s;
+      try {
+        if (next) {
+          localStorage.setItem(SATELLITE_STORAGE_KEY, "1");
+        } else {
+          localStorage.removeItem(SATELLITE_STORAGE_KEY);
+        }
+      } catch {
+        // Quota/private-mode — satellite toggle just won't persist.
+      }
+      return next;
+    });
+  }
+
   const [myLocation, setMyLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [locating, setLocating] = useState(false);
   useEffect(() => {
@@ -437,7 +463,7 @@ export function LeadsMap({
           </svg>
         </button>
         <button
-          onClick={() => setSatellite((s) => !s)}
+          onClick={handleToggleSatellite}
           className={cn(
             "flex h-8 w-8 items-center justify-center rounded-full border shadow",
             satellite
