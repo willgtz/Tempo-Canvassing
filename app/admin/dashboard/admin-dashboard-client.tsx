@@ -5,6 +5,7 @@ import { StatTile } from "@/components/dashboard/stat-tile";
 import { BarChart } from "@/components/dashboard/bar-chart";
 import { TrendChart } from "@/components/dashboard/trend-chart";
 import { DoorKnockGoalsTable } from "@/components/dashboard/door-knock-goals-table";
+import { DoorKnockDayBreakdown } from "@/components/dashboard/door-knock-day-breakdown";
 import { WidgetCustomizeMenu } from "@/components/dashboard/widget-customize-menu";
 import { useWidgetVisibility } from "@/components/dashboard/use-widget-visibility";
 import { Card } from "@/components/ui/card";
@@ -51,7 +52,7 @@ const WIDGETS = [
   { id: "trend", label: "Leads created — 30-day trend" },
   { id: "disposition", label: "Leads by disposition" },
   { id: "byRep", label: "Leads by rep" },
-  { id: "doorsKnockedToday", label: "Doors knocked by rep (today)" },
+  { id: "doorsKnockedToday", label: "Doors knocked by rep (pick a day)" },
   { id: "doorsKnocked", label: "Doors knocked by rep (30 days)" },
   { id: "doorKnockGoals", label: "Door-knock goals by rep" },
   { id: "zip", label: "Leads by zip" },
@@ -207,16 +208,6 @@ export function AdminDashboardClient({
       .sort((a, b) => b.value - a.value);
   }, [doorKnockCounts, repFilter]);
 
-  const doorsKnockedTodayBreakdown = useMemo(() => {
-    const rows =
-      repFilter === "all"
-        ? doorKnockCountsToday
-        : doorKnockCountsToday.filter((r) => r.user_id === repFilter);
-    return rows
-      .map((r) => ({ label: r.full_name, value: r.verified_count }))
-      .sort((a, b) => b.value - a.value);
-  }, [doorKnockCountsToday, repFilter]);
-
   // Unlike the BarChart breakdowns above, this doesn't hide behind
   // showRepBreakdown when a single rep is selected — a single rep's own
   // goal-vs-progress is still meaningful with one row, unlike a one-bar
@@ -357,15 +348,21 @@ export function AdminDashboardClient({
             </div>
           </Card>
         )}
-        {isVisible("doorsKnockedToday") && showRepBreakdown && (
+        {/* Unlike the leads-by-rep/disposition/zip charts above, these
+            two deliberately don't hide behind showRepBreakdown when a
+            single rep is selected — that's exactly when an admin wants
+            to see that specific rep's number, not have it disappear. */}
+        {isVisible("doorsKnockedToday") && (
           <Card className="p-4">
-            <h2 className="text-sm font-medium">Doors knocked by rep (today)</h2>
-            <div className="mt-3">
-              <BarChart items={doorsKnockedTodayBreakdown} />
-            </div>
+            <h2 className="text-sm font-medium">Doors knocked by rep (pick a day)</h2>
+            <DoorKnockDayBreakdown
+              today={today}
+              repFilter={repFilter}
+              initialCounts={doorKnockCountsToday}
+            />
           </Card>
         )}
-        {isVisible("doorsKnocked") && showRepBreakdown && (
+        {isVisible("doorsKnocked") && (
           <Card className="p-4">
             <h2 className="text-sm font-medium">Doors knocked by rep (30 days)</h2>
             <div className="mt-3">
