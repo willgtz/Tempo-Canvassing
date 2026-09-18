@@ -30,6 +30,7 @@ export function AppointmentsExplorer({
   initialNotes,
   activeProfiles,
   sectionOrder,
+  currentUserId,
 }: {
   title: string;
   initialAppointments: Appointment[];
@@ -40,6 +41,7 @@ export function AppointmentsExplorer({
   initialNotes: AppointmentNote[];
   activeProfiles: ActiveProfile[];
   sectionOrder: string[];
+  currentUserId: string;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -492,6 +494,7 @@ export function AppointmentsExplorer({
           notes={notes.filter((x) => x.appointment_id === selected.id)}
           activeProfiles={activeProfiles}
           sectionOrder={sectionOrder}
+          currentUserId={currentUserId}
           onClose={() => setSelectedId(null)}
           onAppointmentUpdated={(updated) => {
             setAppointments((prev) => prev.map((a) => (a.id === updated.id ? updated : a)));
@@ -504,6 +507,9 @@ export function AppointmentsExplorer({
           }}
           onNoteAdded={(note) => {
             setNotes((prev) => [note, ...prev]);
+          }}
+          onNoteUpdated={(updatedNote) => {
+            setNotes((prev) => prev.map((n) => (n.id === updatedNote.id ? updatedNote : n)));
           }}
           onLeadNameUpdated={(leadId, firstName, lastName) => {
             setLeadsState((prev) =>

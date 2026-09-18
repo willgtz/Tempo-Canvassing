@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { getAdminSession } from "@/lib/auth/admin";
 import { AppointmentsExplorer } from "./appointments-explorer";
 import type {
   ActiveProfile,
@@ -21,6 +22,7 @@ type AssignmentJoinRow = {
 type NoteJoinRow = {
   id: string;
   appointment_id: string;
+  user_id: string;
   note: string;
   created_at: string;
   profiles: { full_name: string } | null;
@@ -31,6 +33,15 @@ type NoteJoinRow = {
 const DEFAULT_SECTION_ORDER = ["lead", "schedule", "assigned", "submission_details", "status", "notes"];
 
 export default async function AppointmentsPage() {
+  const session = await getAdminSession();
+  if (!session) {
+    return (
+      <div className="mx-auto w-full max-w-3xl p-6 text-sm text-red-600 dark:text-red-400">
+        Unauthorized.
+      </div>
+    );
+  }
+
   const supabase = await createClient();
 
   const [
@@ -77,7 +88,7 @@ export default async function AppointmentsPage() {
     leadIds.length
       ? supabase
           .from("leads")
-          .select("id, first_name, last_name, address_line, city, state, zipcode, lat, lng")
+          .select("id, first_name, last_name, address_line, city, state, zipcode, phone, lat, lng")
           .in("id", leadIds)
       : Promise.resolve({ data: [] as AppointmentLead[] }),
     appointmentIds.length
@@ -89,7 +100,7 @@ export default async function AppointmentsPage() {
     appointmentIds.length
       ? supabase
           .from("appointment_notes")
-          .select("id, appointment_id, note, created_at, profiles!user_id(full_name)")
+          .select("id, appointment_id, user_id, note, created_at, profiles!user_id(full_name)")
           .in("appointment_id", appointmentIds)
           .order("created_at", { ascending: false })
       : Promise.resolve({ data: [] as NoteJoinRow[] }),
@@ -108,6 +119,7 @@ export default async function AppointmentsPage() {
   const notes: AppointmentNote[] = ((noteRows ?? []) as unknown as NoteJoinRow[]).map((r) => ({
     id: r.id,
     appointment_id: r.appointment_id,
+    user_id: r.user_id,
     note: r.note,
     created_at: r.created_at,
     author_name: r.profiles?.full_name ?? "Unknown",
@@ -134,6 +146,7 @@ export default async function AppointmentsPage() {
         initialNotes={notes}
         activeProfiles={(activeProfiles ?? []) as ActiveProfile[]}
         sectionOrder={sectionOrder}
+        currentUserId={session.userId}
       />
     </div>
   );

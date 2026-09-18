@@ -143,7 +143,10 @@ export async function updateAppointmentScheduledAt(
 }
 
 export type AddAppointmentNoteResult =
-  | { ok: true; note: { id: string; appointment_id: string; note: string; created_at: string; author_name: string } }
+  | {
+      ok: true;
+      note: { id: string; appointment_id: string; user_id: string; note: string; created_at: string; author_name: string };
+    }
   | { ok: false; error: string };
 
 export async function addAppointmentNote(
@@ -178,11 +181,48 @@ export async function addAppointmentNote(
     note: {
       id: data.id,
       appointment_id: appointmentId,
+      user_id: session.userId,
       note: data.note,
       created_at: data.created_at,
       author_name: profile?.full_name ?? session.email,
     },
   };
+}
+
+export type UpdateAppointmentNoteResult =
+  | { ok: true; note: string }
+  | { ok: false; error: string };
+
+// Admin can only ever edit a note they themselves wrote — RLS
+// (appointment_notes_update_own_admin, schema.sql) scopes this to
+// is_admin() AND user_id = auth.uid(), so a plain .update() here is
+// already safe without a separate ownership check; this just gives a
+// clean error instead of a silent zero-row update if somehow called on
+// someone else's note.
+export async function updateAppointmentNote(
+  noteId: string,
+  note: string
+): Promise<UpdateAppointmentNoteResult> {
+  const session = await getAdminSession();
+  if (!session) return { ok: false, error: "Unauthorized" };
+
+  const text = note.trim();
+  if (!text) return { ok: false, error: "Note can't be empty." };
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("appointment_notes")
+    .update({ note: text })
+    .eq("id", noteId)
+    .eq("user_id", session.userId)
+    .select("note")
+    .maybeSingle();
+
+  if (error) return { ok: false, error: error.message };
+  if (!data) return { ok: false, error: "You can only edit your own notes." };
+
+  revalidatePath("/admin/appointments");
+  return { ok: true, note: data.note };
 }
 
 export type AssignmentDiffInput = {
@@ -301,6 +341,7 @@ export type AddManualAppointmentResult =
         city: string | null;
         state: string | null;
         zipcode: string;
+        phone: string | null;
         lat: number | null;
         lng: number | null;
       };
@@ -363,7 +404,7 @@ export async function addManualAppointment(
       is_manual: true,
       entered_by: session.userId,
     })
-    .select("id, first_name, last_name, address_line, city, state, zipcode, lat, lng")
+    .select("id, first_name, last_name, address_line, city, state, zipcode, phone, lat, lng")
     .single();
 
   if (leadError || !lead) {

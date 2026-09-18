@@ -28,6 +28,8 @@ export function SetAppointmentModal({
   const visible = useSlideIn();
   const originalName = [lead.first_name, lead.last_name].filter(Boolean).join(" ");
   const [nameDraft, setNameDraft] = useState(originalName);
+  const originalPhone = lead.phone ?? "";
+  const [phoneDraft, setPhoneDraft] = useState(originalPhone);
   const [scheduledAt, setScheduledAt] = useState(() => {
     // datetime-local wants "YYYY-MM-DDTHH:mm" in local time, no seconds/Z.
     const d = new Date();
@@ -56,6 +58,9 @@ export function SetAppointmentModal({
       const updatedFirstName = nameChanged ? (parts[0] ?? null) : null;
       const updatedLastName = nameChanged ? (parts.slice(1).join(" ") || null) : null;
 
+      const trimmedPhone = phoneDraft.trim();
+      const phoneChanged = trimmedPhone !== originalPhone;
+
       const result = await submitAppointment({
         leadId: lead.id,
         scheduledAt: new Date(scheduledAt).toISOString(),
@@ -63,6 +68,8 @@ export function SetAppointmentModal({
         nameChanged,
         updatedFirstName,
         updatedLastName,
+        phoneChanged,
+        updatedPhone: trimmedPhone || null,
       });
       if (!result.ok) {
         setError(result.error);
@@ -103,6 +110,16 @@ export function SetAppointmentModal({
             <input
               value={nameDraft}
               onChange={(e) => setNameDraft(e.target.value)}
+              className="w-full rounded border border-black/15 px-2 py-1 text-sm dark:border-white/20 dark:bg-transparent"
+            />
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-xs font-medium">Phone (optional)</label>
+            <input
+              type="tel"
+              value={phoneDraft}
+              onChange={(e) => setPhoneDraft(e.target.value)}
               className="w-full rounded border border-black/15 px-2 py-1 text-sm dark:border-white/20 dark:bg-transparent"
             />
           </div>

@@ -37,6 +37,7 @@ export type AppointmentAssignment = {
 export type AppointmentNote = {
   id: string;
   appointment_id: string;
+  user_id: string;
   note: string;
   created_at: string;
   author_name: string;
@@ -52,6 +53,7 @@ export type AppointmentLead = {
   city: string | null;
   state: string | null;
   zipcode: string;
+  phone: string | null;
   lat: number | null;
   lng: number | null;
 };

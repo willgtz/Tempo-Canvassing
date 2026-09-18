@@ -6,6 +6,7 @@ export type Lead = {
   city: string | null;
   state: string | null;
   zipcode: string;
+  phone: string | null;
   lat: number | null;
   lng: number | null;
   geocode_precision: string | null;

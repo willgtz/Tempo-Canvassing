@@ -66,7 +66,10 @@ export async function updateMyAppointmentScheduledAt(
 }
 
 export type AddAppointmentNoteResult =
-  | { ok: true; note: { id: string; appointment_id: string; note: string; created_at: string; author_name: string } }
+  | {
+      ok: true;
+      note: { id: string; appointment_id: string; user_id: string; note: string; created_at: string; author_name: string };
+    }
   | { ok: false; error: string };
 
 export async function addMyAppointmentNote(
@@ -94,6 +97,7 @@ export async function addMyAppointmentNote(
     note: {
       id: data.id,
       appointment_id: appointmentId,
+      user_id: session.userId,
       note: data.note,
       created_at: data.created_at,
       author_name: session.fullName,
@@ -136,6 +140,7 @@ export type AddMyManualAppointmentResult =
         city: string | null;
         state: string | null;
         zipcode: string;
+        phone: string | null;
         lat: number | null;
         lng: number | null;
       };
@@ -202,7 +207,7 @@ export async function addMyManualAppointment(
       is_manual: true,
       entered_by: session.userId,
     })
-    .select("id, first_name, last_name, address_line, city, state, zipcode, lat, lng")
+    .select("id, first_name, last_name, address_line, city, state, zipcode, phone, lat, lng")
     .single();
 
   if (leadError || !lead) {

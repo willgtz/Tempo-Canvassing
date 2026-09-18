@@ -27,7 +27,7 @@ export default async function LeadsPage() {
       supabase
         .from("leads")
         .select(
-          "id, first_name, last_name, address_line, city, state, zipcode, lat, lng, geocode_precision, disposition_id, prior_sale_date, is_manual, entered_by, profiles!entered_by(full_name), created_at, updated_at"
+          "id, first_name, last_name, address_line, city, state, zipcode, phone, lat, lng, geocode_precision, disposition_id, prior_sale_date, is_manual, entered_by, profiles!entered_by(full_name), created_at, updated_at"
         )
         // id as a secondary, unique sort key — see fetch-all-rows.ts's
         // comment: .range() pagination needs a fully deterministic order,

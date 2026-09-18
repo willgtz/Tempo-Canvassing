@@ -259,7 +259,7 @@ export async function addManualLead(input: AddManualLeadInput): Promise<AddManua
       disposition_id: input.dispositionId,
     })
     .select(
-      "id, first_name, last_name, address_line, city, state, zipcode, lat, lng, geocode_precision, disposition_id, prior_sale_date, is_manual, entered_by, created_at, updated_at"
+      "id, first_name, last_name, address_line, city, state, zipcode, phone, lat, lng, geocode_precision, disposition_id, prior_sale_date, is_manual, entered_by, created_at, updated_at"
     )
     .single();
 
@@ -289,6 +289,8 @@ export type SubmitAppointmentInput = {
   nameChanged: boolean;
   updatedFirstName: string | null;
   updatedLastName: string | null;
+  phoneChanged: boolean;
+  updatedPhone: string | null;
 };
 
 export type SubmitAppointmentResult = { ok: true; updatedLead: Lead } | { ok: false; error: string };
@@ -319,6 +321,21 @@ export async function submitAppointment(
     });
     if (nameError) {
       return { ok: false, error: `Couldn't update name: ${nameError.message}` };
+    }
+  }
+
+  // Plain update (not a security-definer RPC like the name change above)
+  // — leads_update RLS already permits this rep to edit any field on a
+  // lead they can currently see, the same condition that made the name
+  // RPC's own check pass in the first place; phone isn't zip-scoped or
+  // otherwise sensitive enough to need its own dedicated function.
+  if (input.phoneChanged) {
+    const { error: phoneError } = await supabase
+      .from("leads")
+      .update({ phone: input.updatedPhone, updated_at: new Date().toISOString() })
+      .eq("id", input.leadId);
+    if (phoneError) {
+      return { ok: false, error: `Couldn't update phone: ${phoneError.message}` };
     }
   }
 
@@ -358,7 +375,7 @@ export async function submitAppointment(
   const { data: refreshed, error: refetchError } = await supabase
     .from("leads")
     .select(
-      "id, first_name, last_name, address_line, city, state, zipcode, lat, lng, geocode_precision, disposition_id, prior_sale_date, is_manual, entered_by, profiles!entered_by(full_name), created_at, updated_at"
+      "id, first_name, last_name, address_line, city, state, zipcode, phone, lat, lng, geocode_precision, disposition_id, prior_sale_date, is_manual, entered_by, profiles!entered_by(full_name), created_at, updated_at"
     )
     .eq("id", input.leadId)
     .single();

@@ -12,6 +12,7 @@ import {
   rescheduleAppointment,
   saveAppointmentAssignments,
   updateAppointmentLeadName,
+  updateAppointmentNote,
   updateAppointmentScheduledAt,
   updateAppointmentStatus,
 } from "./actions";
@@ -57,10 +58,12 @@ export function AppointmentDetailPanel({
   notes,
   activeProfiles,
   sectionOrder,
+  currentUserId,
   onClose,
   onAppointmentUpdated,
   onAssignmentsUpdated,
   onNoteAdded,
+  onNoteUpdated,
   onLeadNameUpdated,
   onDeleted,
 }: {
@@ -72,10 +75,12 @@ export function AppointmentDetailPanel({
   notes: AppointmentNote[];
   activeProfiles: ActiveProfile[];
   sectionOrder: string[];
+  currentUserId: string;
   onClose: () => void;
   onAppointmentUpdated: (updated: Appointment) => void;
   onAssignmentsUpdated: (newAssignments: AppointmentAssignment[]) => void;
   onNoteAdded: (note: AppointmentNote) => void;
+  onNoteUpdated: (note: AppointmentNote) => void;
   onLeadNameUpdated: (leadId: string, firstName: string | null, lastName: string | null) => void;
   onDeleted: (appointmentId: string) => void;
 }) {
@@ -104,6 +109,11 @@ export function AppointmentDetailPanel({
   const [newNoteText, setNewNoteText] = useState("");
   const [isSavingNote, startNoteSave] = useTransition();
   const [noteError, setNoteError] = useState<string | null>(null);
+
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
+  const [editNoteDraft, setEditNoteDraft] = useState("");
+  const [editNoteError, setEditNoteError] = useState<string | null>(null);
+  const [isSavingNoteEdit, startNoteEditSave] = useTransition();
 
   const [isMarkingDeal, startMarkDeal] = useTransition();
 
@@ -274,6 +284,27 @@ export function AppointmentDetailPanel({
     });
   }
 
+  function handleStartEditNote(n: AppointmentNote) {
+    setEditingNoteId(n.id);
+    setEditNoteDraft(n.note);
+    setEditNoteError(null);
+  }
+
+  function handleSaveNoteEdit(n: AppointmentNote) {
+    const text = editNoteDraft.trim();
+    if (!text) return;
+    setEditNoteError(null);
+    startNoteEditSave(async () => {
+      const result = await updateAppointmentNote(n.id, text);
+      if (!result.ok) {
+        setEditNoteError(result.error);
+        return;
+      }
+      onNoteUpdated({ ...n, note: result.note });
+      setEditingNoteId(null);
+    });
+  }
+
   function handleSubmitDeal() {
     window.open(`${DEAL_TOOL_URL}/submit`, "_blank");
     startMarkDeal(async () => {
@@ -359,6 +390,9 @@ export function AppointmentDetailPanel({
               Go to Lead
             </Link>
           </div>
+        )}
+        {lead?.phone && (
+          <p className="mt-1 text-sm text-black/70 dark:text-white/70">{lead.phone}</p>
         )}
       </div>
     ),
@@ -539,10 +573,55 @@ export function AppointmentDetailPanel({
 
           {notes.map((n) => (
             <div key={n.id} className="text-sm">
-              <p className="text-xs text-black/50 dark:text-white/50">
-                {n.author_name} · {new Date(n.created_at).toLocaleString()}
-              </p>
-              <p className="whitespace-pre-wrap">{n.note}</p>
+              <div className="flex items-start justify-between gap-2">
+                <p className="text-xs text-black/50 dark:text-white/50">
+                  {n.author_name} · {new Date(n.created_at).toLocaleString()}
+                </p>
+                {/* Own-notes-only, matches appointment_notes_update_own_admin
+                    RLS exactly — admins can't edit another admin's note. */}
+                {n.user_id === currentUserId && editingNoteId !== n.id && (
+                  <button
+                    onClick={() => handleStartEditNote(n)}
+                    className="shrink-0 text-xs text-black/50 hover:text-black dark:text-white/50 dark:hover:text-white"
+                  >
+                    Edit
+                  </button>
+                )}
+              </div>
+              {editingNoteId === n.id ? (
+                <div className="mt-1 space-y-1">
+                  <textarea
+                    value={editNoteDraft}
+                    onChange={(e) => setEditNoteDraft(e.target.value)}
+                    rows={3}
+                    className="w-full rounded border border-black/15 px-2 py-1 text-base md:text-sm dark:border-white/20 dark:bg-transparent"
+                  />
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => handleSaveNoteEdit(n)}
+                      disabled={!editNoteDraft.trim() || isSavingNoteEdit}
+                      className="rounded bg-black px-2 py-1 text-xs font-medium text-white disabled:opacity-50 dark:bg-white dark:text-black"
+                    >
+                      {isSavingNoteEdit ? "Saving…" : "Save"}
+                    </button>
+                    <button
+                      onClick={() => {
+                        setEditingNoteId(null);
+                        setEditNoteError(null);
+                      }}
+                      disabled={isSavingNoteEdit}
+                      className="rounded border border-black/15 px-2 py-1 text-xs disabled:opacity-50 dark:border-white/20"
+                    >
+                      Cancel
+                    </button>
+                    {editNoteError && (
+                      <span className="text-xs text-red-600 dark:text-red-400">{editNoteError}</span>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <p className="whitespace-pre-wrap">{n.note}</p>
+              )}
             </div>
           ))}
         </div>

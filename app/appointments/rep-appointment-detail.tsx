@@ -183,6 +183,9 @@ export function RepAppointmentDetail({
             ) : (
               <p className="text-sm text-black/60 dark:text-white/60">—</p>
             )}
+            {lead?.phone && (
+              <p className="mt-0.5 text-sm text-black/60 dark:text-white/60">{lead.phone}</p>
+            )}
           </div>
           <Button variant="ghost" size="sm" onClick={onClose}>
             Close
