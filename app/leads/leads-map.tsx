@@ -41,6 +41,32 @@ function readSavedViewport(): SavedViewport | null {
   }
 }
 
+// The zoom level beyond which clustering stops entirely and every pin
+// always shows individually — the one of Mapbox's two clustering knobs
+// (the other being clusterRadius, left fixed) that actually matches "I
+// don't want to have to zoom in so much to see individual leads."
+// Per-device preference (like the viewport above), not an org-wide
+// setting — purely a display preference with zero effect on which leads
+// anyone can see, so there's no reason for it to be anything but local.
+const DEFAULT_CLUSTER_MAX_ZOOM = 14;
+const CLUSTER_MAX_ZOOM_STORAGE_KEY = "leads-map-cluster-max-zoom-v1";
+const CLUSTER_MAX_ZOOM_MIN = 10;
+const CLUSTER_MAX_ZOOM_MAX = 18;
+
+function readSavedClusterMaxZoom(): number {
+  try {
+    const raw = localStorage.getItem(CLUSTER_MAX_ZOOM_STORAGE_KEY);
+    if (!raw) return DEFAULT_CLUSTER_MAX_ZOOM;
+    const parsed = Number(raw);
+    if (Number.isFinite(parsed) && parsed >= CLUSTER_MAX_ZOOM_MIN && parsed <= CLUSTER_MAX_ZOOM_MAX) {
+      return parsed;
+    }
+    return DEFAULT_CLUSTER_MAX_ZOOM;
+  } catch {
+    return DEFAULT_CLUSTER_MAX_ZOOM;
+  }
+}
+
 type LocatedLead = Lead & { lat: number; lng: number };
 
 // Mapbox's own GeoJSON clustering (GPU-rendered circle/symbol layers) is
@@ -176,6 +202,50 @@ export function LeadsMap({
   const [stuck, setStuck] = useState(false);
   const [remountKey, setRemountKey] = useState(0);
   const [savedViewport] = useState(() => readSavedViewport());
+
+  // "Committed" value drives the actual map (via the Source's key, see
+  // below — react-map-gl's <Source> only re-applies the `data` prop on
+  // change, never cluster config, so changing clusterMaxZoom requires an
+  // actual remount of the source, not just a prop update). "Draft" is
+  // the slider's own live position while dragging, so the number shown
+  // updates smoothly without triggering a remount on every tick — only
+  // committed (and the map re-clustered) once the drag ends.
+  const [clusterMaxZoom, setClusterMaxZoom] = useState(() => readSavedClusterMaxZoom());
+  const [clusterMaxZoomDraft, setClusterMaxZoomDraft] = useState(clusterMaxZoom);
+  const [showClusterPanel, setShowClusterPanel] = useState(false);
+  const clusterPanelRef = useRef<HTMLDivElement>(null);
+
+  // Click-outside-to-close, same pattern as WidgetCustomizeMenu/
+  // DispositionSelect elsewhere in the app.
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (clusterPanelRef.current && !clusterPanelRef.current.contains(e.target as Node)) {
+        setShowClusterPanel(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  function commitClusterMaxZoom(next: number) {
+    setClusterMaxZoom(next);
+    setClusterMaxZoomDraft(next);
+    try {
+      localStorage.setItem(CLUSTER_MAX_ZOOM_STORAGE_KEY, String(next));
+    } catch {
+      // Quota/private-mode — preference just won't persist.
+    }
+  }
+
+  function handleResetClusterMaxZoom() {
+    setClusterMaxZoom(DEFAULT_CLUSTER_MAX_ZOOM);
+    setClusterMaxZoomDraft(DEFAULT_CLUSTER_MAX_ZOOM);
+    try {
+      localStorage.removeItem(CLUSTER_MAX_ZOOM_STORAGE_KEY);
+    } catch {
+      // Quota/private-mode — nothing to clean up.
+    }
+  }
 
   const handleMoveEnd = useCallback((e: { viewState: SavedViewport }) => {
     try {
@@ -394,6 +464,67 @@ export function LeadsMap({
             <path strokeLinecap="round" d="M12 2v3M12 19v3M2 12h3M19 12h3" />
           </svg>
         </button>
+        {/* relative wrapper + right-0 anchored panel (not left-0) so this
+            never grows off the left edge of a narrow phone screen — same
+            fix as the dashboard Customize menu's earlier mobile bug. */}
+        <div className="relative" ref={clusterPanelRef}>
+          <button
+            onClick={() => setShowClusterPanel((v) => !v)}
+            className={cn(
+              "flex h-8 w-8 items-center justify-center rounded-full border shadow",
+              showClusterPanel
+                ? "border-blue-600 bg-blue-600 text-white"
+                : "border-black/10 bg-white/90 text-black/60 active:bg-black/10 dark:border-white/10 dark:bg-neutral-950/90 dark:text-white/60 dark:active:bg-white/20"
+            )}
+            aria-label="Adjust lead clustering"
+            title="Adjust lead clustering"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="h-4 w-4">
+              <circle cx="8" cy="8" r="3.5" />
+              <circle cx="16" cy="16" r="3.5" />
+            </svg>
+          </button>
+          {showClusterPanel && (
+            <div className="absolute right-0 top-9 z-10 w-56 rounded-xl border border-black/15 bg-white p-3 shadow-lg dark:border-white/20 dark:bg-neutral-900">
+              <div className="flex items-center justify-between gap-2">
+                <label className="text-xs font-medium text-black/70 dark:text-white/70">
+                  Cluster until zoom {clusterMaxZoomDraft}
+                </label>
+              </div>
+              <input
+                type="range"
+                min={CLUSTER_MAX_ZOOM_MIN}
+                max={CLUSTER_MAX_ZOOM_MAX}
+                step={1}
+                value={clusterMaxZoomDraft}
+                // Updates the displayed number on every tick (cheap,
+                // pure UI feedback) but only actually re-clusters the
+                // map — see the Source's key comment above for why a
+                // remount is what's required — once the drag settles,
+                // via onChange/onMouseUp/onTouchEnd below. Avoids
+                // triggering a source remount on every pixel of drag.
+                onChange={(e) => setClusterMaxZoomDraft(Number(e.target.value))}
+                onMouseUp={(e) => commitClusterMaxZoom(Number(e.currentTarget.value))}
+                onTouchEnd={(e) => commitClusterMaxZoom(Number(e.currentTarget.value))}
+                className="mt-2 w-full"
+              />
+              <p className="mt-1 text-[11px] text-black/50 dark:text-white/50">
+                Lower = pins split apart sooner, without zooming in as far.
+              </p>
+              {/* Only shown while this panel is open, not a persistent
+                  control elsewhere on the map. */}
+              {clusterMaxZoom !== DEFAULT_CLUSTER_MAX_ZOOM && (
+                <button
+                  type="button"
+                  onClick={handleResetClusterMaxZoom}
+                  className="mt-2 text-xs text-blue-600 hover:underline dark:text-blue-400"
+                >
+                  Reset to default
+                </button>
+              )}
+            </div>
+          )}
+        </div>
       </div>
       <Map
       key={remountKey}
@@ -426,11 +557,17 @@ export function LeadsMap({
     >
       {!selectMode && (
         <Source
+          // Keyed on the committed clusterMaxZoom so changing it forces
+          // a real remount — <Source>'s own update logic (react-map-gl)
+          // only ever re-applies `data` on a prop change, never cluster
+          // config, so a plain prop swap alone would silently do
+          // nothing to the already-created Mapbox source underneath.
+          key={`leads-${clusterMaxZoom}`}
           id="leads"
           type="geojson"
           data={geojson}
           cluster={true}
-          clusterMaxZoom={14}
+          clusterMaxZoom={clusterMaxZoom}
           clusterRadius={50}
         >
           <Layer {...CLUSTER_LAYER} />
