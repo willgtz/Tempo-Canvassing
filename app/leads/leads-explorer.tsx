@@ -506,6 +506,21 @@ export function LeadsExplorer({
                 >
                   All
                 </button>
+                {/* Toggles the "" key — filteredLeads already keys off
+                    lead.disposition_id ?? "", so this needs no separate
+                    filter logic, just a way to select it. */}
+                <button
+                  onClick={() => toggleDisposition("")}
+                  className={cn(
+                    "flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors",
+                    dispositionFilter.has("")
+                      ? "border-blue-600 bg-blue-600 text-white dark:border-blue-500 dark:bg-blue-500"
+                      : "border-black/15 hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+                  )}
+                >
+                  <span className="inline-block h-2 w-2 rounded-full border border-black/20 dark:border-white/30" />
+                  No disposition
+                </button>
                 {dispositions.map((d) => (
                   <button
                     key={d.id}
@@ -622,6 +637,18 @@ export function LeadsExplorer({
               )}
             >
               All
+            </button>
+            <button
+              onClick={() => toggleDisposition("")}
+              className={cn(
+                "flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors",
+                dispositionFilter.has("")
+                  ? "border-blue-600 bg-blue-600 text-white dark:border-blue-500 dark:bg-blue-500"
+                  : "border-black/15 hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+              )}
+            >
+              <span className="inline-block h-2 w-2 rounded-full border border-black/20 dark:border-white/30" />
+              No disposition
             </button>
             {dispositions.map((d) => (
               <button

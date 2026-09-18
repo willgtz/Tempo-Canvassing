@@ -41,7 +41,11 @@ export function AllLeadsExplorer({
     const search = appliedSearchQuery.trim().toLowerCase();
 
     return leadsState.filter((lead) => {
-      if (dispositionFilter !== "all" && lead.disposition_id !== dispositionFilter) return false;
+      if (dispositionFilter === "none") {
+        if (lead.disposition_id !== null) return false;
+      } else if (dispositionFilter !== "all" && lead.disposition_id !== dispositionFilter) {
+        return false;
+      }
       if (sourceFilter === "manual" && !lead.is_manual) return false;
       if (sourceFilter === "batch" && lead.is_manual) return false;
       if (zip && !lead.zipcode.includes(zip)) return false;
@@ -188,6 +192,7 @@ export function AllLeadsExplorer({
             className="block rounded border border-black/15 px-2 py-1 text-sm dark:border-white/20 dark:bg-transparent"
           >
             <option value="all">All</option>
+            <option value="none">No disposition</option>
             {dispositions.map((d) => (
               <option key={d.id} value={d.id}>
                 {d.name}

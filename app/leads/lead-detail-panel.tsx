@@ -1,7 +1,15 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
-import { updateLeadDisposition, updateLeadPriorSaleDate, updateLeadName, addLeadNote, archiveLead } from "./actions";
+import {
+  updateLeadDisposition,
+  updateLeadPriorSaleDate,
+  updateLeadName,
+  addLeadNote,
+  archiveLead,
+  getLeadVisibility,
+  type LeadVisibilityEntry,
+} from "./actions";
 import { SetAppointmentModal } from "./set-appointment-modal";
 import { DispositionSelect } from "./disposition-select";
 import { AddressActionsMenu } from "@/components/address-actions-menu";
@@ -9,6 +17,14 @@ import { getCurrentLocation, distanceFeet } from "@/lib/geo";
 import { useSlideIn } from "@/lib/use-slide-in";
 import { cn } from "@/components/ui/cn";
 import type { AppointmentFormField, Disposition, Lead } from "./types";
+
+const VISIBILITY_REASON_LABELS: Record<string, string> = {
+  admin: "Admin",
+  zip: "Zip coverage",
+  manual_entry: "Entered this lead",
+  teammate_manual_entry: "Teammate of who entered it",
+  appointment_assignment: "Assigned to an appointment",
+};
 
 type Note = {
   id: string;
@@ -79,6 +95,9 @@ export function LeadDetailPanel({
   const [archiveError, setArchiveError] = useState<string | null>(null);
   const [isArchiving, startArchiving] = useTransition();
 
+  const [visibility, setVisibility] = useState<LeadVisibilityEntry[] | null>(null);
+  const [visibilityError, setVisibilityError] = useState<string | null>(null);
+
   function handleArchive() {
     if (!confirm("Archive this lead? It will disappear from the map and list for everyone.")) return;
     setArchiveError(null);
@@ -122,6 +141,24 @@ export function LeadDetailPanel({
       cancelled = true;
     };
   }, [lead.id]);
+
+  // Admin-only — skip the call entirely for a rep/team_lead, who'd just
+  // get lead_visibility's "Not authorized" exception back anyway.
+  useEffect(() => {
+    if (!isAdmin) return;
+    let cancelled = false;
+    getLeadVisibility(lead.id).then((result) => {
+      if (cancelled) return;
+      if (!result.ok) {
+        setVisibilityError(result.error);
+        return;
+      }
+      setVisibility(result.visibility);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [lead.id, isAdmin]);
 
   const dispositionChanged = (dispositionId || null) !== (lead.disposition_id ?? null);
   const priorSaleDateChanged = (priorSaleDate || null) !== (lead.prior_sale_date ?? null);
@@ -364,7 +401,40 @@ export function LeadDetailPanel({
               <p className="text-xs text-red-600 dark:text-red-400">{priorSaleDateError}</p>
             )}
           </div>
-        ) : (
+        ) : null}
+
+        {isAdmin && (
+          <details className="mt-4 space-y-2 border-t border-black/10 pt-4 text-sm dark:border-white/10">
+            <summary className="cursor-pointer select-none text-xs font-medium">
+              Who can see this lead{visibility ? ` (${visibility.length})` : ""}
+            </summary>
+            {visibilityError && (
+              <p className="mt-2 text-xs text-red-600 dark:text-red-400">{visibilityError}</p>
+            )}
+            {!visibility && !visibilityError && (
+              <p className="mt-2 text-xs text-black/50 dark:text-white/50">Loading…</p>
+            )}
+            {visibility && visibility.length === 0 && (
+              <p className="mt-2 text-xs italic text-black/40 dark:text-white/40">
+                No active user currently has visibility into this lead.
+              </p>
+            )}
+            {visibility && visibility.length > 0 && (
+              <ul className="mt-2 space-y-1.5">
+                {visibility.map((v) => (
+                  <li key={v.userId} className="text-xs">
+                    <span className="font-medium">{v.fullName}</span>{" "}
+                    <span className="text-black/50 dark:text-white/50">
+                      — {v.reasons.map((r) => VISIBILITY_REASON_LABELS[r] ?? r).join(", ")}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </details>
+        )}
+
+        {!isAdmin && (
           lead.prior_sale_date && (
             <p className="mt-2 text-sm text-black/70 dark:text-white/70">
               Sold {new Date(`${lead.prior_sale_date}T00:00:00`).toLocaleDateString()}

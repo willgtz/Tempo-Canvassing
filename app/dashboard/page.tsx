@@ -145,6 +145,7 @@ export default async function DashboardPage() {
       currentGoal={currentGoal}
       pastGoals={pastGoals}
       today={laToday}
+      currentUserId={session.userId}
     />
   );
 }

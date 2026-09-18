@@ -4,6 +4,7 @@ import { StatTile } from "@/components/dashboard/stat-tile";
 import { BarChart, type BarChartItem } from "@/components/dashboard/bar-chart";
 import { TrendChart } from "@/components/dashboard/trend-chart";
 import { DoorKnockGoalCard } from "@/components/dashboard/door-knock-goal-card";
+import { DoorKnockDayTile } from "@/components/dashboard/door-knock-day-tile";
 import { WidgetCustomizeMenu } from "@/components/dashboard/widget-customize-menu";
 import { useWidgetVisibility } from "@/components/dashboard/use-widget-visibility";
 import { Card } from "@/components/ui/card";
@@ -35,7 +36,7 @@ const WIDGETS = [
   { id: "total", label: "Total leads assigned" },
   { id: "last7", label: "Created in last 7 days" },
   { id: "last30", label: "Created in last 30 days" },
-  { id: "doorsKnockedToday", label: "Doors knocked (today)" },
+  { id: "doorsKnockedToday", label: "Doors knocked (pick a day)" },
   { id: "doorsKnocked", label: "Doors knocked (30 days)" },
   { id: "doorKnockGoal", label: "Door-Knock Goal" },
   { id: "withoutLocation", label: "Leads without a location" },
@@ -50,11 +51,13 @@ export function RepDashboardClient({
   currentGoal,
   pastGoals,
   today,
+  currentUserId,
 }: {
   stats: Stats;
   currentGoal: GoalRow | null;
   pastGoals: GoalRow[];
   today: string;
+  currentUserId: string;
 }) {
   const { isVisible, toggle } = useWidgetVisibility("rep-dashboard-hidden-widgets");
 
@@ -75,14 +78,11 @@ export function RepDashboardClient({
         {isVisible("last7") && <StatTile label="Created in last 7 days" value={stats.last7} />}
         {isVisible("last30") && <StatTile label="Created in last 30 days" value={stats.last30} />}
         {isVisible("doorsKnockedToday") && (
-          <StatTile
-            label="Doors knocked (today)"
-            value={stats.doorsKnockedToday}
-            hint={
-              stats.doorsKnockedTotalToday > stats.doorsKnockedToday
-                ? `${stats.doorsKnockedTotalToday - stats.doorsKnockedToday} more not counted — too far from the lead's saved location`
-                : undefined
-            }
+          <DoorKnockDayTile
+            currentUserId={currentUserId}
+            today={today}
+            initialVerified={stats.doorsKnockedToday}
+            initialTotal={stats.doorsKnockedTotalToday}
           />
         )}
         {isVisible("doorsKnocked") && (

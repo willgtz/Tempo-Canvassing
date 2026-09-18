@@ -125,6 +125,34 @@ export async function updateLeadPriorSaleDate(
   return { ok: true };
 }
 
+export type LeadVisibilityEntry = { userId: string; fullName: string; reasons: string[] };
+export type GetLeadVisibilityResult =
+  | { ok: true; visibility: LeadVisibilityEntry[] }
+  | { ok: false; error: string };
+
+// Admin-only: the inverse of leads_select's own OR-logic — who can see
+// this lead, and through which rule (admin/zip/manual entry/teammate of
+// the entering rep/appointment assignment). lead_visibility (schema.sql)
+// has its own inline is_admin() check — this is just a clean UI gate/
+// error instead of letting a non-admin's call fail with a raw exception.
+export async function getLeadVisibility(leadId: string): Promise<GetLeadVisibilityResult> {
+  const session = await getAdminSession();
+  if (!session) return { ok: false, error: "Unauthorized" };
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("lead_visibility", { p_lead_id: leadId });
+  if (error) return { ok: false, error: error.message };
+
+  return {
+    ok: true,
+    visibility: (data ?? []).map((row: { user_id: string; full_name: string; reasons: string[] }) => ({
+      userId: row.user_id,
+      fullName: row.full_name,
+      reasons: row.reasons,
+    })),
+  };
+}
+
 export type UpdateLeadNameResult = { ok: true } | { ok: false; error: string };
 
 // Any rep who can currently see the lead can correct its name — a CSV
