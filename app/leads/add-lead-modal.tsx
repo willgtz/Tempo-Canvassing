@@ -6,6 +6,7 @@ import { useSlideIn } from "@/lib/use-slide-in";
 import { cn } from "@/components/ui/cn";
 import { AddressAutocomplete } from "@/components/address-autocomplete";
 import { DispositionSelect } from "./disposition-select";
+import { getCurrentLocation } from "@/lib/geo";
 import type { Disposition, Lead } from "./types";
 
 export function AddLeadModal({
@@ -35,6 +36,19 @@ export function AddLeadModal({
     e.preventDefault();
     setError(null);
     startTransition(async () => {
+      // Best-effort — same "soft check" as editing an existing lead's
+      // disposition: the lead always saves either way, this only
+      // decides whether it counts toward the rep's verified door-knock
+      // count (the DB trigger recomputes that server-side from these
+      // coordinates against the address just geocoded).
+      let location: { lat: number; lng: number } | null = null;
+      try {
+        location = await getCurrentLocation();
+      } catch {
+        // No location available — addManualLead still succeeds, it just
+        // won't count as a verified knock.
+      }
+
       const result = await addManualLead({
         firstName: firstName || null,
         lastName: lastName || null,
@@ -46,6 +60,8 @@ export function AddLeadModal({
         email: email || null,
         notes: notes || null,
         dispositionId: dispositionId || null,
+        eventLat: location?.lat,
+        eventLng: location?.lng,
       });
       if (!result.ok) {
         setError(result.error);

@@ -198,6 +198,14 @@ export type AddManualLeadInput = {
   email: string | null;
   notes: string | null;
   dispositionId: string | null;
+  // Best-effort door-knock location capture — same "soft check" as
+  // updateLeadDisposition: the lead always saves either way, this only
+  // affects whether it counts toward the rep's verified door-knock
+  // count. The DB trigger (compute_door_knock_verification_history,
+  // schema.sql) is what actually recomputes verified/distance_ft from
+  // these coordinates against the lead's own just-geocoded lat/lng.
+  eventLat?: number;
+  eventLng?: number;
 };
 
 export type AddManualLeadResult = { ok: true; lead: Lead } | { ok: false; error: string };
@@ -266,6 +274,35 @@ export async function addManualLead(input: AddManualLeadInput): Promise<AddManua
   if (error || !data) {
     return { ok: false, error: error?.message ?? "Failed to add lead." };
   }
+
+  // Door-knock credit for entering this lead — same lead_history shape
+  // updateLeadDisposition already writes (field_changed: 'disposition',
+  // source defaults to 'user' at the column level), so this becomes a
+  // door_knock_events row through the exact same existing path. Written
+  // unconditionally (even with no disposition picked) since the ask is
+  // "entering the lead while nearby counts," not "picking a disposition
+  // while nearby counts" — old_value is "None" because the lead didn't
+  // exist a moment ago, so there's no prior state to reference.
+  let newDispositionName = "None";
+  if (input.dispositionId) {
+    const { data: dispositionRow } = await supabase
+      .from("dispositions")
+      .select("name")
+      .eq("id", input.dispositionId)
+      .maybeSingle();
+    newDispositionName = dispositionRow?.name ?? "Unknown";
+  }
+  // Best-effort — the lead itself is already saved at this point, same
+  // convention as the note insert just below.
+  await supabase.from("lead_history").insert({
+    lead_id: data.id,
+    user_id: session.userId,
+    field_changed: "disposition",
+    old_value: "None",
+    new_value: newDispositionName,
+    event_lat: input.eventLat ?? null,
+    event_lng: input.eventLng ?? null,
+  });
 
   const noteText = input.notes?.trim();
   if (noteText) {
