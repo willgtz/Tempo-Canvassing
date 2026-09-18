@@ -27,10 +27,13 @@ export default async function AdminDashboardPage() {
   const supabase = await createClient();
 
   const now = new Date();
-  const thirtyDaysAgo = new Date(now);
-  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-  const dateOnly = (d: Date) => d.toISOString().slice(0, 10);
   const laToday = laDateOnly(now);
+  // First of the current calendar month, LA-time — the "doors knocked by
+  // rep" card now shows a navigable calendar month instead of a rolling
+  // 30-day window (DoorKnockMonthBreakdown handles past months entirely
+  // client-side); this is just the initial (current-month) server-
+  // computed value, same as laToday seeds the day-picker.
+  const laFirstOfMonth = `${laToday.slice(0, 7)}-01`;
 
   // is_admin(auth.uid()) bypasses zip-based RLS on leads, and
   // subordinate_zip_assignments(admin_id) returns every active assignment
@@ -61,12 +64,12 @@ export default async function AdminDashboardPage() {
         .range(from, to)
     ),
     supabase.rpc("door_knock_counts", {
-      from_date: dateOnly(thirtyDaysAgo),
-      to_date: dateOnly(now),
+      from_date: laFirstOfMonth,
+      to_date: laToday,
     }),
     // Same RPC, today only (LA-time boundary — see laDateOnly's comment
     // on why toISOString() would be wrong here) — the "who's knocking
-    // right now, today" companion to the 30-day rolling view above.
+    // right now, today" companion to the current-month view above.
     supabase.rpc("door_knock_counts", { from_date: laToday, to_date: laToday }),
     supabase.from("dispositions").select("id, name, color, sort_order").order("sort_order"),
     supabase.from("profiles").select("id, full_name, role, active").order("full_name"),

@@ -6,6 +6,8 @@ import { BarChart } from "@/components/dashboard/bar-chart";
 import { TrendChart } from "@/components/dashboard/trend-chart";
 import { DoorKnockGoalsTable } from "@/components/dashboard/door-knock-goals-table";
 import { DoorKnockDayBreakdown } from "@/components/dashboard/door-knock-day-breakdown";
+import { DoorKnockMonthBreakdown } from "@/components/dashboard/door-knock-month-breakdown";
+import { DoorKnockRangeBreakdown } from "@/components/dashboard/door-knock-range-breakdown";
 import { WidgetCustomizeMenu } from "@/components/dashboard/widget-customize-menu";
 import { useWidgetVisibility } from "@/components/dashboard/use-widget-visibility";
 import { Card } from "@/components/ui/card";
@@ -53,7 +55,8 @@ const WIDGETS = [
   { id: "disposition", label: "Leads by disposition" },
   { id: "byRep", label: "Leads by rep" },
   { id: "doorsKnockedToday", label: "Doors knocked by rep (pick a day)" },
-  { id: "doorsKnocked", label: "Doors knocked by rep (30 days)" },
+  { id: "doorsKnocked", label: "Doors knocked by rep (by month)" },
+  { id: "doorsKnockedRange", label: "Doors knocked by rep (custom range)" },
   { id: "doorKnockGoals", label: "Door-knock goals by rep" },
   { id: "zip", label: "Leads by zip" },
 ];
@@ -194,19 +197,6 @@ export function AdminDashboardClient({
       value: count,
     })).sort((a, b) => b.value - a.value);
   }, [filteredLeads, zipToUserIds, nameByUserId]);
-
-  // door_knock_counts has no per-lead/zip breakdown (it's a dedup'd count,
-  // not raw rows) — only the rep filter applies here, not the zip one.
-  // Already scoped to whoever this admin can see (everyone, since
-  // is_admin() bypasses can_view_door_knock_count) and already sorted by
-  // verified_count desc.
-  const doorsKnockedBreakdown = useMemo(() => {
-    const rows =
-      repFilter === "all" ? doorKnockCounts : doorKnockCounts.filter((r) => r.user_id === repFilter);
-    return rows
-      .map((r) => ({ label: r.full_name, value: r.verified_count }))
-      .sort((a, b) => b.value - a.value);
-  }, [doorKnockCounts, repFilter]);
 
   // Unlike the BarChart breakdowns above, this doesn't hide behind
   // showRepBreakdown when a single rep is selected — a single rep's own
@@ -364,10 +354,18 @@ export function AdminDashboardClient({
         )}
         {isVisible("doorsKnocked") && (
           <Card className="p-4">
-            <h2 className="text-sm font-medium">Doors knocked by rep (30 days)</h2>
-            <div className="mt-3">
-              <BarChart items={doorsKnockedBreakdown} />
-            </div>
+            <h2 className="text-sm font-medium">Doors knocked by rep (by month)</h2>
+            <DoorKnockMonthBreakdown
+              today={today}
+              repFilter={repFilter}
+              initialCounts={doorKnockCounts}
+            />
+          </Card>
+        )}
+        {isVisible("doorsKnockedRange") && (
+          <Card className="p-4">
+            <h2 className="text-sm font-medium">Doors knocked by rep (custom range)</h2>
+            <DoorKnockRangeBreakdown today={today} repFilter={repFilter} />
           </Card>
         )}
         {isVisible("doorKnockGoals") && (
