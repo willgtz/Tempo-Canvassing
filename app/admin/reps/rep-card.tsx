@@ -5,6 +5,7 @@ import {
   assignZip,
   unassignZip,
   assignAllZips,
+  unassignAllZips,
   updateUser,
   sendPasswordReset,
   setUserPassword,
@@ -232,6 +233,22 @@ export function RepCard({
         return;
       }
       setAssignments(result.assignments);
+    });
+  }
+
+  function handleRemoveAllZips() {
+    if (assignments.length === 0) return;
+    if (!confirm(`Remove all ${assignments.length} zip assignments from ${user.full_name}?`)) {
+      return;
+    }
+    setZipError(null);
+    startZipSave(async () => {
+      const result = await unassignAllZips(user.id);
+      if (!result.ok) {
+        setZipError(result.error);
+        return;
+      }
+      setAssignments([]);
     });
   }
 
@@ -513,6 +530,14 @@ export function RepCard({
             className="rounded border border-black/15 px-3 py-1 text-sm disabled:opacity-50 dark:border-white/20"
           >
             Assign All Zips
+          </button>
+          <button
+            type="button"
+            onClick={handleRemoveAllZips}
+            disabled={isSavingZip || assignments.length === 0}
+            className="rounded border border-red-600/40 px-3 py-1 text-sm text-red-600 disabled:opacity-50 dark:border-red-400/40 dark:text-red-400"
+          >
+            Remove All Zips
           </button>
           {zipError && <span className="text-xs text-red-600 dark:text-red-400">{zipError}</span>}
         </form>

@@ -632,3 +632,27 @@ export async function unassignZip(assignmentId: string): Promise<UnassignZipResu
   revalidatePath("/admin/reps/add");
   return { ok: true };
 }
+
+export async function unassignAllZips(userId: string): Promise<UnassignZipResult> {
+  const session = await getAdminSession();
+  if (!session) return { ok: false, error: "Unauthorized" };
+
+  const supabase = await createClient();
+
+  // Same history-preserving close-out as unassignZip, just applied to
+  // every currently-active row for this user in one statement.
+  const { error } = await supabase
+    .from("zip_assignments")
+    .update({ unassigned_at: new Date().toISOString(), unassigned_by: session.userId })
+    .eq("user_id", userId)
+    .is("unassigned_at", null);
+
+  if (error) {
+    return { ok: false, error: error.message };
+  }
+
+  revalidatePath("/admin/reps/manage");
+  revalidatePath("/admin/reps/inactive");
+  revalidatePath("/admin/reps/add");
+  return { ok: true };
+}
