@@ -12,6 +12,29 @@ export default async function LeadsPage() {
   const session = await requireSession();
   const supabase = await createClient();
 
+  // Rep-filter dropdown scoping: a team_lead should only be able to
+  // browse/preview teammates (same team_id — the admin-managed Teams
+  // grouping, unrelated to the manager_id hierarchy), never the whole
+  // company roster. If they're not on a team at all, there's nothing to
+  // scope to, so they get no rep options. Admin/super_admin are
+  // unrestricted (existing behavior); a plain rep never uses this (see
+  // canFilterByRep below), so their query is skipped entirely.
+  let profilesQuery = supabase.from("profiles").select("id, full_name, role, active").order("full_name");
+  if (session.role === "rep") {
+    // Never shown to a rep (canFilterByRep is false) — skip the round trip.
+    profilesQuery = profilesQuery.eq("id", session.userId).limit(0);
+  } else if (session.role === "team_lead") {
+    const { data: ownProfile } = await supabase
+      .from("profiles")
+      .select("team_id")
+      .eq("id", session.userId)
+      .single();
+    const ownTeamId = ownProfile?.team_id ?? null;
+    profilesQuery = ownTeamId
+      ? profilesQuery.eq("team_id", ownTeamId)
+      : profilesQuery.eq("id", session.userId).limit(0);
+  }
+
   // No manual zip filtering here — leads_select RLS (schema.sql) already
   // scopes this to whatever the signed-in user is allowed to see: their own
   // active zip assignments for a rep, + subordinates' for a team_lead, or
@@ -51,13 +74,15 @@ export default async function LeadsPage() {
     // regardless of what the client sends. Same app_settings row the
     // admin settings page (app/admin/reps/settings) reads/writes.
     supabase.from("app_settings").select("value").eq("key", "door_knock_radius_feet").single(),
-    // Full active-profile list — used to populate the rep filter dropdown
-    // with every rep, regardless of whether they hold a direct zip
-    // assignment, since a rep can now also see leads purely through
-    // team-based sharing. That rep's true effective zips/teammates are
-    // fetched on demand (see /api/reps/[repId]/effective-zips) once
-    // they're actually selected in the filter.
-    supabase.from("profiles").select("id, full_name, role, active").order("full_name"),
+    // Full active-profile list for admin/super_admin — used to populate
+    // the rep filter dropdown with every rep, regardless of whether they
+    // hold a direct zip assignment, since a rep can now also see leads
+    // purely through team-based sharing. A team_lead gets this scoped
+    // above to just their own teammates; a plain rep gets an empty
+    // result (canFilterByRep is false, so the dropdown never renders).
+    // That rep's true effective zips/teammates are fetched on demand
+    // (see /api/reps/[repId]/effective-zips) once actually selected.
+    profilesQuery,
   ]);
 
   if (leadsError || dispositionsError) {

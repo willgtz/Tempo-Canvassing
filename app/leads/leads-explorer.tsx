@@ -814,11 +814,17 @@ export function LeadsExplorer({
           inside the Rep field's own flex item. */}
       {canFilterByRep && repOptions.length === 0 && (
         <p className="mt-2 text-xs text-black/40 dark:text-white/40">
-          No reps have assigned zips yet — assign one in{" "}
-          <a href="/admin/reps/manage" className="underline">
-            Manage Reps
-          </a>{" "}
-          to filter by them here.
+          {isAdmin ? (
+            <>
+              No reps have assigned zips yet — assign one in{" "}
+              <a href="/admin/reps/manage" className="underline">
+                Manage Reps
+              </a>{" "}
+              to filter by them here.
+            </>
+          ) : (
+            "You're not on a team yet, so there's no one to filter by here — ask an admin to add you to a team."
+          )}
         </p>
       )}
       </div>
