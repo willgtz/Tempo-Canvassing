@@ -16,21 +16,29 @@ export default async function TeamsPage() {
   const [
     { data: teams, error: teamsError },
     { data: profiles, error: profilesError },
+    { data: memberships, error: membershipsError },
   ] = await Promise.all([
     supabase.from("teams").select("id, name, created_at").order("name"),
     supabase
       .from("profiles")
-      .select("id, full_name, email, role, active, team_id")
+      .select("id, full_name, email, role, active")
       .order("full_name"),
+    supabase.from("team_memberships").select("user_id, team_id"),
   ]);
 
-  if (teamsError || profilesError) {
+  if (teamsError || profilesError || membershipsError) {
     return (
       <div className="mx-auto w-full max-w-3xl p-6 text-sm text-red-600 dark:text-red-400">
-        Failed to load teams: {teamsError?.message ?? profilesError?.message}
+        Failed to load teams: {teamsError?.message ?? profilesError?.message ?? membershipsError?.message}
       </div>
     );
   }
 
-  return <TeamsClient initialTeams={teams ?? []} profiles={profiles ?? []} />;
+  return (
+    <TeamsClient
+      initialTeams={teams ?? []}
+      profiles={profiles ?? []}
+      initialMemberships={(memberships ?? []).map((m) => ({ userId: m.user_id, teamId: m.team_id }))}
+    />
+  );
 }

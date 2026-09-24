@@ -14,7 +14,7 @@ export default async function InactiveRepsPage() {
     );
   }
 
-  const { profiles, managerOptions, nameById, assignmentsByUser, historyByUser, teams, teamNameById } = data;
+  const { profiles, managerOptions, nameById, assignmentsByUser, historyByUser, teamNameById, teamIdsByUser } = data;
   const inactiveProfiles = profiles.filter((p) => !p.active);
 
   return (
@@ -40,8 +40,7 @@ export default async function InactiveRepsPage() {
             managerName={p.manager_id ? (nameById.get(p.manager_id) ?? null) : null}
             initialAssignments={assignmentsByUser.get(p.id) ?? []}
             zipHistory={historyByUser.get(p.id) ?? []}
-            teams={teams}
-            teamName={p.team_id ? (teamNameById.get(p.team_id) ?? null) : null}
+            teamNames={(teamIdsByUser.get(p.id) ?? []).map((id) => teamNameById.get(id) ?? "Unknown")}
           />
         ))}
       </div>

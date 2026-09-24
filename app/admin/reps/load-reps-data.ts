@@ -15,11 +15,12 @@ export async function loadRepsData() {
     { data: historyRows, error: historyError },
     { data: leadZipRows, error: leadZipsError },
     { data: teams, error: teamsError },
+    { data: memberships, error: membershipsError },
   ] = await Promise.all([
     supabase
       .from("profiles")
       .select(
-        "id, full_name, email, phone, role, active, manager_id, team_id, can_view_company_leaderboard, excluded_from_leaderboard, name_pending"
+        "id, full_name, email, phone, role, active, manager_id, can_view_company_leaderboard, excluded_from_leaderboard, name_pending"
       )
       .order("full_name"),
     supabase
@@ -50,15 +51,27 @@ export async function loadRepsData() {
         .range(from, to)
     ),
     supabase.from("teams").select("id, name").order("name"),
+    supabase.from("team_memberships").select("user_id, team_id"),
   ]);
 
-  const loadError = error ?? assignmentsError ?? historyError ?? leadZipsError ?? teamsError ?? null;
+  const loadError =
+    error ?? assignmentsError ?? historyError ?? leadZipsError ?? teamsError ?? membershipsError ?? null;
 
   const managerOptions = (profiles ?? []).filter((p) =>
     ["team_lead", "admin", "super_admin"].includes(p.role)
   );
   const nameById = new Map((profiles ?? []).map((p) => [p.id, p.full_name]));
   const teamNameById = new Map((teams ?? []).map((t) => [t.id, t.name]));
+
+  // Multi-team: each user can now have any number of rows here, not just
+  // zero-or-one — this map is the read side RepCard/TeamsClient use to
+  // display "Teams: A, B" instead of a single team.
+  const teamIdsByUser = new Map<string, string[]>();
+  for (const m of memberships ?? []) {
+    const list = teamIdsByUser.get(m.user_id) ?? [];
+    list.push(m.team_id);
+    teamIdsByUser.set(m.user_id, list);
+  }
 
   const assignmentsByUser = new Map<string, { id: string; zipcode: string }[]>();
   for (const a of assignments ?? []) {
@@ -119,5 +132,6 @@ export async function loadRepsData() {
     unassignedZips,
     teams: teams ?? [],
     teamNameById,
+    teamIdsByUser,
   };
 }

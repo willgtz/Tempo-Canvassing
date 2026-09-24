@@ -7,10 +7,11 @@ import { createClient } from "@/lib/supabase/server";
 // definer with no built-in caller restriction on their uid param — the role
 // check below is what actually prevents a plain rep from probing another
 // rep's effective visibility through this endpoint. A team_lead is further
-// restricted to reps on their own team (team_id) — the same scoping the
-// rep-filter dropdown itself already applies server-side (app/leads/page.tsx)
-// — so this endpoint can't be used to route around that and probe an
-// out-of-team rep's zips directly by id.
+// restricted to reps who share at least one team with them (team_memberships
+// — a rep can be on several) — the same scoping the rep-filter dropdown
+// itself already applies server-side (app/leads/page.tsx) — so this endpoint
+// can't be used to route around that and probe an out-of-team rep's zips
+// directly by id.
 export async function GET(
   _request: Request,
   ctx: RouteContext<"/api/reps/[repId]/effective-zips">
@@ -25,22 +26,10 @@ export async function GET(
   const supabase = await createClient();
 
   if (session.role === "team_lead") {
-    const { data: ownProfile } = await supabase
-      .from("profiles")
-      .select("team_id")
-      .eq("id", session.userId)
-      .single();
-    const ownTeamId = ownProfile?.team_id ?? null;
-    if (!ownTeamId) {
-      return NextResponse.json({ error: "You're not on a team." }, { status: 403 });
-    }
-    const { data: targetProfile } = await supabase
-      .from("profiles")
-      .select("team_id")
-      .eq("id", repId)
-      .single();
-    if (targetProfile?.team_id !== ownTeamId) {
-      return NextResponse.json({ error: "That rep isn't on your team." }, { status: 403 });
+    const { data: ownTeammateIds } = await supabase.rpc("teammate_ids", { uid: session.userId });
+    const allowed = repId === session.userId || (ownTeammateIds ?? []).includes(repId);
+    if (!allowed) {
+      return NextResponse.json({ error: "That rep isn't on any of your teams." }, { status: 403 });
     }
   }
 

@@ -13,26 +13,32 @@ export default async function LeadsPage() {
   const supabase = await createClient();
 
   // Rep-filter dropdown scoping: a team_lead should only be able to
-  // browse/preview teammates (same team_id — the admin-managed Teams
-  // grouping, unrelated to the manager_id hierarchy), never the whole
-  // company roster. If they're not on a team at all, there's nothing to
-  // scope to, so they get no rep options. Admin/super_admin are
-  // unrestricted (existing behavior); a plain rep never uses this (see
-  // canFilterByRep below), so their query is skipped entirely.
+  // browse/preview teammates (the admin-managed Teams grouping —
+  // team_memberships, possibly several teams at once — unrelated to the
+  // manager_id hierarchy), never the whole company roster. If they're
+  // not on any team at all, there's nothing to scope to, so they get no
+  // rep options. Admin/super_admin are unrestricted (existing
+  // behavior); a plain rep never uses this (see canFilterByRep below),
+  // so their query is skipped entirely.
   let profilesQuery = supabase.from("profiles").select("id, full_name, role, active").order("full_name");
   if (session.role === "rep") {
     // Never shown to a rep (canFilterByRep is false) — skip the round trip.
     profilesQuery = profilesQuery.eq("id", session.userId).limit(0);
   } else if (session.role === "team_lead") {
-    const { data: ownProfile } = await supabase
-      .from("profiles")
+    const { data: ownMemberships } = await supabase
+      .from("team_memberships")
       .select("team_id")
-      .eq("id", session.userId)
-      .single();
-    const ownTeamId = ownProfile?.team_id ?? null;
-    profilesQuery = ownTeamId
-      ? profilesQuery.eq("team_id", ownTeamId)
-      : profilesQuery.eq("id", session.userId).limit(0);
+      .eq("user_id", session.userId);
+    if (!ownMemberships || ownMemberships.length === 0) {
+      profilesQuery = profilesQuery.eq("id", session.userId).limit(0);
+    } else {
+      // teammate_ids (schema.sql) is security definer and returns the
+      // union of every OTHER member across all of the caller's teams —
+      // exactly the roster this dropdown needs, plus self so they can
+      // still pick "(me)" like before.
+      const { data: teammateIds } = await supabase.rpc("teammate_ids", { uid: session.userId });
+      profilesQuery = profilesQuery.in("id", [session.userId, ...(teammateIds ?? [])]);
+    }
   }
 
   // No manual zip filtering here — leads_select RLS (schema.sql) already

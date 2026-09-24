@@ -26,7 +26,6 @@ export type UpdateUserInput = {
   role: UserRole;
   active: boolean;
   managerId: string | null;
-  teamId: string | null;
   canViewCompanyLeaderboard: boolean;
   excludedFromLeaderboard: boolean;
 };
@@ -255,7 +254,6 @@ export async function updateUser(
       role: input.role,
       active: input.active,
       manager_id: input.managerId,
-      team_id: input.teamId,
       can_view_company_leaderboard: input.canViewCompanyLeaderboard,
       excluded_from_leaderboard: input.excludedFromLeaderboard,
     })
@@ -575,10 +573,11 @@ export async function renameTeam(teamId: string, name: string): Promise<RenameTe
 
 export type DeleteTeamResult = { ok: true } | { ok: false; error: string };
 
-// No "must be empty first" precondition — team_id's ON DELETE SET NULL
-// (schema.sql) already makes this safe, a profile can never be destroyed
-// by it. The confirm() dialog in teams-client.tsx surfaces the member
-// count before this runs, so the admin isn't surprised by it.
+// No "must be empty first" precondition — team_memberships' ON DELETE
+// CASCADE (schema.sql) already makes this safe, a profile can never be
+// destroyed by it, just unmembered from this one team. The confirm()
+// dialog in teams-client.tsx surfaces the member count before this
+// runs, so the admin isn't surprised by it.
 export async function deleteTeam(teamId: string): Promise<DeleteTeamResult> {
   const session = await getAdminSession();
   if (!session) return { ok: false, error: "Unauthorized" };
@@ -591,18 +590,34 @@ export async function deleteTeam(teamId: string): Promise<DeleteTeamResult> {
   return { ok: true };
 }
 
-export type SetRepTeamResult = { ok: true } | { ok: false; error: string };
+export type TeamMembershipResult = { ok: true } | { ok: false; error: string };
 
-// Single-column write used by the Teams roster editor's add/remove-member
-// controls — a second legitimate path to the same profiles.team_id value
-// that updateUser's teamId field also writes (via RepCard's full profile
-// edit form). Same underlying row either way, so nothing can drift.
-export async function setRepTeam(userId: string, teamId: string | null): Promise<SetRepTeamResult> {
+// A rep can now belong to multiple teams at once (team_memberships,
+// schema.sql) — this just adds one more membership row, leaving any
+// other teams they're already on untouched. unique(user_id, team_id)
+// makes a duplicate add a no-op error rather than a silent double-row.
+export async function addRepToTeam(userId: string, teamId: string): Promise<TeamMembershipResult> {
   const session = await getAdminSession();
   if (!session) return { ok: false, error: "Unauthorized" };
 
   const supabase = await createClient();
-  const { error } = await supabase.from("profiles").update({ team_id: teamId }).eq("id", userId);
+  const { error } = await supabase.from("team_memberships").insert({ user_id: userId, team_id: teamId });
+  if (error) return { ok: false, error: error.code === "23505" ? "Already on this team." : error.message };
+
+  revalidateTeamPaths();
+  return { ok: true };
+}
+
+export async function removeRepFromTeam(userId: string, teamId: string): Promise<TeamMembershipResult> {
+  const session = await getAdminSession();
+  if (!session) return { ok: false, error: "Unauthorized" };
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("team_memberships")
+    .delete()
+    .eq("user_id", userId)
+    .eq("team_id", teamId);
   if (error) return { ok: false, error: error.message };
 
   revalidateTeamPaths();

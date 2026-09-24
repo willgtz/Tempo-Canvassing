@@ -25,7 +25,6 @@ export type ManagedUser = {
   role: UserRole;
   active: boolean;
   manager_id: string | null;
-  team_id: string | null;
   can_view_company_leaderboard: boolean;
   excluded_from_leaderboard: boolean;
   // Set by the invite-user Edge Function on an email-only invite (iOS
@@ -37,7 +36,6 @@ export type ManagedUser = {
 };
 
 type ManagerOption = { id: string; full_name: string; role: string };
-type TeamOption = { id: string; name: string };
 type Assignment = { id: string; zipcode: string };
 type ZipHistoryEntry = {
   id: string;
@@ -57,8 +55,7 @@ export function RepCard({
   managerName,
   initialAssignments,
   zipHistory,
-  teams,
-  teamName,
+  teamNames,
 }: {
   user: ManagedUser;
   managerOptions: ManagerOption[];
@@ -66,8 +63,12 @@ export function RepCard({
   managerName: string | null;
   initialAssignments: Assignment[];
   zipHistory: ZipHistoryEntry[];
-  teams: TeamOption[];
-  teamName: string | null;
+  // A rep can now be on multiple teams (team_memberships, schema.sql) —
+  // this is display-only here; membership itself is managed exclusively
+  // from the dedicated Teams page (/admin/reps/teams), same as how zip
+  // history is shown here but assignment editing has its own section
+  // below rather than living in the profile edit form.
+  teamNames: string[];
 }) {
   const [editing, setEditing] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
@@ -77,7 +78,6 @@ export function RepCard({
   const [role, setRole] = useState<UserRole>(user.role);
   const [active, setActive] = useState(user.active);
   const [managerId, setManagerId] = useState(user.manager_id ?? "");
-  const [teamId, setTeamId] = useState(user.team_id ?? "");
   const [canViewCompanyLeaderboard, setCanViewCompanyLeaderboard] = useState(
     user.can_view_company_leaderboard
   );
@@ -165,7 +165,6 @@ export function RepCard({
     setRole(user.role);
     setActive(user.active);
     setManagerId(user.manager_id ?? "");
-    setTeamId(user.team_id ?? "");
     setCanViewCompanyLeaderboard(user.can_view_company_leaderboard);
     setExcludedFromLeaderboard(user.excluded_from_leaderboard);
     setProfileError(null);
@@ -182,7 +181,6 @@ export function RepCard({
         role,
         active,
         managerId: managerId || null,
-        teamId: teamId || null,
         canViewCompanyLeaderboard,
         excludedFromLeaderboard,
       });
@@ -313,21 +311,6 @@ export function RepCard({
                   ))}
               </select>
             </div>
-            <div className="space-y-1">
-              <label className="text-xs font-medium">Team</label>
-              <select
-                value={teamId}
-                onChange={(e) => setTeamId(e.target.value)}
-                className="w-full rounded border border-black/15 px-2 py-1 text-sm dark:border-white/20 dark:bg-transparent"
-              >
-                <option value="">No team</option>
-                {teams.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name}
-                  </option>
-                ))}
-              </select>
-            </div>
             <label className="flex items-center gap-1.5 self-end pb-1.5 text-sm">
               <input
                 type="checkbox"
@@ -407,7 +390,10 @@ export function RepCard({
               Reports to: {managerName ?? "—"}
             </p>
             <p className="text-xs text-black/50 dark:text-white/50">
-              Team: {teamName ?? "—"}
+              Teams: {teamNames.length > 0 ? teamNames.join(", ") : "—"}{" "}
+              <a href="/admin/reps/teams" className="underline">
+                manage
+              </a>
             </p>
           </div>
           {isSelf ? (

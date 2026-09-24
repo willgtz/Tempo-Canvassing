@@ -22,8 +22,8 @@ export default async function ManageRepsPage() {
     assignmentsByUser,
     historyByUser,
     unassignedZips,
-    teams,
     teamNameById,
+    teamIdsByUser,
   } = data;
   // Inactive reps live on their own tab now (app/admin/reps/inactive) —
   // moved out rather than just shown dimmed here, per William's request,
@@ -80,8 +80,8 @@ export default async function ManageRepsPage() {
         assignmentsByUser={assignmentsByUser}
         historyByUser={historyByUser}
         currentUserId={session.userId}
-        teams={teams}
         teamNameById={teamNameById}
+        teamIdsByUser={teamIdsByUser}
       />
     </div>
   );

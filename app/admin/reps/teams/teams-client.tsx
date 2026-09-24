@@ -1,40 +1,64 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { createTeam, renameTeam, deleteTeam, setRepTeam } from "../actions";
+import { createTeam, renameTeam, deleteTeam, addRepToTeam, removeRepFromTeam } from "../actions";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
 
 type Team = { id: string; name: string; created_at: string };
-type Profile = { id: string; full_name: string; email: string; role: string; active: boolean; team_id: string | null };
+type Profile = { id: string; full_name: string; email: string; role: string; active: boolean };
+// One row per (user, team) pair — a user can appear in multiple rows now
+// that team membership is many-to-many (team_memberships, schema.sql),
+// unlike the old single-team_id model this replaced.
+type Membership = { userId: string; teamId: string };
 
 export function TeamsClient({
   initialTeams,
   profiles,
+  initialMemberships,
 }: {
   initialTeams: Team[];
   profiles: Profile[];
+  initialMemberships: Membership[];
 }) {
   const [teams, setTeams] = useState(initialTeams);
-  const [members, setMembers] = useState(profiles);
+  const [members] = useState(profiles);
+  const [memberships, setMemberships] = useState(initialMemberships);
 
   const [newTeamName, setNewTeamName] = useState("");
   const [createError, setCreateError] = useState<string | null>(null);
   const [isCreating, startCreate] = useTransition();
 
+  const profileById = useMemo(() => new Map(members.map((p) => [p.id, p])), [members]);
   const teamNameById = useMemo(() => new Map(teams.map((t) => [t.id, t.name])), [teams]);
+
   const membersByTeam = useMemo(() => {
     const map = new Map<string, Profile[]>();
-    for (const p of members) {
-      if (!p.team_id) continue;
-      const list = map.get(p.team_id) ?? [];
-      list.push(p);
-      map.set(p.team_id, list);
+    for (const m of memberships) {
+      const profile = profileById.get(m.userId);
+      if (!profile) continue;
+      const list = map.get(m.teamId) ?? [];
+      list.push(profile);
+      map.set(m.teamId, list);
     }
     return map;
-  }, [members]);
-  const unassigned = useMemo(() => members.filter((p) => !p.team_id), [members]);
+  }, [memberships, profileById]);
+
+  const teamIdsByUser = useMemo(() => {
+    const map = new Map<string, string[]>();
+    for (const m of memberships) {
+      const list = map.get(m.userId) ?? [];
+      list.push(m.teamId);
+      map.set(m.userId, list);
+    }
+    return map;
+  }, [memberships]);
+
+  const unassigned = useMemo(
+    () => members.filter((p) => (teamIdsByUser.get(p.id) ?? []).length === 0),
+    [members, teamIdsByUser]
+  );
 
   function handleCreate(e: React.FormEvent) {
     e.preventDefault();
@@ -57,7 +81,10 @@ export function TeamsClient({
         <p className="text-sm text-black/60 dark:text-white/60">
           Reps on the same team automatically share zip coverage and can see
           each other&apos;s manually-entered leads — no need to individually
-          assign each rep to every zip. Each rep belongs to at most one team.
+          assign each rep to every zip. A rep can belong to multiple teams;
+          they share coverage with each team&apos;s other members
+          independently, so being on two teams never shares one team&apos;s
+          pins with the other&apos;s members.
         </p>
       </div>
 
@@ -88,7 +115,8 @@ export function TeamsClient({
               key={team.id}
               team={team}
               teamMembers={membersByTeam.get(team.id) ?? []}
-              addableMembers={members.filter((p) => p.team_id !== team.id)}
+              addableMembers={members.filter((p) => !(teamIdsByUser.get(p.id) ?? []).includes(team.id))}
+              teamIdsByUser={teamIdsByUser}
               teamNameById={teamNameById}
               onRenamed={(name) => {
                 setTeams((prev) =>
@@ -97,13 +125,13 @@ export function TeamsClient({
               }}
               onDeleted={() => {
                 setTeams((prev) => prev.filter((t) => t.id !== team.id));
-                setMembers((prev) => prev.map((p) => (p.team_id === team.id ? { ...p, team_id: null } : p)));
+                setMemberships((prev) => prev.filter((m) => m.teamId !== team.id));
               }}
               onMemberAdded={(userId) => {
-                setMembers((prev) => prev.map((p) => (p.id === userId ? { ...p, team_id: team.id } : p)));
+                setMemberships((prev) => [...prev, { userId, teamId: team.id }]);
               }}
               onMemberRemoved={(userId) => {
-                setMembers((prev) => prev.map((p) => (p.id === userId ? { ...p, team_id: null } : p)));
+                setMemberships((prev) => prev.filter((m) => !(m.userId === userId && m.teamId === team.id)));
               }}
             />
           ))}
@@ -140,6 +168,7 @@ function TeamCard({
   team,
   teamMembers,
   addableMembers,
+  teamIdsByUser,
   teamNameById,
   onRenamed,
   onDeleted,
@@ -149,6 +178,7 @@ function TeamCard({
   team: Team;
   teamMembers: Profile[];
   addableMembers: Profile[];
+  teamIdsByUser: Map<string, string[]>;
   teamNameById: Map<string, string>;
   onRenamed: (name: string) => void;
   onDeleted: () => void;
@@ -207,7 +237,7 @@ function TeamCard({
     setAddError(null);
     if (!addUserId) return;
     startAdd(async () => {
-      const result = await setRepTeam(addUserId, team.id);
+      const result = await addRepToTeam(addUserId, team.id);
       if (!result.ok) {
         setAddError(result.error);
         return;
@@ -220,7 +250,7 @@ function TeamCard({
   function handleRemoveMember(userId: string) {
     setRemovingId(userId);
     startRemove(async () => {
-      const result = await setRepTeam(userId, null);
+      const result = await removeRepFromTeam(userId, team.id);
       if (result.ok) onMemberRemoved(userId);
       setRemovingId(null);
     });
@@ -297,12 +327,16 @@ function TeamCard({
       <form onSubmit={handleAddMember} className="mt-3 flex items-center gap-2">
         <Select value={addUserId} onChange={(e) => setAddUserId(e.target.value)} className="flex-1">
           <option value="">Add member…</option>
-          {addableMembers.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.full_name} ({p.role})
-              {p.team_id ? ` — currently on ${teamNameById.get(p.team_id) ?? "another team"}` : ""}
-            </option>
-          ))}
+          {addableMembers.map((p) => {
+            const otherTeamNames = (teamIdsByUser.get(p.id) ?? [])
+              .map((id) => teamNameById.get(id) ?? "another team");
+            return (
+              <option key={p.id} value={p.id}>
+                {p.full_name} ({p.role})
+                {otherTeamNames.length > 0 ? ` — also on ${otherTeamNames.join(", ")}` : ""}
+              </option>
+            );
+          })}
         </Select>
         <Button type="submit" variant="secondary" size="sm" disabled={isAdding || !addUserId}>
           {isAdding ? "Adding…" : "Add"}
