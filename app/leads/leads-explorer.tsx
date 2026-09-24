@@ -69,8 +69,25 @@ export function LeadsExplorer({
   const focusLeadId = searchParams.get("lead");
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(focusLeadId);
   const [showAddLead, setShowAddLead] = useState(false);
-  const [selectMode, setSelectMode] = useState(false);
-  const [selectedLeadIds, setSelectedLeadIds] = useState<string[]>([]);
+  // "Reuse this route" deep-link from Route History (/leads/routes) —
+  // /leads?reroute=<comma-separated lead ids> drops straight into select
+  // mode with that route's stops pre-selected, so hitting Route rebuilds
+  // it with a fresh current-location origin and fresh Google ordering
+  // rather than replaying stale directions. Some of those leads may no
+  // longer be visible to this viewer (reassigned, archived, deleted) —
+  // silently dropped from the selection, surfaced via rerouteDroppedCount
+  // below rather than erroring.
+  const rerouteParam = searchParams.get("reroute");
+  const rerouteRequestedIds = rerouteParam ? rerouteParam.split(",").filter(Boolean) : [];
+  const rerouteLeadIds = (() => {
+    if (rerouteRequestedIds.length === 0) return [];
+    const visibleIds = new Set(leads.map((l) => l.id));
+    return rerouteRequestedIds.filter((id) => visibleIds.has(id)).slice(0, MAX_ROUTE_STOPS);
+  })();
+  const rerouteDroppedCount = rerouteRequestedIds.length - rerouteLeadIds.length;
+  const [selectMode, setSelectMode] = useState(rerouteLeadIds.length > 0);
+  const [selectedLeadIds, setSelectedLeadIds] = useState<string[]>(rerouteLeadIds);
+  const [showRerouteBanner, setShowRerouteBanner] = useState(rerouteLeadIds.length > 0);
   const [routeStops, setRouteStops] = useState<RouteStop[] | null>(null);
   const [routeSkipped, setRouteSkipped] = useState(0);
   const [routeId, setRouteId] = useState<string | null>(null);
@@ -308,6 +325,7 @@ export function LeadsExplorer({
     setSelectMode(false);
     setSelectedLeadIds([]);
     setRouteError(null);
+    setShowRerouteBanner(false);
   }
 
   function handleBuildRoute() {
@@ -336,6 +354,7 @@ export function LeadsExplorer({
       setRouteId(data.routeId ?? null);
       setSelectMode(false);
       setSelectedLeadIds([]);
+      setShowRerouteBanner(false);
     });
   }
 
@@ -808,6 +827,20 @@ export function LeadsExplorer({
           </div>
         </div>
       </div>
+      {showRerouteBanner && (
+        <p className="mt-2 flex items-center justify-between gap-2 text-xs text-black/50 dark:text-white/50">
+          <span>
+            Reusing a previous route
+            {rerouteDroppedCount > 0
+              ? ` — ${rerouteLeadIds.length} of ${rerouteRequestedIds.length} stops still visible to you.`
+              : "."}{" "}
+            Hit Route for fresh directions from where you are now.
+          </span>
+          <button type="button" onClick={() => setShowRerouteBanner(false)} className="shrink-0 underline">
+            Dismiss
+          </button>
+        </p>
+      )}
       {/* Its own line below the whole filter row (not nested inside the
           Rep filter item) so it can't throw off items-end alignment for
           every other filter in that row the way it did when nested

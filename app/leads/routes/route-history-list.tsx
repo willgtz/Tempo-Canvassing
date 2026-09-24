@@ -96,9 +96,18 @@ export function RouteHistoryList({
               </button>
               {isExpanded && (
                 <ol className="space-y-2 border-t border-black/10 p-3 pt-3 dark:border-white/10">
-                  {stopLeads.length === 0 && (
+                  {stopLeads.length === 0 ? (
                     <li className="text-xs italic text-black/40 dark:text-white/40">
                       None of these leads are visible to you anymore.
+                    </li>
+                  ) : (
+                    <li>
+                      <Link
+                        href={`/leads?reroute=${route.leadIds.join(",")}`}
+                        className="inline-block rounded-full border border-black/15 px-3 py-1 text-xs font-medium hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+                      >
+                        Reuse this route
+                      </Link>
                     </li>
                   )}
                   {stopLeads.map((lead, i) => (
