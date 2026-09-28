@@ -40,6 +40,12 @@ type AppointmentAssignmentRow = {
   role: "opener" | "closer";
 };
 
+type LeadNameRow = {
+  id: string;
+  first_name: string | null;
+  last_name: string | null;
+};
+
 type AppointmentNoteRow = {
   appointment_id: string;
   user_id: string;
@@ -90,6 +96,7 @@ export default async function AdminDashboardPage() {
     { data: appointmentStatuses, error: appointmentStatusesError },
     { data: teamMemberships, error: teamMembershipsError },
     { data: teams, error: teamsError },
+    { data: leadNames, error: leadNamesError },
   ] = await Promise.all([
     fetchAllRows<DashboardLeadRow>((from, to) =>
       supabase
@@ -171,6 +178,11 @@ export default async function AdminDashboardPage() {
       .order("sort_order"),
     supabase.from("team_memberships").select("user_id, team_id"),
     supabase.from("teams").select("id, name").order("name"),
+    // Just names, not the full lead record — used to label the lead a
+    // stale appointment belongs to, linking through to /admin/appointments.
+    fetchAllRows<LeadNameRow>((from, to) =>
+      supabase.from("leads").select("id, first_name, last_name").order("id").range(from, to)
+    ),
   ]);
 
   if (
@@ -188,7 +200,8 @@ export default async function AdminDashboardPage() {
     appointmentNotesError ||
     appointmentStatusesError ||
     teamMembershipsError ||
-    teamsError
+    teamsError ||
+    leadNamesError
   ) {
     return (
       <div className="mx-auto w-full max-w-6xl p-6 text-sm text-red-600 dark:text-red-400">
@@ -207,7 +220,8 @@ export default async function AdminDashboardPage() {
           appointmentNotesError?.message ??
           appointmentStatusesError?.message ??
           teamMembershipsError?.message ??
-          teamsError?.message}
+          teamsError?.message ??
+          leadNamesError?.message}
       </div>
     );
   }
@@ -229,6 +243,7 @@ export default async function AdminDashboardPage() {
       appointmentStatuses={appointmentStatuses ?? []}
       teamMemberships={teamMemberships ?? []}
       teams={teams ?? []}
+      leadNames={leadNames ?? []}
       today={laToday}
     />
   );

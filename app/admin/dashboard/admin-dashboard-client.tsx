@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { StatTile } from "@/components/dashboard/stat-tile";
 import { BarChart } from "@/components/dashboard/bar-chart";
 import { TrendChart } from "@/components/dashboard/trend-chart";
@@ -65,6 +66,7 @@ type DispositionHistoryRow = { lead_id: string; new_value: string | null; change
 type LeadNoteRow = { lead_id: string; created_at: string };
 type Team = { id: string; name: string };
 type TeamMembership = { user_id: string; team_id: string };
+type LeadNameRow = { id: string; first_name: string | null; last_name: string | null };
 
 const WIDGETS = [
   { id: "total", label: "Total leads" },
@@ -75,6 +77,7 @@ const WIDGETS = [
   { id: "manual", label: "Manually entered leads" },
   { id: "orphanZips", label: "Zips with no rep assigned" },
   { id: "neverKnocked", label: "Leads never knocked (no disposition, no notes)" },
+  { id: "neverKnockedByZip", label: "Never-knocked leads by zip" },
   { id: "avgTimeToFirstKnock", label: "Average time to first knock" },
   { id: "trend", label: "Leads created — 30-day trend" },
   { id: "dispositionTrend", label: "Disposition trend — by week" },
@@ -111,6 +114,7 @@ export function AdminDashboardClient({
   appointmentStatuses,
   teamMemberships,
   teams,
+  leadNames,
   today,
 }: {
   leads: StatLead[];
@@ -128,6 +132,7 @@ export function AdminDashboardClient({
   appointmentStatuses: AppointmentStatusRow[];
   teamMemberships: TeamMembership[];
   teams: Team[];
+  leadNames: LeadNameRow[];
   today: string;
 }) {
   const [repFilter, setRepFilter] = useState("all");
@@ -300,6 +305,22 @@ export function AdminDashboardClient({
   const neverKnockedCount = useMemo(
     () => countNeverKnocked(filteredLeads.map((l) => l.id), touchedLeadIds),
     [filteredLeads, touchedLeadIds]
+  );
+
+  const neverKnockedLeads = useMemo(
+    () => filteredLeads.filter((l) => !touchedLeadIds.has(l.id)),
+    [filteredLeads, touchedLeadIds]
+  );
+
+  const neverKnockedByZip = useMemo(() => {
+    return Array.from(countByZip(neverKnockedLeads), ([zip, count]) => ({ label: zip, value: count })).sort(
+      (a, b) => b.value - a.value
+    );
+  }, [neverKnockedLeads]);
+
+  const leadNameById = useMemo(
+    () => new Map(leadNames.map((l) => [l.id, [l.first_name, l.last_name].filter(Boolean).join(" ") || "Lead"])),
+    [leadNames]
   );
 
   const firstKnockAtById = useMemo(() => {
@@ -735,6 +756,23 @@ export function AdminDashboardClient({
             </div>
           </Card>
         )}
+        {isVisible("neverKnockedByZip") && (
+          <Card className="p-4">
+            <h2 className="text-sm font-medium">Never-knocked leads by zip</h2>
+            <p className="mt-1 text-xs text-black/50 dark:text-white/50">
+              Which areas have leads that have never been dispositioned or noted.
+            </p>
+            <div className="mt-3">
+              {neverKnockedByZip.length === 0 ? (
+                <p className="text-sm italic text-black/40 dark:text-white/40">
+                  Every lead has been knocked at least once.
+                </p>
+              ) : (
+                <BarChart items={neverKnockedByZip} />
+              )}
+            </div>
+          </Card>
+        )}
         {isVisible("byRep") && showRepBreakdown && (
           <Card className="p-4">
             <h2 className="text-sm font-medium">Leads by rep</h2>
@@ -998,6 +1036,7 @@ export function AdminDashboardClient({
                 <table className="w-full text-left text-sm">
                   <thead className="bg-black/5 dark:bg-white/5">
                     <tr>
+                      <th className="px-3 py-2 font-medium">Lead</th>
                       <th className="px-3 py-2 font-medium">Scheduled</th>
                       <th className="px-3 py-2 font-medium">Status</th>
                       <th className="px-3 py-2 font-medium">Closer</th>
@@ -1009,6 +1048,14 @@ export function AdminDashboardClient({
                       .sort((a, b) => a.scheduled_at.localeCompare(b.scheduled_at))
                       .map((a) => (
                         <tr key={a.id} className="border-t border-black/5 dark:border-white/10">
+                          <td className="px-3 py-2">
+                            <Link
+                              href={`/admin/appointments?appointment=${a.id}`}
+                              className="underline decoration-black/30 underline-offset-2 hover:decoration-black dark:decoration-white/30 dark:hover:decoration-white"
+                            >
+                              {leadNameById.get(a.lead_id) ?? "Lead"}
+                            </Link>
+                          </td>
                           <td className="px-3 py-2">{new Date(a.scheduled_at).toLocaleString()}</td>
                           <td className="px-3 py-2">{statusNameById.get(a.status_id) ?? "Unknown"}</td>
                           <td className="px-3 py-2">{(closerNamesByAppt.get(a.id) ?? []).join(", ") || "—"}</td>
