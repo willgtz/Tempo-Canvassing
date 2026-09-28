@@ -14,6 +14,37 @@ type DashboardLeadRow = {
   created_at: string;
 };
 
+type DispositionHistoryRow = {
+  lead_id: string;
+  new_value: string | null;
+  changed_at: string;
+};
+
+type LeadNoteRow = {
+  lead_id: string;
+  created_at: string;
+};
+
+type AppointmentRow = {
+  id: string;
+  lead_id: string;
+  scheduled_at: string;
+  status_id: string;
+  created_by: string;
+  created_at: string;
+};
+
+type AppointmentAssignmentRow = {
+  appointment_id: string;
+  user_id: string;
+  role: "opener" | "closer";
+};
+
+type AppointmentNoteRow = {
+  appointment_id: string;
+  user_id: string;
+};
+
 export default async function AdminDashboardPage() {
   const session = await getAdminSession();
   if (!session) {
@@ -51,6 +82,14 @@ export default async function AdminDashboardPage() {
     { data: profiles, error: profilesError },
     { data: teamZips, error: teamZipsError },
     { data: goalRows, error: goalError },
+    { data: dispositionHistory, error: dispositionHistoryError },
+    { data: leadNotes, error: leadNotesError },
+    { data: appointments, error: appointmentsError },
+    { data: appointmentAssignments, error: appointmentAssignmentsError },
+    { data: appointmentNotes, error: appointmentNotesError },
+    { data: appointmentStatuses, error: appointmentStatusesError },
+    { data: teamMemberships, error: teamMembershipsError },
+    { data: teams, error: teamsError },
   ] = await Promise.all([
     fetchAllRows<DashboardLeadRow>((from, to) =>
       supabase
@@ -79,6 +118,59 @@ export default async function AdminDashboardPage() {
     // can_view_door_knock_count check, so this admin always gets every
     // rep's row back regardless of grants.
     supabase.rpc("door_knock_goal_progress"),
+    // Raw disposition-CHANGE events (not leads.disposition_id, which is
+    // only ever the current value) — drives both "never knocked" (any
+    // row here means the lead's been touched at least once) and the
+    // weekly disposition trend (new_value is already the disposition's
+    // NAME at change time, see updateLeadDisposition/addManualLead in
+    // app/leads/actions.ts, so no join back to dispositions is needed).
+    fetchAllRows<DispositionHistoryRow>((from, to) =>
+      supabase
+        .from("lead_history")
+        .select("lead_id, new_value, changed_at")
+        .eq("field_changed", "disposition")
+        .eq("source", "user")
+        .order("id")
+        .range(from, to)
+    ),
+    // The other half of "touched at all" — a note with no disposition
+    // change still counts as knocked (door_knock_events, schema.sql,
+    // unions both the same way).
+    fetchAllRows<LeadNoteRow>((from, to) =>
+      supabase
+        .from("lead_notes")
+        .select("lead_id, created_at")
+        .is("deleted_at", null)
+        .order("id")
+        .range(from, to)
+    ),
+    fetchAllRows<AppointmentRow>((from, to) =>
+      supabase
+        .from("appointments")
+        .select("id, lead_id, scheduled_at, status_id, created_by, created_at")
+        .order("id")
+        .range(from, to)
+    ),
+    fetchAllRows<AppointmentAssignmentRow>((from, to) =>
+      supabase
+        .from("appointment_assignments")
+        .select("appointment_id, user_id, role")
+        .order("id")
+        .range(from, to)
+    ),
+    fetchAllRows<AppointmentNoteRow>((from, to) =>
+      supabase
+        .from("appointment_notes")
+        .select("appointment_id, user_id")
+        .order("id")
+        .range(from, to)
+    ),
+    supabase
+      .from("appointment_statuses")
+      .select("id, name, color, sort_order, is_default")
+      .order("sort_order"),
+    supabase.from("team_memberships").select("user_id, team_id"),
+    supabase.from("teams").select("id, name").order("name"),
   ]);
 
   if (
@@ -88,7 +180,15 @@ export default async function AdminDashboardPage() {
     dispositionsError ||
     profilesError ||
     teamZipsError ||
-    goalError
+    goalError ||
+    dispositionHistoryError ||
+    leadNotesError ||
+    appointmentsError ||
+    appointmentAssignmentsError ||
+    appointmentNotesError ||
+    appointmentStatusesError ||
+    teamMembershipsError ||
+    teamsError
   ) {
     return (
       <div className="mx-auto w-full max-w-6xl p-6 text-sm text-red-600 dark:text-red-400">
@@ -99,7 +199,15 @@ export default async function AdminDashboardPage() {
           dispositionsError?.message ??
           profilesError?.message ??
           teamZipsError?.message ??
-          goalError?.message}
+          goalError?.message ??
+          dispositionHistoryError?.message ??
+          leadNotesError?.message ??
+          appointmentsError?.message ??
+          appointmentAssignmentsError?.message ??
+          appointmentNotesError?.message ??
+          appointmentStatusesError?.message ??
+          teamMembershipsError?.message ??
+          teamsError?.message}
       </div>
     );
   }
@@ -113,6 +221,14 @@ export default async function AdminDashboardPage() {
       profiles={profiles ?? []}
       teamZips={teamZips ?? []}
       doorKnockGoals={goalRows ?? []}
+      dispositionHistory={dispositionHistory ?? []}
+      leadNotes={leadNotes ?? []}
+      appointments={appointments ?? []}
+      appointmentAssignments={appointmentAssignments ?? []}
+      appointmentNotes={appointmentNotes ?? []}
+      appointmentStatuses={appointmentStatuses ?? []}
+      teamMemberships={teamMemberships ?? []}
+      teams={teams ?? []}
       today={laToday}
     />
   );
