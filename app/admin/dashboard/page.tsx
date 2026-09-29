@@ -16,6 +16,7 @@ type DashboardLeadRow = {
 
 type DispositionHistoryRow = {
   lead_id: string;
+  user_id: string;
   new_value: string | null;
   changed_at: string;
 };
@@ -128,13 +129,13 @@ export default async function AdminDashboardPage() {
     // Raw disposition-CHANGE events (not leads.disposition_id, which is
     // only ever the current value) — drives both "never knocked" (any
     // row here means the lead's been touched at least once) and the
-    // weekly disposition trend (new_value is already the disposition's
+    // per-rep disposition mix (new_value is already the disposition's
     // NAME at change time, see updateLeadDisposition/addManualLead in
     // app/leads/actions.ts, so no join back to dispositions is needed).
     fetchAllRows<DispositionHistoryRow>((from, to) =>
       supabase
         .from("lead_history")
-        .select("lead_id, new_value, changed_at")
+        .select("lead_id, user_id, new_value, changed_at")
         .eq("field_changed", "disposition")
         .eq("source", "user")
         .order("id")

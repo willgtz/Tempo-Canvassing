@@ -255,15 +255,16 @@ export function appointmentsByCloserAndStatus(
   return result;
 }
 
-// Closed / (Closed + No Show) — of appointments with a definitive
-// outcome, what fraction actually happened. Excludes Cancelled (never
-// attempted) and Rescheduled (outcome still pending). Null when there's
-// no definitive-outcome data yet, so callers can render "—" instead of
-// a misleading 0%.
-export function computeShowRate(closedCount: number, noShowCount: number): number | null {
-  const denom = closedCount + noShowCount;
-  if (denom === 0) return null;
-  return closedCount / denom;
+// statusId -> count, across the given appointments — the company-wide
+// "what fraction of appointments land in each status" breakdown. Plain
+// enough to inline, but kept as its own function for the same
+// testability/consistency reasons the rest of this file uses one.
+export function appointmentsByStatus(appointments: StatAppointment[]): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const a of appointments) {
+    counts.set(a.status_id, (counts.get(a.status_id) ?? 0) + 1);
+  }
+  return counts;
 }
 
 // Per opener: how many of the appointments they opened actually closed —
@@ -326,50 +327,25 @@ export function averageHoursToFirstKnock(
   return totalHours / n;
 }
 
-// Monday-anchored week-start date (en-CA, LA-time — same convention as
-// every other date bucketing on this dashboard) for a given ISO timestamp.
-function weekStart(iso: string): string {
-  const d = new Date(laDateOnly(new Date(iso)) + "T00:00:00");
-  const day = d.getDay(); // 0 = Sunday
-  const diffToMonday = day === 0 ? 6 : day - 1;
-  d.setDate(d.getDate() - diffToMonday);
-  return laDateOnly(d);
-}
-
-// dispositionName -> weekStartDate -> count, from raw disposition-change
-// history rows (lead_history.new_value is already the disposition's NAME
-// at the time of the change — see addManualLead/updateLeadDisposition,
-// app/leads/actions.ts — not its id, so no dispositions-table join is
-// needed here). Tracks CHANGES over time, not lead creation, so a shift
-// in a rep's outcome mix shows up even for leads created long ago.
-export function weeklyDispositionCounts(
-  historyRows: { new_value: string | null; changed_at: string }[],
-  weeks: number,
-  now = new Date()
-): { weekStarts: string[]; countsByDisposition: Map<string, number[]> } {
-  const weekStarts: string[] = [];
-  const today = new Date(laDateOnly(now) + "T00:00:00");
-  const day = today.getDay();
-  const thisMonday = new Date(today);
-  thisMonday.setDate(today.getDate() - (day === 0 ? 6 : day - 1));
-  for (let i = weeks - 1; i >= 0; i--) {
-    const d = new Date(thisMonday);
-    d.setDate(d.getDate() - i * 7);
-    weekStarts.push(laDateOnly(d));
-  }
-  const weekIndex = new Map(weekStarts.map((w, i) => [w, i]));
-
-  const countsByDisposition = new Map<string, number[]>();
+// userId -> dispositionName -> count, from raw disposition-CHANGE history
+// rows (lead_history.new_value is already the disposition's NAME at
+// change time — see addManualLead/updateLeadDisposition, app/leads/
+// actions.ts — not its id, so no dispositions-table join is needed here),
+// restricted to changes on/after sinceIso. This is "who's dispositioning
+// leads as what, lately" — a knock-QUALITY comparison across reps, not a
+// volume one (doors-knocked widgets already cover volume).
+export function dispositionMixByRep(
+  historyRows: { user_id: string; new_value: string | null; changed_at: string }[],
+  sinceIso: string
+): Map<string, Map<string, number>> {
+  const result = new Map<string, Map<string, number>>();
   for (const row of historyRows) {
-    if (!row.new_value) continue;
-    const w = weekStart(row.changed_at);
-    const idx = weekIndex.get(w);
-    if (idx === undefined) continue;
-    const series = countsByDisposition.get(row.new_value) ?? new Array(weeks).fill(0);
-    series[idx]++;
-    countsByDisposition.set(row.new_value, series);
+    if (!row.new_value || row.changed_at < sinceIso) continue;
+    const byDisposition = result.get(row.user_id) ?? new Map<string, number>();
+    byDisposition.set(row.new_value, (byDisposition.get(row.new_value) ?? 0) + 1);
+    result.set(row.user_id, byDisposition);
   }
-  return { weekStarts, countsByDisposition };
+  return result;
 }
 
 // Re-attributes a per-user count to every team that user is on — same

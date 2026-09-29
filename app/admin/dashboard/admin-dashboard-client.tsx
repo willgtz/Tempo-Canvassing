@@ -29,11 +29,11 @@ import {
   countStuckAssignedNoCloserNotes,
   appointmentsByOpener,
   appointmentsByCloserAndStatus,
-  computeShowRate,
+  appointmentsByStatus,
   openerToCloserConversion,
   staleAppointments,
   averageHoursToFirstKnock,
-  weeklyDispositionCounts,
+  dispositionMixByRep,
   rollupByTeam,
   rollupNestedByTeam,
   laDateOnly,
@@ -62,7 +62,7 @@ type GoalRow = {
   end_date: string;
   verified_count: number;
 };
-type DispositionHistoryRow = { lead_id: string; new_value: string | null; changed_at: string };
+type DispositionHistoryRow = { lead_id: string; user_id: string; new_value: string | null; changed_at: string };
 type LeadNoteRow = { lead_id: string; created_at: string };
 type Team = { id: string; name: string };
 type TeamMembership = { user_id: string; team_id: string };
@@ -80,7 +80,7 @@ const WIDGETS = [
   { id: "neverKnockedByZip", label: "Never-knocked leads by zip" },
   { id: "avgTimeToFirstKnock", label: "Average time to first knock" },
   { id: "trend", label: "Leads created — 30-day trend" },
-  { id: "dispositionTrend", label: "Disposition trend — by week" },
+  { id: "dispositionMixByRep", label: "Disposition mix by rep (last 30 days)" },
   { id: "disposition", label: "Leads by disposition" },
   { id: "byRep", label: "Leads by rep" },
   { id: "doorsKnockedToday", label: "Doors knocked by rep (pick a day)" },
@@ -92,7 +92,7 @@ const WIDGETS = [
   { id: "stuckAssigned", label: "Appointments stuck in Assigned (no closer notes)" },
   { id: "apptsByOpener", label: "Appointments by opener" },
   { id: "apptsByCloser", label: "Appointments by closer (outcome breakdown)" },
-  { id: "showRate", label: "Show rate" },
+  { id: "apptStatusBreakdown", label: "Appointment status breakdown (company %)" },
   { id: "openerConversion", label: "Opener → closer conversion" },
   { id: "staleAppts", label: "Stale appointments (past due, still Assigned)" },
   { id: "knocksToApptRate", label: "Knocks → appointment rate" },
@@ -341,8 +341,6 @@ export function AdminDashboardClient({
     [leadCreatedAtById, firstKnockAtById]
   );
 
-  const dispositionTrend = useMemo(() => weeklyDispositionCounts(dispositionHistory, 8), [dispositionHistory]);
-
   // ============================================================
   // Appointment stats — scoped to the date range picker (by
   // scheduled_at) and, where a specific rep is selected up top, to
@@ -377,10 +375,6 @@ export function AdminDashboardClient({
     () => appointmentStatuses.find((s) => s.name === "Closed")?.id,
     [appointmentStatuses]
   );
-  const noShowStatusId = useMemo(
-    () => appointmentStatuses.find((s) => s.name === "No Show")?.id,
-    [appointmentStatuses]
-  );
 
   const stuckAssignedCount = useMemo(
     () =>
@@ -402,6 +396,49 @@ export function AdminDashboardClient({
   // single-rep filter above doesn't apply here — showing every team,
   // regardless of repFilter, is what "view by team" means.
   const nameByIdForView = viewByTeam ? teamNameById : nameByUserId;
+
+  // Trailing 30-day window (not tied to the appointment date-range
+  // picker above — this is about door-knock activity, a separate
+  // concern from appointments) — same "last30" window convention the
+  // leads-side stat tiles already use.
+  const dispositionMixSinceIso = useMemo(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 30);
+    return d.toISOString();
+  }, []);
+  const dispositionMixByRepRaw = useMemo(
+    () => dispositionMixByRep(dispositionHistory, dispositionMixSinceIso),
+    [dispositionHistory, dispositionMixSinceIso]
+  );
+  const dispositionMixScoped = useMemo(() => {
+    const base = viewByTeam ? rollupNestedByTeam(dispositionMixByRepRaw, teamIdsByUser) : dispositionMixByRepRaw;
+    if (viewByTeam || repFilter === "all") return base;
+    const filtered = new Map<string, Map<string, number>>();
+    if (base.has(repFilter)) filtered.set(repFilter, base.get(repFilter) as Map<string, number>);
+    return filtered;
+  }, [dispositionMixByRepRaw, viewByTeam, teamIdsByUser, repFilter]);
+  // Configured dispositions first (in their admin-set order), then any
+  // name appearing in history that isn't currently configured (renamed
+  // or deleted since) appended at the end rather than silently dropped.
+  const dispositionMixColumns = useMemo(() => {
+    const configured = [...dispositions].sort((a, b) => a.sort_order - b.sort_order).map((d) => d.name);
+    const known = new Set(configured);
+    const extra = new Set<string>();
+    for (const byDisposition of dispositionMixScoped.values()) {
+      for (const name of byDisposition.keys()) {
+        if (!known.has(name)) extra.add(name);
+      }
+    }
+    return [...configured, ...Array.from(extra).sort()];
+  }, [dispositions, dispositionMixScoped]);
+  const dispositionMixTable = useMemo(() => {
+    return Array.from(dispositionMixScoped, ([id, byDisposition]) => ({
+      id,
+      label: nameByIdForView.get(id) ?? "Unknown",
+      byDisposition,
+      total: Array.from(byDisposition.values()).reduce((a, b) => a + b, 0),
+    })).sort((a, b) => b.total - a.total);
+  }, [dispositionMixScoped, nameByIdForView]);
 
   const openerCountsRaw = useMemo(
     () => appointmentsByOpener(apptsInRange, appointmentAssignments),
@@ -434,33 +471,40 @@ export function AdminDashboardClient({
     return filtered;
   }, [closerByStatusRaw, viewByTeam, teamIdsByUser, repFilter]);
 
-  const closerOutcomeStatuses = useMemo(
+  const appointmentStatusesSorted = useMemo(
     () => [...appointmentStatuses].sort((a, b) => a.sort_order - b.sort_order),
     [appointmentStatuses]
   );
+  // Closed % here IS the closer's close ratio — no separate metric, per
+  // William: "it will only calculate appts dispositioned to closed status
+  // ... and I want that percentage for every status." One column per
+  // status, each showing count + % of that closer's own total.
   const closerOutcomeTable = useMemo(() => {
     return Array.from(closerByStatus, ([id, byStatus]) => {
-      const closed = closedStatusId ? (byStatus.get(closedStatusId) ?? 0) : 0;
-      const noShow = noShowStatusId ? (byStatus.get(noShowStatusId) ?? 0) : 0;
+      const total = Array.from(byStatus.values()).reduce((a, b) => a + b, 0);
       return {
         id,
         label: nameByIdForView.get(id) ?? "Unknown",
         byStatus,
-        total: Array.from(byStatus.values()).reduce((a, b) => a + b, 0),
-        showRate: computeShowRate(closed, noShow),
+        total,
       };
     }).sort((a, b) => b.total - a.total);
-  }, [closerByStatus, nameByIdForView, closedStatusId, noShowStatusId]);
+  }, [closerByStatus, nameByIdForView]);
 
-  const overallShowRate = useMemo(() => {
-    let closed = 0;
-    let noShow = 0;
-    for (const a of apptsInRangeForRep) {
-      if (closedStatusId && a.status_id === closedStatusId) closed++;
-      if (noShowStatusId && a.status_id === noShowStatusId) noShow++;
-    }
-    return computeShowRate(closed, noShow);
-  }, [apptsInRangeForRep, closedStatusId, noShowStatusId]);
+  // Company-wide (or single-rep-as-closer, when repFilter narrows it)
+  // equivalent of the per-closer table above, one row per status instead
+  // of one row per rep — replaces the old single "show rate" ratio with
+  // the full picture.
+  const statusBreakdown = useMemo(() => {
+    const counts = appointmentsByStatus(apptsInRangeForRep);
+    const total = apptsInRangeForRep.length;
+    return appointmentStatusesSorted.map((s) => ({
+      id: s.id,
+      name: s.name,
+      count: counts.get(s.id) ?? 0,
+      pct: total > 0 ? (counts.get(s.id) ?? 0) / total : null,
+    }));
+  }, [apptsInRangeForRep, appointmentStatusesSorted]);
 
   const openerConversionRaw = useMemo(
     () => openerToCloserConversion(apptsInRange, appointmentAssignments, closedStatusId),
@@ -688,50 +732,45 @@ export function AdminDashboardClient({
         </Card>
       )}
 
-      {isVisible("dispositionTrend") && (
+      {isVisible("dispositionMixByRep") && (
         <Card className="overflow-x-auto p-4">
-          <h2 className="text-sm font-medium">Disposition trend — last 8 weeks</h2>
+          <h2 className="text-sm font-medium">Disposition mix by rep{viewByTeam ? " — by team" : ""} (last 30 days)</h2>
           <p className="mt-1 text-xs text-black/50 dark:text-white/50">
-            Disposition CHANGES per week (not lead creation) — a shift in a rep&apos;s outcome mix
-            shows up here even for leads created long ago.
+            What % of each rep&apos;s own disposition changes landed on each outcome — a knock-quality
+            comparison, not a volume one.
           </p>
           <div className="mt-3">
-            {dispositionTrend.countsByDisposition.size === 0 ? (
+            {dispositionMixTable.length === 0 ? (
               <p className="text-sm italic text-black/40 dark:text-white/40">
-                No disposition changes in this window.
+                No disposition changes in the last 30 days.
               </p>
             ) : (
               <table className="w-full text-left text-sm">
                 <thead className="bg-black/5 dark:bg-white/5">
                   <tr>
-                    <th className="px-3 py-2 font-medium">Disposition</th>
-                    {dispositionTrend.weekStarts.map((w) => (
-                      <th key={w} className="px-3 py-2 text-right font-medium">
-                        {new Date(`${w}T00:00:00`).toLocaleDateString(undefined, {
-                          month: "short",
-                          day: "numeric",
-                        })}
+                    <th className="px-3 py-2 font-medium">{viewByTeam ? "Team" : "Rep"}</th>
+                    {dispositionMixColumns.map((name) => (
+                      <th key={name} className="px-3 py-2 text-right font-medium">
+                        {name}
                       </th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {Array.from(dispositionTrend.countsByDisposition, ([name, series]) => ({
-                    name,
-                    series,
-                    total: series.reduce((a, b) => a + b, 0),
-                  }))
-                    .sort((a, b) => b.total - a.total)
-                    .map((row) => (
-                      <tr key={row.name} className="border-t border-black/5 dark:border-white/10">
-                        <td className="px-3 py-2">{row.name}</td>
-                        {row.series.map((count, i) => (
-                          <td key={i} className="px-3 py-2 text-right">
-                            {count}
+                  {dispositionMixTable.map((row) => (
+                    <tr key={row.id} className="border-t border-black/5 dark:border-white/10">
+                      <td className="px-3 py-2">{row.label}</td>
+                      {dispositionMixColumns.map((name) => {
+                        const count = row.byDisposition.get(name) ?? 0;
+                        const pct = row.total > 0 ? Math.round((count / row.total) * 100) : 0;
+                        return (
+                          <td key={name} className="px-3 py-2 text-right">
+                            {count > 0 ? `${count} (${pct}%)` : "—"}
                           </td>
-                        ))}
-                      </tr>
-                    ))}
+                        );
+                      })}
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             )}
@@ -825,7 +864,7 @@ export function AdminDashboardClient({
         isVisible("stuckAssigned") ||
         isVisible("apptsByOpener") ||
         isVisible("apptsByCloser") ||
-        isVisible("showRate") ||
+        isVisible("apptStatusBreakdown") ||
         isVisible("openerConversion") ||
         isVisible("staleAppts") ||
         isVisible("knocksToApptRate")) && (
@@ -883,13 +922,6 @@ export function AdminDashboardClient({
                 hint="Closer assigned, no notes, no outcome"
               />
             )}
-            {isVisible("showRate") && (
-              <StatTile
-                label="Show rate"
-                value={overallShowRate == null ? 0 : Math.round(overallShowRate * 100)}
-                hint={overallShowRate == null ? "No Closed/No Show appointments yet" : "% Closed / (Closed + No Show)"}
-              />
-            )}
             {isVisible("staleAppts") && (
               <StatTile
                 label="Stale appointments"
@@ -917,6 +949,10 @@ export function AdminDashboardClient({
                 <h2 className="text-sm font-medium">
                   Appointments by closer{viewByTeam ? " — by team" : ""} (outcome breakdown)
                 </h2>
+                <p className="mt-1 text-xs text-black/50 dark:text-white/50">
+                  Each cell is that {viewByTeam ? "team" : "closer"}&apos;s count and % of their own
+                  total appointments — the Closed % column is their close ratio.
+                </p>
                 <div className="mt-3">
                   {closerOutcomeTable.length === 0 ? (
                     <p className="text-sm italic text-black/40 dark:text-white/40">No appointments in this range.</p>
@@ -925,25 +961,59 @@ export function AdminDashboardClient({
                       <thead className="bg-black/5 dark:bg-white/5">
                         <tr>
                           <th className="px-3 py-2 font-medium">{viewByTeam ? "Team" : "Closer"}</th>
-                          {closerOutcomeStatuses.map((s) => (
+                          {appointmentStatusesSorted.map((s) => (
                             <th key={s.id} className="px-3 py-2 text-right font-medium">
                               {s.name}
                             </th>
                           ))}
-                          <th className="px-3 py-2 text-right font-medium">Show rate</th>
                         </tr>
                       </thead>
                       <tbody>
                         {closerOutcomeTable.map((row) => (
                           <tr key={row.id} className="border-t border-black/5 dark:border-white/10">
                             <td className="px-3 py-2">{row.label}</td>
-                            {closerOutcomeStatuses.map((s) => (
-                              <td key={s.id} className="px-3 py-2 text-right">
-                                {row.byStatus.get(s.id) ?? 0}
-                              </td>
-                            ))}
+                            {appointmentStatusesSorted.map((s) => {
+                              const count = row.byStatus.get(s.id) ?? 0;
+                              const pct = row.total > 0 ? Math.round((count / row.total) * 100) : 0;
+                              return (
+                                <td key={s.id} className="px-3 py-2 text-right">
+                                  {count > 0 ? `${count} (${pct}%)` : "—"}
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              </Card>
+            )}
+            {isVisible("apptStatusBreakdown") && (
+              <Card className="overflow-x-auto p-4">
+                <h2 className="text-sm font-medium">Appointment status breakdown — company-wide</h2>
+                <p className="mt-1 text-xs text-black/50 dark:text-white/50">
+                  What % of all appointments in this range fall into each status.
+                </p>
+                <div className="mt-3">
+                  {apptsInRangeForRep.length === 0 ? (
+                    <p className="text-sm italic text-black/40 dark:text-white/40">No appointments in this range.</p>
+                  ) : (
+                    <table className="w-full text-left text-sm">
+                      <thead className="bg-black/5 dark:bg-white/5">
+                        <tr>
+                          <th className="px-3 py-2 font-medium">Status</th>
+                          <th className="px-3 py-2 text-right font-medium">Count</th>
+                          <th className="px-3 py-2 text-right font-medium">%</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {statusBreakdown.map((row) => (
+                          <tr key={row.id} className="border-t border-black/5 dark:border-white/10">
+                            <td className="px-3 py-2">{row.name}</td>
+                            <td className="px-3 py-2 text-right">{row.count}</td>
                             <td className="px-3 py-2 text-right">
-                              {row.showRate == null ? "—" : `${Math.round(row.showRate * 100)}%`}
+                              {row.pct == null ? "—" : `${Math.round(row.pct * 100)}%`}
                             </td>
                           </tr>
                         ))}
