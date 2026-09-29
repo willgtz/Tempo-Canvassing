@@ -348,6 +348,43 @@ export function dispositionMixByRep(
   return result;
 }
 
+// Per rep: of the leads THEY marked with the given "callback-style"
+// disposition (in the window starting at sinceIso), what fraction ever
+// got touched again afterward — another disposition change, a note, or
+// an appointment booked for that lead, whichever comes first. Flags
+// reps who log callbacks but don't chase them. A callback set very
+// recently may simply not have had time to be followed up yet — that's
+// a real limitation of any snapshot-in-time version of this metric, not
+// a bug, and worth keeping in mind for callbacks near the window edge.
+export function callbackFollowThroughByRep(
+  historyRows: { lead_id: string; user_id: string; new_value: string | null; changed_at: string }[],
+  leadNotes: { lead_id: string; created_at: string }[],
+  appointments: { lead_id: string; created_at: string }[],
+  callbackDispositionName: string,
+  sinceIso: string
+): Map<string, { total: number; followedThrough: number }> {
+  const touchesByLead = new Map<string, string[]>();
+  const addTouch = (leadId: string, at: string) => {
+    const list = touchesByLead.get(leadId) ?? [];
+    list.push(at);
+    touchesByLead.set(leadId, list);
+  };
+  for (const h of historyRows) addTouch(h.lead_id, h.changed_at);
+  for (const n of leadNotes) addTouch(n.lead_id, n.created_at);
+  for (const a of appointments) addTouch(a.lead_id, a.created_at);
+
+  const result = new Map<string, { total: number; followedThrough: number }>();
+  for (const h of historyRows) {
+    if (h.new_value !== callbackDispositionName || h.changed_at < sinceIso) continue;
+    const entry = result.get(h.user_id) ?? { total: 0, followedThrough: 0 };
+    entry.total++;
+    const touches = touchesByLead.get(h.lead_id) ?? [];
+    if (touches.some((t) => t > h.changed_at)) entry.followedThrough++;
+    result.set(h.user_id, entry);
+  }
+  return result;
+}
+
 // Re-attributes a per-user count to every team that user is on — same
 // "counts toward each team they're a member of" convention team-based
 // zip/manual-lead sharing already uses (schema.sql, 2026-09-24 multi-team

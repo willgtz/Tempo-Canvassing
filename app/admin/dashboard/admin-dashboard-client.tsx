@@ -34,6 +34,7 @@ import {
   staleAppointments,
   averageHoursToFirstKnock,
   dispositionMixByRep,
+  callbackFollowThroughByRep,
   rollupByTeam,
   rollupNestedByTeam,
   laDateOnly,
@@ -81,6 +82,7 @@ const WIDGETS = [
   { id: "avgTimeToFirstKnock", label: "Average time to first knock" },
   { id: "trend", label: "Leads created — 30-day trend" },
   { id: "dispositionMixByRep", label: "Disposition mix by rep (last 30 days)" },
+  { id: "callbackFollowThrough", label: "Callback follow-through rate" },
   { id: "disposition", label: "Leads by disposition" },
   { id: "byRep", label: "Leads by rep" },
   { id: "doorsKnockedToday", label: "Doors knocked by rep (pick a day)" },
@@ -146,6 +148,14 @@ export function AdminDashboardClient({
   const [viewByTeam, setViewByTeam] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
   const [isExporting, setIsExporting] = useState(false);
+  // Which configured disposition counts as "callback-style" for the
+  // follow-through metric — no fixed name for this across accounts, so
+  // it's a picker rather than a hardcoded guess. Defaults to "Follow Up"
+  // or "Callback" if either exists, otherwise the first disposition.
+  const [callbackDispositionName, setCallbackDispositionName] = useState(() => {
+    const preferred = dispositions.find((d) => /^(follow up|callback)$/i.test(d.name));
+    return preferred?.name ?? dispositions[0]?.name ?? "";
+  });
   const { isVisible, toggle } = useWidgetVisibility("admin-dashboard-hidden-widgets");
 
   const dispositionById = useMemo(
@@ -439,6 +449,51 @@ export function AdminDashboardClient({
       total: Array.from(byDisposition.values()).reduce((a, b) => a + b, 0),
     })).sort((a, b) => b.total - a.total);
   }, [dispositionMixScoped, nameByIdForView]);
+
+  // Same trailing window as the disposition mix above, and the FULL
+  // (not date-range-filtered) appointments/notes/history — a callback
+  // set inside the window can legitimately be followed up by a touch
+  // that happens after the window's end, right up to "now".
+  const callbackByRepRaw = useMemo(
+    () =>
+      callbackDispositionName
+        ? callbackFollowThroughByRep(dispositionHistory, leadNotes, appointments, callbackDispositionName, dispositionMixSinceIso)
+        : new Map<string, { total: number; followedThrough: number }>(),
+    [dispositionHistory, leadNotes, appointments, callbackDispositionName, dispositionMixSinceIso]
+  );
+  const callbackTable = useMemo(() => {
+    const base = viewByTeam
+      ? (() => {
+          const rolled = new Map<string, { total: number; followedThrough: number }>();
+          for (const [userId, v] of callbackByRepRaw) {
+            for (const teamId of teamIdsByUser.get(userId) ?? []) {
+              const entry = rolled.get(teamId) ?? { total: 0, followedThrough: 0 };
+              entry.total += v.total;
+              entry.followedThrough += v.followedThrough;
+              rolled.set(teamId, entry);
+            }
+          }
+          return rolled;
+        })()
+      : callbackByRepRaw;
+    const scoped =
+      viewByTeam || repFilter === "all"
+        ? base
+        : (() => {
+            const filtered = new Map<string, { total: number; followedThrough: number }>();
+            if (base.has(repFilter)) {
+              filtered.set(repFilter, base.get(repFilter) as { total: number; followedThrough: number });
+            }
+            return filtered;
+          })();
+    return Array.from(scoped, ([id, v]) => ({
+      id,
+      label: nameByIdForView.get(id) ?? "Unknown",
+      total: v.total,
+      followedThrough: v.followedThrough,
+      rate: v.total > 0 ? v.followedThrough / v.total : null,
+    })).sort((a, b) => b.total - a.total);
+  }, [callbackByRepRaw, viewByTeam, teamIdsByUser, repFilter, nameByIdForView]);
 
   const openerCountsRaw = useMemo(
     () => appointmentsByOpener(apptsInRange, appointmentAssignments),
@@ -769,6 +824,65 @@ export function AdminDashboardClient({
                           </td>
                         );
                       })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </Card>
+      )}
+
+      {isVisible("callbackFollowThrough") && (
+        <Card className="overflow-x-auto p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-sm font-medium">
+              Callback follow-through rate{viewByTeam ? " — by team" : ""} (last 30 days)
+            </h2>
+            <div className="flex items-center gap-2">
+              <label className="text-xs font-medium">Callback disposition</label>
+              <Select
+                value={callbackDispositionName}
+                onChange={(e) => setCallbackDispositionName(e.target.value)}
+                className="text-sm"
+              >
+                {dispositions.map((d) => (
+                  <option key={d.id} value={d.name}>
+                    {d.name}
+                  </option>
+                ))}
+              </Select>
+            </div>
+          </div>
+          <p className="mt-1 text-xs text-black/50 dark:text-white/50">
+            Of the leads each rep marked &quot;{callbackDispositionName || "—"}&quot;, what % ever got
+            touched again afterward — another disposition change, a note, or an appointment booked.
+            A callback set very recently may just not have had time to be followed up yet.
+          </p>
+          <div className="mt-3">
+            {callbackTable.length === 0 ? (
+              <p className="text-sm italic text-black/40 dark:text-white/40">
+                No &quot;{callbackDispositionName || "—"}&quot; dispositions set in the last 30 days.
+              </p>
+            ) : (
+              <table className="w-full text-left text-sm">
+                <thead className="bg-black/5 dark:bg-white/5">
+                  <tr>
+                    <th className="px-3 py-2 font-medium">{viewByTeam ? "Team" : "Rep"}</th>
+                    <th className="px-3 py-2 text-right font-medium">Callbacks</th>
+                    <th className="px-3 py-2 text-right font-medium">Followed up</th>
+                    <th className="px-3 py-2 text-right font-medium">Rate</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {callbackTable.map((row) => (
+                    <tr key={row.id} className="border-t border-black/5 dark:border-white/10">
+                      <td className="px-3 py-2">{row.label}</td>
+                      <td className="px-3 py-2 text-right">{row.total}</td>
+                      <td className="px-3 py-2 text-right">{row.followedThrough}</td>
+                      <td className="px-3 py-2 text-right">
+                        {row.rate == null ? "—" : `${Math.round(row.rate * 100)}%`}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
