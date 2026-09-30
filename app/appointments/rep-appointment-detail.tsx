@@ -2,7 +2,12 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
-import { updateMyAppointmentStatus, updateMyAppointmentScheduledAt, addMyAppointmentNote } from "./actions";
+import {
+  updateMyAppointmentStatus,
+  updateMyAppointmentScheduledAt,
+  addMyAppointmentNote,
+  markMyDealSubmitted,
+} from "./actions";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -35,6 +40,10 @@ function toDatetimeLocal(iso: string): string {
   return d.toISOString().slice(0, 16);
 }
 
+// Same public env var the admin panel reads — NEXT_PUBLIC_ so it's
+// inlined into this client bundle too, no server round-trip needed.
+const DEAL_TOOL_URL = process.env.NEXT_PUBLIC_DEAL_TOOL_URL;
+
 export function RepAppointmentDetail({
   appointment,
   lead,
@@ -47,6 +56,7 @@ export function RepAppointmentDetail({
   onStatusChanged,
   onScheduledAtChanged,
   onNoteAdded,
+  onDealSubmitted,
 }: {
   appointment: Appointment;
   lead: AppointmentLead | null;
@@ -59,6 +69,7 @@ export function RepAppointmentDetail({
   onStatusChanged: (appointmentId: string, statusId: string) => void;
   onScheduledAtChanged: (appointmentId: string, scheduledAt: string) => void;
   onNoteAdded: (note: AppointmentNote) => void;
+  onDealSubmitted: (appointmentId: string, dealSubmittedAt: string) => void;
 }) {
   const isMyCloseJob = assignments.some((a) => a.role === "closer" && a.user_id === currentUserId);
   // Broader than isMyCloseJob — any role, opener or closer. The date/time
@@ -68,6 +79,8 @@ export function RepAppointmentDetail({
   const openers = assignments.filter((a) => a.role === "opener");
   const closers = assignments.filter((a) => a.role === "closer");
   const currentStatus = statuses.find((s) => s.id === appointment.status_id);
+  // Matched by name, same convention appointment-detail-panel.tsx uses.
+  const isClosed = currentStatus?.name.toLowerCase().includes("closed") ?? false;
 
   // Same notesFormField/otherFormFields split as
   // app/admin/appointments/appointment-detail-panel.tsx — matched by
@@ -98,6 +111,22 @@ export function RepAppointmentDetail({
   const [noteText, setNoteText] = useState("");
   const [noteError, setNoteError] = useState<string | null>(null);
   const [isSavingNote, startNoteSave] = useTransition();
+
+  const [isMarkingDeal, startMarkDeal] = useTransition();
+  const [dealError, setDealError] = useState<string | null>(null);
+
+  function handleSubmitDeal() {
+    window.open(`${DEAL_TOOL_URL}/submit`, "_blank");
+    setDealError(null);
+    startMarkDeal(async () => {
+      const result = await markMyDealSubmitted(appointment.id);
+      if (!result.ok) {
+        setDealError(result.error);
+        return;
+      }
+      onDealSubmitted(appointment.id, new Date().toISOString());
+    });
+  }
 
   function handleStatusChange(newStatusId: string) {
     setStatusId(newStatusId);
@@ -266,6 +295,39 @@ export function RepAppointmentDetail({
           )}
           {statusError && <p className="text-xs text-red-600 dark:text-red-400">{statusError}</p>}
         </div>
+
+        {/* Closer-only, same as the Status control above — a non-closer
+            assignee (e.g. the opener) would just get "You can only submit
+            a deal for appointments you're the closer for" from RLS if
+            they tried, so this isn't offered to them in the first place. */}
+        {DEAL_TOOL_URL && isClosed && isMyCloseJob && (
+          <div className="mt-4 rounded-md border border-black/10 p-3 dark:border-white/10">
+            <label className="text-xs font-medium">Deal</label>
+            {appointment.deal_submitted_at ? (
+              <div className="mt-1.5 flex items-center justify-between gap-2 text-sm">
+                <span className="text-black/60 dark:text-white/60">
+                  Submitted {new Date(appointment.deal_submitted_at).toLocaleString()}
+                </span>
+                <button
+                  onClick={handleSubmitDeal}
+                  disabled={isMarkingDeal}
+                  className="shrink-0 rounded border border-black/15 px-2 py-1 text-xs disabled:opacity-50 dark:border-white/20"
+                >
+                  Resubmit
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={handleSubmitDeal}
+                disabled={isMarkingDeal}
+                className="mt-1.5 w-full rounded bg-black px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50 dark:bg-white dark:text-black"
+              >
+                Submit Deal
+              </button>
+            )}
+            {dealError && <p className="mt-1 text-xs text-red-600 dark:text-red-400">{dealError}</p>}
+          </div>
+        )}
 
         <div className="mt-5 space-y-2 border-t border-black/10 pt-4 dark:border-white/10">
           <p className="text-sm font-medium">Notes</p>

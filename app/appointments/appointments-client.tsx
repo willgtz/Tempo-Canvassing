@@ -122,6 +122,11 @@ export function AppointmentsClient({
             );
           }}
           onNoteAdded={(note) => setNotes((prev) => [note, ...prev])}
+          onDealSubmitted={(appointmentId, dealSubmittedAt) => {
+            setAppointmentsState((prev) =>
+              prev.map((a) => (a.id === appointmentId ? { ...a, deal_submitted_at: dealSubmittedAt } : a))
+            );
+          }}
         />
       )}
 

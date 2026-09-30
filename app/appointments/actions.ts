@@ -40,6 +40,29 @@ export async function updateMyAppointmentStatus(
   return { ok: true };
 }
 
+// Same "RLS is the real boundary, count:0 means it was silently denied"
+// pattern as updateMyAppointmentStatus above — appointments_update
+// (admin or the assigned closer only) already covers this column too,
+// so no new RLS or schema change was needed, just this action and the
+// rep-facing UI, which previously only existed in the admin panel.
+export async function markMyDealSubmitted(appointmentId: string): Promise<ActionResult> {
+  await requireSession();
+  const supabase = await createClient();
+
+  const { error, count } = await supabase
+    .from("appointments")
+    .update({ deal_submitted_at: new Date().toISOString() }, { count: "exact" })
+    .eq("id", appointmentId);
+
+  if (error) return { ok: false, error: error.message };
+  if (!count) {
+    return { ok: false, error: "You can only submit a deal for appointments you're the closer for." };
+  }
+
+  revalidatePath("/appointments");
+  return { ok: true };
+}
+
 // Unlike updateMyAppointmentStatus above, this is NOT gated by
 // appointments_update RLS (admin or closer only) — it goes through
 // update_appointment_scheduled_at_for_assignee (schema.sql), a
