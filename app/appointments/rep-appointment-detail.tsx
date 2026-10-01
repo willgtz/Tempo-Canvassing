@@ -268,6 +268,30 @@ export function RepAppointmentDetail({
           <p className="text-sm">{closers.map((a) => a.full_name).join(", ") || "Unassigned"}</p>
         </div>
 
+        {/* Opens in a new tab — the appointment panel stays exactly as
+            it was underneath, so closing the slideshow tab returns here
+            with nothing lost. Available to any assignee, same as the
+            rest of this panel (appointments_select RLS already limits
+            who can even open this panel to admin or an assignee). */}
+        <div className="mt-4 flex gap-2 border-t border-black/10 pt-4 dark:border-white/10">
+          <a
+            href="/slideshow/en"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex-1 rounded border border-black/15 px-3 py-1.5 text-center text-sm font-medium hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+          >
+            Slideshow
+          </a>
+          <a
+            href="/slideshow/es"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex-1 rounded border border-black/15 px-3 py-1.5 text-center text-sm font-medium hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+          >
+            Spanish Slideshow
+          </a>
+        </div>
+
         {otherFormFields.length > 0 && (
           <div className="mt-4 space-y-1 border-t border-black/10 pt-4 dark:border-white/10">
             <p className="text-xs font-medium text-black/50 dark:text-white/50">Submission Details</p>

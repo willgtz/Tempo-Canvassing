@@ -8,6 +8,7 @@ const TABS = [
   { href: "/admin/appointments/statuses", label: "Statuses" },
   { href: "/admin/appointments/form-fields", label: "Form Fields" },
   { href: "/admin/appointments/section-order", label: "Detail Panel Order" },
+  { href: "/admin/appointments/slideshow", label: "Slideshow" },
 ];
 
 export function AppointmentsSubnav() {

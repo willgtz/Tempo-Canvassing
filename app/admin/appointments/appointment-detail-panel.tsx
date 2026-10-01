@@ -653,6 +653,28 @@ export function AppointmentDetailPanel({
           </button>
         </div>
 
+        {/* Fixed position, not one of the orderable sections below (same
+            treatment as dealBlock) — opens in a new tab, this panel is
+            untouched underneath. */}
+        <div className="mt-4 flex gap-2">
+          <a
+            href="/slideshow/en"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex-1 rounded border border-black/15 px-3 py-1.5 text-center text-sm font-medium hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+          >
+            Slideshow
+          </a>
+          <a
+            href="/slideshow/es"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex-1 rounded border border-black/15 px-3 py-1.5 text-center text-sm font-medium hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+          >
+            Spanish Slideshow
+          </a>
+        </div>
+
         {sectionOrder.map((key, i) => (
           <div
             key={key}
