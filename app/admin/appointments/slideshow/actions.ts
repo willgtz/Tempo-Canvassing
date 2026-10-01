@@ -104,11 +104,19 @@ export async function moveSlide(slideId: string, direction: "up" | "down"): Prom
     .single();
   if (fetchError || !slide) return { ok: false, error: fetchError?.message ?? "Slide not found." };
 
+  // "up" wants the closest slide BELOW the current sort_order (largest
+  // value that's still less than current) — that's descending order on
+  // the filtered set, not ascending. "down" wants the closest ABOVE
+  // (smallest value still greater) — ascending. The two were swapped
+  // (bug found 2026-10-01: "up" on the last slide was jumping it to the
+  // very first position instead of swapping with its immediate
+  // predecessor, since ascending order on the <current set returns the
+  // smallest match, i.e. the first slide, not the closest one).
   const { data: neighbor } = await supabase
     .from("slideshow_slides")
     .select("id, sort_order")
     .eq("language", slide.language)
-    .order("sort_order", { ascending: direction === "up" })
+    .order("sort_order", { ascending: direction === "down" })
     .gt("sort_order", direction === "down" ? slide.sort_order : -1)
     .lt("sort_order", direction === "up" ? slide.sort_order : 1_000_000_000)
     .limit(1)
@@ -209,11 +217,12 @@ export async function moveNavButton(id: string, direction: "up" | "down"): Promi
     .single();
   if (fetchError || !button) return { ok: false, error: fetchError?.message ?? "Button not found." };
 
+  // Same fix as moveSlide's identical neighbor-selection query above.
   const { data: neighbor } = await supabase
     .from("slideshow_nav_buttons")
     .select("id, sort_order")
     .eq("language", button.language)
-    .order("sort_order", { ascending: direction === "up" })
+    .order("sort_order", { ascending: direction === "down" })
     .gt("sort_order", direction === "down" ? button.sort_order : -1)
     .lt("sort_order", direction === "up" ? button.sort_order : 1_000_000_000)
     .limit(1)
