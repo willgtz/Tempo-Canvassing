@@ -6,7 +6,7 @@ import type { CircleLayerSpecification, SymbolLayerSpecification, GeoJSONSource 
 import "mapbox-gl/dist/mapbox-gl.css";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/components/ui/cn";
-import { getCurrentLocation } from "@/lib/geo";
+import { watchLocation } from "@/lib/geo";
 import type { Disposition, Lead } from "./types";
 
 const STREETS_STYLE = "mapbox://styles/mapbox/streets-v12";
@@ -304,7 +304,24 @@ export function LeadsMap({
   }
 
   const [myLocation, setMyLocation] = useState<{ lat: number; lng: number } | null>(null);
-  const [locating, setLocating] = useState(false);
+  const [locationError, setLocationError] = useState<string | null>(null);
+
+  // Continuous tracking while the map is mounted — gives a live "where am
+  // I" dot (like MapKit's built-in blue dot) without the rep needing to
+  // tap "center on me" every time, and lets that button just pan to the
+  // latest known fix instead of re-requesting location on every tap.
+  // Scoped to this component's lifetime: stops automatically when the map
+  // unmounts (switching to List view, or leaving the Leads page), the
+  // same foreground-only scope as every other location use in this app.
+  useEffect(() => {
+    return watchLocation(
+      (loc) => {
+        setMyLocation(loc);
+        setLocationError(null);
+      },
+      (message) => setLocationError(message)
+    );
+  }, []);
 
   useEffect(() => {
     if (!readyToMount || loaded) return;
@@ -470,21 +487,12 @@ export function LeadsMap({
     setRemountKey((k) => k + 1);
   }
 
-  // Matches the iOS app's "center on me" map control — flies to the
-  // rep's current position and drops a marker there, same as MapKit's
-  // built-in blue-dot user location, since Mapbox GL doesn't have a
-  // built-in equivalent of its own to just turn on.
-  async function handleLocateMe() {
-    setLocating(true);
-    try {
-      const loc = await getCurrentLocation();
-      setMyLocation(loc);
-      mapRef.current?.getMap().flyTo({ center: [loc.lng, loc.lat], zoom: 15, duration: 800 });
-    } catch (err) {
-      setMapError(err instanceof Error ? err.message : "Couldn't get your location.");
-    } finally {
-      setLocating(false);
-    }
+  // Matches the iOS app's "center on me" map control. myLocation is kept
+  // current by the continuous watchLocation effect above, so this just
+  // pans/flies there — no separate fetch needed on every tap.
+  function handleLocateMe() {
+    if (!myLocation) return;
+    mapRef.current?.getMap().flyTo({ center: [myLocation.lng, myLocation.lat], zoom: 15, duration: 800 });
   }
 
   return (
@@ -549,12 +557,12 @@ export function LeadsMap({
         </button>
         <button
           onClick={handleLocateMe}
-          disabled={locating}
+          disabled={!myLocation}
           className="flex h-8 w-8 items-center justify-center rounded-full border border-black/10 bg-white/90 text-black/60 shadow active:bg-black/10 disabled:opacity-50 dark:border-white/10 dark:bg-neutral-950/90 dark:text-white/60 dark:active:bg-white/20"
           aria-label="Center on my location"
-          title="Center on my location"
+          title={locationError ?? (myLocation ? "Center on my location" : "Finding your location…")}
         >
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className={cn("h-4 w-4", locating && "animate-pulse")}>
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className={cn("h-4 w-4", !myLocation && "animate-pulse")}>
             <circle cx="12" cy="12" r="3" />
             <path strokeLinecap="round" d="M12 2v3M12 19v3M2 12h3M19 12h3" />
           </svg>
@@ -692,9 +700,8 @@ export function LeadsMap({
 
       {/* Same blue-dot treatment as MapKit's built-in user location —
           Mapbox GL has no built-in equivalent, so this is a plain marker
-          instead, dropped/updated only when "center on me" is tapped
-          (no continuous location watching, to avoid burning battery for
-          a marker most reps won't look at twice). */}
+          instead, continuously repositioned by the watchLocation effect
+          above rather than only on "center on me" taps. */}
       {myLocation && (
         <Marker longitude={myLocation.lng} latitude={myLocation.lat}>
           <div className="h-4 w-4 rounded-full border-2 border-white bg-blue-600 shadow-[0_0_0_4px_rgba(37,99,235,0.3)]" />

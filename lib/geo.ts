@@ -22,6 +22,33 @@ export function getCurrentLocation(): Promise<{ lat: number; lng: number }> {
   });
 }
 
+// Continuous location tracking — backs the Leads map's live "where am I"
+// dot, so a rep doesn't have to tap "center on me" every time to see
+// their own position, and that button can just pan to the latest known
+// fix instead of re-requesting location on every tap. Separate from
+// getCurrentLocation above: callers that need a precise one-off fix for
+// a specific action (building a route, verifying a door knock) should
+// keep using that instead of a possibly-few-seconds-stale watched
+// position. Returns an unsubscribe function.
+export function watchLocation(
+  onUpdate: (loc: { lat: number; lng: number }) => void,
+  onError: (message: string) => void
+): () => void {
+  if (!navigator.geolocation) {
+    onError("Geolocation isn't supported by this browser.");
+    return () => {};
+  }
+  const watchId = navigator.geolocation.watchPosition(
+    (pos) => onUpdate({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+    (err) =>
+      onError(
+        err.message || "Couldn't get your location — allow location access and try again."
+      ),
+    { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 }
+  );
+  return () => navigator.geolocation.clearWatch(watchId);
+}
+
 // Same URL shape as the per-stop turn-by-turn handoff in
 // route-result-panel.tsx (destination-only, no origin — both Apple's and
 // Google's directions URLs default to the device's current location when
