@@ -169,6 +169,10 @@ export function LeadsMap({
   onSelectLead,
   onTogglePin,
   focusLeadId,
+  fixLocationLead,
+  onConfirmFixLocation,
+  onCancelFixLocation,
+  onConfirmNewPin,
 }: {
   leads: Lead[];
   dispositionById: Map<string, Disposition>;
@@ -180,6 +184,17 @@ export function LeadsMap({
   // Deep-link support ("Go to Lead" from an appointment) — flies the map
   // to this lead once, instead of the default center-of-all-leads view.
   focusLeadId?: string | null;
+  // "Fix Location" — triggered from the Lead Detail Panel (a sibling,
+  // not a child of this component), so unlike new-pin placement below
+  // this has to be parent-owned state, threaded down as a prop.
+  fixLocationLead?: Lead | null;
+  onConfirmFixLocation?: (leadId: string, lat: number, lng: number) => void;
+  onCancelFixLocation?: () => void;
+  // New-pin placement is triggered by this component's own control-stack
+  // button, so start/cancel stay fully local — only the final confirmed
+  // point needs to bubble up, for leads-explorer.tsx to reverse-geocode
+  // and open the Add Lead modal with it.
+  onConfirmNewPin?: (lat: number, lng: number) => void;
 }) {
   const mapRef = useRef<MapRef>(null);
   // Mapbox failures (bad token, network/adblock-blocked tile requests,
@@ -290,6 +305,7 @@ export function LeadsMap({
 
   const [myLocation, setMyLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [locating, setLocating] = useState(false);
+
   useEffect(() => {
     if (!readyToMount || loaded) return;
     const t = setTimeout(() => setStuck(true), 6000);
@@ -322,6 +338,59 @@ export function LeadsMap({
     );
     return { lat: sum.lat / locatedLeads.length, lng: sum.lng / locatedLeads.length };
   }, [locatedLeads]);
+
+  // Drives both "drop a new pin" and "fix an existing pin's location" —
+  // mutually exclusive, never active at once. newPinCenter non-null
+  // means the former; fixLocationLead non-null (a prop) means the
+  // latter. dragOverride holds wherever the user has since dragged it
+  // to, reset back to null whenever the thing being staged changes
+  // (new-pin vs. which lead) — both derived from plain props/state
+  // during render, no ref reads or effects needed.
+  const [newPinCenter, setNewPinCenter] = useState<{ lat: number; lng: number } | null>(null);
+  const [dragOverride, setDragOverride] = useState<{ lat: number; lng: number } | null>(null);
+  const isPlacingNewPin = newPinCenter != null;
+
+  const stagingKey = isPlacingNewPin ? "new" : fixLocationLead ? `fix:${fixLocationLead.id}` : null;
+  const [lastStagingKey, setLastStagingKey] = useState<string | null>(null);
+  if (stagingKey !== lastStagingKey) {
+    setLastStagingKey(stagingKey);
+    setDragOverride(null);
+  }
+
+  const stagingBasePosition = isPlacingNewPin
+    ? newPinCenter
+    : fixLocationLead
+      ? fixLocationLead.lat != null && fixLocationLead.lng != null
+        ? { lat: fixLocationLead.lat, lng: fixLocationLead.lng }
+        // No coordinates yet (geocoding never succeeded) — the centroid
+        // of this viewer's other leads is at least in the right general
+        // area to start dragging from, unlike the contiguous-US fallback.
+        : center
+      : null;
+  const stagingPosition = dragOverride ?? stagingBasePosition;
+  const isStaging = stagingPosition != null;
+
+  function handleStartPlacingNewPin() {
+    const mapCenter = mapRef.current?.getMap()?.getCenter();
+    setNewPinCenter(mapCenter ? { lat: mapCenter.lat, lng: mapCenter.lng } : center);
+  }
+
+  function handleCancelStaging() {
+    setNewPinCenter(null);
+    setDragOverride(null);
+    if (fixLocationLead) onCancelFixLocation?.();
+  }
+
+  function handleConfirmStaging() {
+    if (!stagingPosition) return;
+    if (fixLocationLead) {
+      onConfirmFixLocation?.(fixLocationLead.id, stagingPosition.lat, stagingPosition.lng);
+    } else {
+      onConfirmNewPin?.(stagingPosition.lat, stagingPosition.lng);
+    }
+    setNewPinCenter(null);
+    setDragOverride(null);
+  }
 
   const geojson = useMemo(
     () => ({
@@ -490,6 +559,19 @@ export function LeadsMap({
             <path strokeLinecap="round" d="M12 2v3M12 19v3M2 12h3M19 12h3" />
           </svg>
         </button>
+        {!selectMode && !isStaging && (
+          <button
+            onClick={handleStartPlacingNewPin}
+            className="flex h-8 w-8 items-center justify-center rounded-full border border-black/10 bg-white/90 text-black/60 shadow active:bg-black/10 dark:border-white/10 dark:bg-neutral-950/90 dark:text-white/60 dark:active:bg-white/20"
+            aria-label="Drop a pin to add a lead"
+            title="Drop a pin to add a lead"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="h-4 w-4">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 21s-7-7.1-7-12a7 7 0 1 1 14 0c0 4.9-7 12-7 12Z" />
+              <circle cx="12" cy="9" r="2.5" />
+            </svg>
+          </button>
+        )}
         {/* relative wrapper + right-0 anchored panel (not left-0) so this
             never grows off the left edge of a narrow phone screen — same
             fix as the dashboard Customize menu's earlier mobile bug. */}
@@ -574,14 +656,19 @@ export function LeadsMap({
       // desktop too, where there's no tab bar to worry about.
       padding={{ top: 0, bottom: 80, left: 0, right: 0 }}
       onLoad={() => setLoaded(true)}
-      interactiveLayerIds={selectMode ? [] : ["clusters", "unclustered-point"]}
-      onClick={selectMode ? undefined : handleClick}
+      interactiveLayerIds={selectMode || isStaging ? [] : ["clusters", "unclustered-point"]}
+      onClick={selectMode || isStaging ? undefined : handleClick}
       onError={(e) => {
         console.error("Mapbox error:", e.error);
         setMapError(e.error?.message ?? "unknown error — check console");
       }}
     >
-      {!selectMode && (
+      {/* Hidden entirely while fixing one lead's location — "no other
+          pins as a distraction," per William. New-pin placement
+          deliberately leaves other leads visible instead (useful
+          context for spotting duplicates/nearby houses), so this only
+          checks fixLocationLead, not the broader isStaging flag. */}
+      {!selectMode && !fixLocationLead && (
         <Source
           // Keyed on the committed clusterMaxZoom so changing it forces
           // a real remount — <Source>'s own update logic (react-map-gl)
@@ -650,7 +737,41 @@ export function LeadsMap({
             </Marker>
           );
         })}
+
+      {/* The one pin being placed/moved — Mapbox's own Marker dragging
+          (not the flaky HTML5 drag-and-drop API) handles mouse AND touch
+          natively, so this works the same on a phone as on desktop.
+          Panning the map underneath is a separate gesture from grabbing
+          this marker, so both stay available at once. */}
+      {stagingPosition && (
+        <Marker
+          longitude={stagingPosition.lng}
+          latitude={stagingPosition.lat}
+          draggable
+          onDragEnd={(e) => setDragOverride({ lat: e.lngLat.lat, lng: e.lngLat.lng })}
+        >
+          <div className="flex h-8 w-8 -translate-y-1/2 cursor-grab items-center justify-center rounded-full border-[3px] border-white bg-red-600 shadow-lg active:cursor-grabbing">
+            <div className="h-2 w-2 rounded-full bg-white" />
+          </div>
+        </Marker>
+      )}
       </Map>
+
+      {isStaging && (
+        <div className="absolute inset-x-0 bottom-20 z-10 flex justify-center gap-2 px-4 sm:bottom-6">
+          <div className="flex items-center gap-2 rounded-full border border-black/10 bg-white/95 p-1.5 shadow-lg dark:border-white/10 dark:bg-neutral-950/95">
+            <span className="px-2 text-xs text-black/60 dark:text-white/60">
+              {fixLocationLead ? "Drag to the correct spot" : "Drag the pin into place"}
+            </span>
+            <Button type="button" variant="secondary" size="sm" onClick={handleCancelStaging}>
+              Cancel
+            </Button>
+            <Button type="button" size="sm" onClick={handleConfirmStaging}>
+              Confirm
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

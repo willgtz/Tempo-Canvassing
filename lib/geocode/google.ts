@@ -63,3 +63,71 @@ export async function geocodeAddress(address: string): Promise<GeocodeOutcome> {
     return { status: "ERROR", lat: null, lng: null, precision: null };
   }
 }
+
+export type ReverseGeocodeOutcome = {
+  status: GeocodeStatus;
+  addressLine: string | null;
+  city: string | null;
+  state: string | null;
+  zipcode: string | null;
+  formattedAddress?: string;
+};
+
+type AddressComponent = { long_name: string; short_name: string; types: string[] };
+
+// Used by the "drop a pin" / "fix pin location" flows (app/leads) — the
+// dropped point is the source of truth for the lead's lat/lng either
+// way, this is purely to pre-fill the address TEXT fields as a
+// convenience. A rep can freely edit those afterward (e.g. a new build
+// Google hasn't indexed yet) without it ever moving the pin, since
+// nothing here feeds back into lat/lng.
+export async function reverseGeocode(lat: number, lng: number): Promise<ReverseGeocodeOutcome> {
+  const key = apiKey();
+  if (!key) {
+    throw new Error("Server is missing GOOGLE_MAPS_API_KEY");
+  }
+
+  const url = new URL(GOOGLE_GEOCODE_URL);
+  url.searchParams.set("latlng", `${lat},${lng}`);
+  url.searchParams.set("key", key);
+
+  const empty = { addressLine: null, city: null, state: null, zipcode: null };
+
+  try {
+    const res = await fetch(url.toString());
+    const data = await res.json();
+
+    if (data.status === "OK" && data.results?.[0]) {
+      const result = data.results[0];
+      const components: AddressComponent[] = result.address_components ?? [];
+      const find = (type: string, useShort = false) => {
+        const c = components.find((c) => c.types.includes(type));
+        return c ? (useShort ? c.short_name : c.long_name) : null;
+      };
+
+      const streetNumber = find("street_number");
+      const route = find("route");
+      const addressLine = [streetNumber, route].filter(Boolean).join(" ") || null;
+      const city = find("locality") ?? find("sublocality") ?? find("postal_town");
+      const state = find("administrative_area_level_1", true);
+      const zipcode = find("postal_code");
+
+      return {
+        status: "OK",
+        addressLine,
+        city,
+        state,
+        zipcode,
+        formattedAddress: result.formatted_address,
+      };
+    }
+
+    if (data.status === "ZERO_RESULTS") {
+      return { status: "ZERO_RESULTS", ...empty };
+    }
+
+    return { status: "ERROR", ...empty };
+  } catch {
+    return { status: "ERROR", ...empty };
+  }
+}

@@ -15,6 +15,7 @@ import { cn } from "@/components/ui/cn";
 import { MobileTabBarSpacer } from "@/components/mobile-tab-bar";
 import { getCurrentLocation } from "@/lib/geo";
 import { usePersistedLeadsFilters } from "./use-persisted-leads-filters";
+import { updateLeadLocation } from "./actions";
 import type { AppointmentFormField, Disposition, Lead, Profile, RouteStop } from "./types";
 
 type ViewMode = "map" | "list";
@@ -69,6 +70,16 @@ export function LeadsExplorer({
   const focusLeadId = searchParams.get("lead");
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(focusLeadId);
   const [showAddLead, setShowAddLead] = useState(false);
+  // Set when Add Lead was opened by confirming a dropped pin on the map
+  // (leads-map.tsx's "drop a pin" mode) rather than the plain "+ Add
+  // Lead" button — AddLeadModal uses this to lock the lead's location to
+  // exactly this point and reverse-geocode it for a pre-filled (but
+  // still freely editable) address.
+  const [newPinLocation, setNewPinLocation] = useState<{ lat: number; lng: number } | null>(null);
+  // "Fix Location" from the Lead Detail Panel — non-null while the map
+  // is in its one-pin-draggable mode for this specific lead.
+  const [fixLocationLead, setFixLocationLead] = useState<Lead | null>(null);
+  const [fixLocationError, setFixLocationError] = useState<string | null>(null);
   // "Reuse this route" deep-link from Route History (/leads/routes) —
   // /leads?reroute=<comma-separated lead ids> drops straight into select
   // mode with that route's stops pre-selected, so hitting Route rebuilds
@@ -326,6 +337,32 @@ export function LeadsExplorer({
     setSelectedLeadIds([]);
     setRouteError(null);
     setShowRerouteBanner(false);
+  }
+
+  function handleConfirmNewPin(lat: number, lng: number) {
+    setNewPinLocation({ lat, lng });
+    setShowAddLead(true);
+  }
+
+  function handleFixLocation(lead: Lead) {
+    setFixLocationError(null);
+    setFixLocationLead(lead);
+    setSelectedLeadId(null); // close the detail panel — full map visibility while dragging
+    setViewMode("map");
+  }
+
+  function handleConfirmFixLocation(leadId: string, lat: number, lng: number) {
+    setFixLocationError(null);
+    updateLeadLocation(leadId, lat, lng).then((result) => {
+      if (!result.ok) {
+        setFixLocationError(result.error);
+        return;
+      }
+      setLeadsState((prev) =>
+        prev.map((l) => (l.id === leadId ? { ...l, lat, lng, geocode_precision: "MANUAL" } : l))
+      );
+      setFixLocationLead(null);
+    });
   }
 
   function handleBuildRoute() {
@@ -871,6 +908,11 @@ export function LeadsExplorer({
           positioning sizes directly off this containing block regardless
           of that quirk. */}
       <div className="relative flex-1">
+        {fixLocationError && (
+          <p className="absolute inset-x-0 top-0 z-10 bg-red-600 px-3 py-1.5 text-center text-xs font-medium text-white">
+            {fixLocationError}
+          </p>
+        )}
         {viewMode === "map" ? (
           <LeadsMap
             leads={filteredLeads}
@@ -881,6 +923,10 @@ export function LeadsExplorer({
             onSelectLead={setSelectedLeadId}
             onTogglePin={handleTogglePin}
             focusLeadId={focusLeadId}
+            fixLocationLead={fixLocationLead}
+            onConfirmFixLocation={handleConfirmFixLocation}
+            onCancelFixLocation={() => setFixLocationLead(null)}
+            onConfirmNewPin={handleConfirmNewPin}
           />
         ) : (
           <LeadsList
@@ -925,16 +971,22 @@ export function LeadsExplorer({
             setLeadsState((prev) => prev.filter((l) => l.id !== leadId));
             setSelectedLeadId(null);
           }}
+          onFixLocation={handleFixLocation}
         />
       )}
 
       {showAddLead && (
         <AddLeadModal
           dispositions={dispositions}
-          onClose={() => setShowAddLead(false)}
+          lockedLocation={newPinLocation}
+          onClose={() => {
+            setShowAddLead(false);
+            setNewPinLocation(null);
+          }}
           onAdded={(lead) => {
             setLeadsState((prev) => [lead, ...prev]);
             setShowAddLead(false);
+            setNewPinLocation(null);
           }}
         />
       )}

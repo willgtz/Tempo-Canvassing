@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { addManualLead } from "./actions";
 import { useSlideIn } from "@/lib/use-slide-in";
 import { cn } from "@/components/ui/cn";
@@ -11,10 +11,17 @@ import type { Disposition, Lead } from "./types";
 
 export function AddLeadModal({
   dispositions,
+  lockedLocation,
   onClose,
   onAdded,
 }: {
   dispositions: Disposition[];
+  // Set when this modal was opened by confirming a dropped pin on the
+  // map — the lead's lat/lng locks to exactly this point regardless of
+  // whatever the address fields below get edited to afterward (a new
+  // build Google hasn't indexed yet, for instance). Address fields are
+  // still pre-filled via reverse-geocoding, purely for convenience.
+  lockedLocation?: { lat: number; lng: number } | null;
   onClose: () => void;
   onAdded: (lead: Lead) => void;
 }) {
@@ -31,6 +38,40 @@ export function AddLeadModal({
   const [dispositionId, setDispositionId] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const [isResolvingAddress, setIsResolvingAddress] = useState(!!lockedLocation);
+
+  // Runs once, on mount only (this modal is always freshly mounted when
+  // opened — see leads-explorer.tsx's `{showAddLead && <AddLeadModal .../>}`
+  // — so lockedLocation never changes out from under an already-open
+  // instance). Best-effort: a reverse-geocode failure still lets the rep
+  // type the address by hand, it just doesn't start pre-filled.
+  useEffect(() => {
+    if (!lockedLocation) return;
+    let cancelled = false;
+    fetch("/api/geocode/reverse", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(lockedLocation),
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (cancelled) return;
+        if (data.addressLine) setAddressLine(data.addressLine);
+        if (data.city) setCity(data.city);
+        if (data.state) setState(data.state);
+        if (data.zipcode) setZipcode(data.zipcode);
+      })
+      .catch(() => {
+        // No pre-fill — rep can still type the address manually.
+      })
+      .finally(() => {
+        if (!cancelled) setIsResolvingAddress(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -62,6 +103,8 @@ export function AddLeadModal({
         dispositionId: dispositionId || null,
         eventLat: location?.lat,
         eventLng: location?.lng,
+        lockedLat: lockedLocation?.lat,
+        lockedLng: lockedLocation?.lng,
       });
       if (!result.ok) {
         setError(result.error);
@@ -99,6 +142,11 @@ export function AddLeadModal({
           For a cold-knocked door. Allowed in any zip, even one that isn&apos;t
           assigned to you — it&apos;ll be marked as manually entered.
         </p>
+        {lockedLocation && (
+          <p className="mt-2 rounded bg-blue-50 px-2 py-1 text-xs text-blue-700 dark:bg-blue-500/10 dark:text-blue-400">
+            Location locked to the pin you dropped — editing the address below won&apos;t move it.
+          </p>
+        )}
 
         <form onSubmit={handleSubmit} className="mt-4 space-y-3">
           {/* Submit lives up here, not below Notes — on mobile, filling in
@@ -109,10 +157,10 @@ export function AddLeadModal({
           <div className="flex flex-wrap items-center gap-3">
             <button
               type="submit"
-              disabled={isPending}
+              disabled={isPending || isResolvingAddress}
               className="rounded bg-black px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50 dark:bg-white dark:text-black"
             >
-              {isPending ? "Adding…" : "Add Lead"}
+              {isPending ? "Adding…" : isResolvingAddress ? "Resolving address…" : "Add Lead"}
             </button>
             <DispositionSelect dispositions={dispositions} value={dispositionId} onChange={setDispositionId} />
             {error && <span className="text-sm text-red-600 dark:text-red-400">{error}</span>}

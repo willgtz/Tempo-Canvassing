@@ -54,6 +54,7 @@ export function LeadDetailPanel({
   onPriorSaleDateSaved,
   onLeadUpdated,
   onArchived,
+  onFixLocation,
 }: {
   lead: Lead;
   dispositions: Disposition[];
@@ -66,6 +67,7 @@ export function LeadDetailPanel({
   onPriorSaleDateSaved: (leadId: string, priorSaleDate: string | null) => void;
   onLeadUpdated: (lead: Lead) => void;
   onArchived: (leadId: string) => void;
+  onFixLocation: (lead: Lead) => void;
 }) {
   const visible = useSlideIn();
   const [showSetAppointment, setShowSetAppointment] = useState(false);
@@ -366,6 +368,17 @@ export function LeadDetailPanel({
           className="mt-3 rounded border border-black/15 px-3 py-1.5 text-sm font-medium hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
         >
           Set Appointment
+        </button>
+
+        {/* No extra permission gate — anyone who can see this panel can
+            already edit this lead (leads_select/leads_update share the
+            same RLS clauses), matching how disposition/notes editing
+            already works here. */}
+        <button
+          onClick={() => onFixLocation(lead)}
+          className="mt-3 ml-2 rounded border border-black/15 px-3 py-1.5 text-sm font-medium hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+        >
+          Fix Location
         </button>
 
         {canArchive && (

@@ -93,6 +93,68 @@ export async function updateLeadDisposition(
   return { ok: true };
 }
 
+export type UpdateLeadLocationResult = { ok: true } | { ok: false; error: string };
+
+// "Fix Location" from the lead detail panel — same leads_update RLS
+// (admin OR anyone who can already edit the lead) as updateLeadDisposition
+// above, no new permission tier. geocode_precision becomes "MANUAL" so
+// this position is flagged as human-verified rather than a geocoder
+// guess, and a lead_history row records the correction (old coords ->
+// new) the same way a disposition change already does — this directly
+// feeds the door-knock verification trigger (compute_door_knock_
+// verification_history/_notes, schema.sql), which always reads the
+// lead's CURRENT lat/lng fresh at knock time, so every future knock on
+// this lead is measured against the corrected point immediately.
+export async function updateLeadLocation(
+  leadId: string,
+  lat: number,
+  lng: number
+): Promise<UpdateLeadLocationResult> {
+  const session = await getSession();
+  if (!session) return { ok: false, error: "Unauthorized" };
+
+  const supabase = await createClient();
+
+  const { data: currentLead, error: leadError } = await supabase
+    .from("leads")
+    .select("lat, lng")
+    .eq("id", leadId)
+    .single();
+
+  if (leadError || !currentLead) {
+    return { ok: false, error: leadError?.message ?? "Lead not found." };
+  }
+
+  const { error: updateError } = await supabase
+    .from("leads")
+    .update({ lat, lng, geocode_precision: "MANUAL", updated_at: new Date().toISOString() })
+    .eq("id", leadId);
+
+  if (updateError) {
+    return { ok: false, error: updateError.message };
+  }
+
+  const oldValue =
+    currentLead.lat != null && currentLead.lng != null
+      ? `${currentLead.lat},${currentLead.lng}`
+      : "None";
+
+  const { error: historyError } = await supabase.from("lead_history").insert({
+    lead_id: leadId,
+    user_id: session.userId,
+    field_changed: "location",
+    old_value: oldValue,
+    new_value: `${lat},${lng}`,
+  });
+
+  if (historyError) {
+    return { ok: false, error: `Saved, but failed to record history: ${historyError.message}` };
+  }
+
+  revalidatePath("/leads");
+  return { ok: true };
+}
+
 export type UpdatePriorSaleDateResult = { ok: true } | { ok: false; error: string };
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -206,6 +268,15 @@ export type AddManualLeadInput = {
   // these coordinates against the lead's own just-geocoded lat/lng.
   eventLat?: number;
   eventLng?: number;
+  // Set when this lead was created by dropping a pin on the map (see
+  // leads-map.tsx's new-pin mode) — the dropped point IS the lead's
+  // location, full stop. Geocoding is skipped entirely in that case, so
+  // editing the address text afterward (e.g. a new build Google hasn't
+  // indexed yet) never moves it. geocode_precision becomes "MANUAL"
+  // rather than one of Google's own precision codes, signaling this was
+  // human-placed, not a geocoder guess.
+  lockedLat?: number;
+  lockedLng?: number;
 };
 
 export type AddManualLeadResult = { ok: true; lead: Lead } | { ok: false; error: string };
@@ -233,17 +304,23 @@ export async function addManualLead(input: AddManualLeadInput): Promise<AddManua
   let lat: number | null = null;
   let lng: number | null = null;
   let precision: string | null = null;
-  try {
-    const fullAddress = [addressLine, city, [state, zipcode].filter(Boolean).join(" ")]
-      .filter(Boolean)
-      .join(", ");
-    const result = await geocodeAddress(fullAddress);
-    lat = result.lat;
-    lng = result.lng;
-    precision = result.precision;
-  } catch {
-    // Same fallback as bulk upload — insert with no coordinates rather
-    // than blocking the rep from logging the door.
+  if (input.lockedLat != null && input.lockedLng != null) {
+    lat = input.lockedLat;
+    lng = input.lockedLng;
+    precision = "MANUAL";
+  } else {
+    try {
+      const fullAddress = [addressLine, city, [state, zipcode].filter(Boolean).join(" ")]
+        .filter(Boolean)
+        .join(", ");
+      const result = await geocodeAddress(fullAddress);
+      lat = result.lat;
+      lng = result.lng;
+      precision = result.precision;
+    } catch {
+      // Same fallback as bulk upload — insert with no coordinates rather
+      // than blocking the rep from logging the door.
+    }
   }
 
   const supabase = await createClient();
