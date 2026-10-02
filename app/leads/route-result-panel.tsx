@@ -1,10 +1,17 @@
 "use client";
 
-import { useState, useTransition } from "react";
 import { useSlideIn } from "@/lib/use-slide-in";
 import { cn } from "@/components/ui/cn";
-import { toggleRouteStopVisited } from "./actions";
 import type { RouteStop } from "./types";
+
+// Google's Directions API caps a single request at 25 waypoints — this
+// app works around that for its own route-building (chunked, sequential
+// calls, see app/api/leads/route/route.ts), but the "Open in Google
+// Maps" deep link below is a single untouched Google Maps URL with no
+// such workaround, and its own practical waypoint limit is untested past
+// this point. Hidden above it; per-stop Apple Go/Google Go links below
+// still work at any route size since they carry just one destination each.
+const MAX_GOOGLE_MAPS_LINK_STOPS = 24;
 
 function buildGoogleMapsUrl(stops: RouteStop[]): string {
   const origin = stops[0];
@@ -51,8 +58,12 @@ export function RouteResultPanel({
   stops,
   skippedCount,
   routeId,
-  onClose,
+  visitedLeadIds,
+  onToggleVisited,
+  preserveOrder,
   onSelectLead,
+  onMinimize,
+  onEndRoute,
 }: {
   stops: RouteStop[];
   skippedCount: number;
@@ -60,40 +71,23 @@ export function RouteResultPanel({
   // failed (best-effort, see api/leads/route/route.ts), in which case
   // visited-tracking is just disabled rather than erroring.
   routeId: string | null;
+  // Lifted to the parent (leads-explorer.tsx) rather than owned here, so
+  // it survives this panel being unmounted by Minimize and a later
+  // reopen — this component is now a controlled view over that state.
+  visitedLeadIds: Set<string>;
+  onToggleVisited: (leadId: string) => void;
+  // True when these stops came from "Reuse this route" — distances/times
+  // were recalculated fresh, but the sequence itself was intentionally
+  // NOT reordered by Google, unlike a normal freshly-built route.
+  preserveOrder: boolean;
   onSelectLead: (leadId: string) => void;
-  onClose: () => void;
+  // Hides the panel but keeps the route alive (still shown via the slim
+  // top bar) — distinct from onEndRoute, which actually clears it.
+  onMinimize: () => void;
+  onEndRoute: () => void;
 }) {
   const mapsUrl = buildGoogleMapsUrl(stops);
   const visible = useSlideIn();
-
-  // Scoped to this live panel only, not persisted to Route History —
-  // still saved to the routes row itself (not just this component's
-  // state) so a page refresh mid-route doesn't lose progress.
-  const [visitedLeadIds, setVisitedLeadIds] = useState<Set<string>>(new Set());
-  const [, startToggle] = useTransition();
-
-  function handleToggleVisited(leadId: string) {
-    if (!routeId) return;
-    const nowVisited = !visitedLeadIds.has(leadId);
-    setVisitedLeadIds((prev) => {
-      const next = new Set(prev);
-      if (nowVisited) next.add(leadId);
-      else next.delete(leadId);
-      return next;
-    });
-    startToggle(async () => {
-      const result = await toggleRouteStopVisited(routeId, leadId, nowVisited);
-      if (!result.ok) {
-        // Revert the optimistic update on failure.
-        setVisitedLeadIds((prev) => {
-          const next = new Set(prev);
-          if (nowVisited) next.delete(leadId);
-          else next.add(leadId);
-          return next;
-        });
-      }
-    });
-  }
 
   return (
     <>
@@ -102,7 +96,7 @@ export function RouteResultPanel({
           "fixed inset-0 z-20 bg-black/30 backdrop-blur-sm transition-opacity duration-200",
           visible ? "opacity-100" : "opacity-0"
         )}
-        onClick={onClose}
+        onClick={onMinimize}
       />
       <div
         className={cn(
@@ -113,16 +107,17 @@ export function RouteResultPanel({
         <div className="flex items-start justify-between gap-4">
           <h2 className="text-lg font-semibold">Optimized Route</h2>
           <button
-            onClick={onClose}
+            onClick={onMinimize}
             className="text-sm text-black/50 hover:text-black dark:text-white/50 dark:hover:text-white"
           >
-            Close
+            Minimize
           </button>
         </div>
 
         <p className="mt-1 text-sm text-black/60 dark:text-white/60">
-          Starting from your current location. The last lead you selected is the fixed final
-          stop; everything else was reordered nearest-to-farthest by Google.
+          {preserveOrder
+            ? "Reusing a past route in its original stop order. Distances and times are recalculated from your current location."
+            : "Starting from your current location. The last lead you selected is the fixed final stop; everything else was reordered nearest-to-farthest by Google."}
         </p>
 
         {skippedCount > 0 && (
@@ -132,14 +127,24 @@ export function RouteResultPanel({
           </p>
         )}
 
-        <a
-          href={mapsUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="mt-4 block rounded bg-black px-4 py-2 text-center text-sm font-medium text-white dark:bg-white dark:text-black"
+        {stops.length <= MAX_GOOGLE_MAPS_LINK_STOPS && (
+          <a
+            href={mapsUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-4 block rounded bg-black px-4 py-2 text-center text-sm font-medium text-white dark:bg-white dark:text-black"
+          >
+            Open in Google Maps
+          </a>
+        )}
+
+        <button
+          type="button"
+          onClick={onEndRoute}
+          className="mt-2 block w-full rounded border border-red-600/30 px-4 py-2 text-center text-sm font-medium text-red-600 hover:bg-red-600/5 dark:border-red-400/30 dark:text-red-400 dark:hover:bg-red-400/10"
         >
-          Open in Google Maps
-        </a>
+          End Route
+        </button>
 
         <ol className="mt-6 space-y-4">
           {stops.map((stop, i) => {
@@ -158,7 +163,7 @@ export function RouteResultPanel({
                   <input
                     type="checkbox"
                     checked={isVisited}
-                    onChange={() => handleToggleVisited(stop.leadId as string)}
+                    onChange={() => onToggleVisited(stop.leadId as string)}
                     disabled={!routeId}
                     title={routeId ? "Mark visited" : "Visited-tracking unavailable for this route"}
                     className="mt-1.5 h-4 w-4 flex-none"

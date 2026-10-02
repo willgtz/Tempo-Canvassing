@@ -15,15 +15,17 @@ import { cn } from "@/components/ui/cn";
 import { MobileTabBarSpacer } from "@/components/mobile-tab-bar";
 import { getCurrentLocation } from "@/lib/geo";
 import { usePersistedLeadsFilters } from "./use-persisted-leads-filters";
-import { updateLeadLocation } from "./actions";
+import { usePersistedActiveRoute } from "./use-persisted-active-route";
+import { updateLeadLocation, toggleRouteStopVisited } from "./actions";
 import type { AppointmentFormField, Disposition, Lead, Profile, RouteStop } from "./types";
 
 type ViewMode = "map" | "list";
 
-// Google Directions API allows 25 waypoints total; the rep's current
-// location always takes one of those slots as the route origin, so at
-// most 24 leads can be selected.
-const MAX_ROUTE_STOPS = 24;
+// Overall selection cap — the server (app/api/leads/route/route.ts) splits
+// anything beyond Google's own 24-leads-per-request limit into sequential
+// chunks, so this is just a sane upper bound on one route, not an API
+// constraint in itself.
+const MAX_ROUTE_STOPS = 100;
 
 export function LeadsExplorer({
   leads,
@@ -99,11 +101,31 @@ export function LeadsExplorer({
   const [selectMode, setSelectMode] = useState(rerouteLeadIds.length > 0);
   const [selectedLeadIds, setSelectedLeadIds] = useState<string[]>(rerouteLeadIds);
   const [showRerouteBanner, setShowRerouteBanner] = useState(rerouteLeadIds.length > 0);
+  // Set while the pending build is a "Reuse this route" replay — tells
+  // the server to keep the given lead order instead of letting Google
+  // reoptimize it. Reset back to false once consumed by a build (success
+  // or a fresh manual selection), so it never leaks into an unrelated
+  // route.
+  const [reuseExactOrder, setReuseExactOrder] = useState(rerouteLeadIds.length > 0);
   const [routeStops, setRouteStops] = useState<RouteStop[] | null>(null);
   const [routeSkipped, setRouteSkipped] = useState(0);
   const [routeId, setRouteId] = useState<string | null>(null);
+  // Whether the CURRENTLY DISPLAYED route (routeStops above) was built
+  // with order preserved — captured at build time since reuseExactOrder
+  // itself gets reset right after, and this still needs to drive the
+  // result panel's copy for as long as this route stays open.
+  const [routePreservesOrder, setRoutePreservesOrder] = useState(false);
+  // Scoped to the live route only, not persisted to Route History —
+  // still saved to the routes row itself (toggleRouteStopVisited) and
+  // mirrored into localStorage below, so neither a refresh nor a
+  // minimize/reopen cycle loses checked-off progress.
+  const [visitedLeadIds, setVisitedLeadIds] = useState<Set<string>>(new Set());
+  // Hides the route panel but keeps the route itself alive, surfaced via
+  // a slim top bar instead — distinct from actually ending the route.
+  const [isRouteMinimized, setIsRouteMinimized] = useState(false);
   const [routeError, setRouteError] = useState<string | null>(null);
   const [isRouting, startRouting] = useTransition();
+  const [, startTogglingVisited] = useTransition();
   const [showMobileFilters, setShowMobileFilters] = useState(false);
   const [showMobileSearch, setShowMobileSearch] = useState(false);
 
@@ -157,6 +179,36 @@ export function LeadsExplorer({
     viewMode,
     savePersistedFilters,
   ]);
+
+  // In-progress route survives a refresh/navigate-away-and-back, until
+  // explicitly ended (End Route button in RouteResultPanel) — same
+  // restore-once/save-on-change pattern as the filters above.
+  const { restored: restoredRoute, save: saveActiveRoute } = usePersistedActiveRoute();
+  const hasHydratedRoute = useRef(false);
+
+  useEffect(() => {
+    if (!restoredRoute || hasHydratedRoute.current) return;
+    hasHydratedRoute.current = true;
+    setRouteStops(restoredRoute.stops);
+    setRouteSkipped(restoredRoute.skippedCount);
+    setRouteId(restoredRoute.routeId);
+    setVisitedLeadIds(new Set(restoredRoute.visitedLeadIds));
+    setRoutePreservesOrder(restoredRoute.preserveOrder);
+  }, [restoredRoute]);
+
+  useEffect(() => {
+    if (routeStops) {
+      saveActiveRoute({
+        routeId,
+        stops: routeStops,
+        skippedCount: routeSkipped,
+        visitedLeadIds: Array.from(visitedLeadIds),
+        preserveOrder: routePreservesOrder,
+      });
+    } else {
+      saveActiveRoute(null);
+    }
+  }, [routeStops, routeId, routeSkipped, visitedLeadIds, routePreservesOrder, saveActiveRoute]);
 
   const dispositionById = useMemo(
     () => new Map(dispositions.map((d) => [d.id, d])),
@@ -337,6 +389,15 @@ export function LeadsExplorer({
     setSelectedLeadIds([]);
     setRouteError(null);
     setShowRerouteBanner(false);
+    setReuseExactOrder(false);
+  }
+
+  // Starts a brand-new, from-scratch selection — distinct from the
+  // "Reuse this route" deep link, which seeds selectMode/selectedLeadIds
+  // itself and must NOT be clobbered back to false here.
+  function handleStartSelect() {
+    setSelectMode(true);
+    setReuseExactOrder(false);
   }
 
   function handleConfirmNewPin(lat: number, lng: number) {
@@ -379,7 +440,7 @@ export function LeadsExplorer({
       const res = await fetch("/api/leads/route", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ leadIds: selectedLeadIds, origin }),
+        body: JSON.stringify({ leadIds: selectedLeadIds, origin, preserveOrder: reuseExactOrder }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -389,10 +450,46 @@ export function LeadsExplorer({
       setRouteStops(data.stops);
       setRouteSkipped(data.skippedCount ?? 0);
       setRouteId(data.routeId ?? null);
+      setRoutePreservesOrder(reuseExactOrder);
+      setVisitedLeadIds(new Set());
+      setIsRouteMinimized(false);
       setSelectMode(false);
       setSelectedLeadIds([]);
       setShowRerouteBanner(false);
+      setReuseExactOrder(false);
     });
+  }
+
+  function handleToggleVisited(leadId: string) {
+    if (!routeId) return;
+    const nowVisited = !visitedLeadIds.has(leadId);
+    setVisitedLeadIds((prev) => {
+      const next = new Set(prev);
+      if (nowVisited) next.add(leadId);
+      else next.delete(leadId);
+      return next;
+    });
+    startTogglingVisited(async () => {
+      const result = await toggleRouteStopVisited(routeId, leadId, nowVisited);
+      if (!result.ok) {
+        // Revert the optimistic update on failure.
+        setVisitedLeadIds((prev) => {
+          const next = new Set(prev);
+          if (nowVisited) next.delete(leadId);
+          else next.add(leadId);
+          return next;
+        });
+      }
+    });
+  }
+
+  function handleEndRoute() {
+    setRouteStops(null);
+    setRouteSkipped(0);
+    setRouteId(null);
+    setRoutePreservesOrder(false);
+    setVisitedLeadIds(new Set());
+    setIsRouteMinimized(false);
   }
 
   return (
@@ -502,7 +599,7 @@ export function LeadsExplorer({
                 mode picks pins on the map, nothing to select in List. */}
             {viewMode === "map" && (
               <button
-                onClick={() => setSelectMode(true)}
+                onClick={handleStartSelect}
                 className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-black/15 active:bg-black/10 dark:border-white/20 dark:active:bg-white/20"
                 aria-label="Select leads for route"
               >
@@ -830,7 +927,7 @@ export function LeadsExplorer({
               <Button type="button" size="sm" onClick={() => setShowAddLead(true)}>
                 + Add Lead
               </Button>
-              <Button type="button" variant="secondary" size="sm" onClick={() => setSelectMode(true)}>
+              <Button type="button" variant="secondary" size="sm" onClick={handleStartSelect}>
                 Select Leads
               </Button>
               <Button type="button" variant="secondary" size="sm" onClick={handleClearFilters}>
@@ -871,7 +968,7 @@ export function LeadsExplorer({
             {rerouteDroppedCount > 0
               ? ` — ${rerouteLeadIds.length} of ${rerouteRequestedIds.length} stops still visible to you.`
               : "."}{" "}
-            Hit Route for fresh directions from where you are now.
+            Hit Route to recalculate distances from where you are now — stop order stays the same.
           </span>
           <button type="button" onClick={() => setShowRerouteBanner(false)} className="shrink-0 underline">
             Dismiss
@@ -912,6 +1009,20 @@ export function LeadsExplorer({
           <p className="absolute inset-x-0 top-0 z-10 bg-red-600 px-3 py-1.5 text-center text-xs font-medium text-white">
             {fixLocationError}
           </p>
+        )}
+        {/* Minimized route stays alive (state untouched) but out of the
+            way — a slim full-width bar rather than a center-screen
+            overlay, so the map/list underneath stays fully usable. Tap
+            to reopen the full RouteResultPanel. */}
+        {routeStops && isRouteMinimized && (
+          <button
+            type="button"
+            onClick={() => setIsRouteMinimized(false)}
+            className="absolute inset-x-0 top-0 z-10 bg-blue-600 px-3 py-1.5 text-center text-xs font-medium text-white dark:bg-blue-500"
+          >
+            Route: {visitedLeadIds.size} of {routeStops.filter((s) => s.leadId).length} stops —
+            tap to reopen
+          </button>
         )}
         {viewMode === "map" ? (
           <LeadsMap
@@ -991,16 +1102,17 @@ export function LeadsExplorer({
         />
       )}
 
-      {routeStops && (
+      {routeStops && !isRouteMinimized && (
         <RouteResultPanel
           stops={routeStops}
           skippedCount={routeSkipped}
           routeId={routeId}
-          onClose={() => {
-            setRouteStops(null);
-            setRouteId(null);
-          }}
+          visitedLeadIds={visitedLeadIds}
+          onToggleVisited={handleToggleVisited}
+          preserveOrder={routePreservesOrder}
           onSelectLead={setSelectedLeadId}
+          onMinimize={() => setIsRouteMinimized(true)}
+          onEndRoute={handleEndRoute}
         />
       )}
     </div>

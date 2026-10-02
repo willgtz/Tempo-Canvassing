@@ -2,11 +2,58 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { optimizeRoute } from "@/lib/directions/google";
+import type { RouteStop } from "@/app/leads/types";
 
-// Google Directions API's own limit: 25 waypoints total (origin +
-// destination + up to 23 intermediate stops) per request. Origin is now
-// always the rep's location, so at most 24 of those slots are leads.
-const MAX_STOPS = 24;
+// Overall selection cap a rep can build a route from in one go.
+const MAX_STOPS = 100;
+
+// Google Directions API's own hard limit: 25 waypoints total (origin +
+// destination + up to 23 intermediate stops) per REQUEST — unrelated to
+// MAX_STOPS above. To support more than 24 leads, the full lead list is
+// split into chunks of this size and run through sequential Directions
+// calls below, with each chunk's final stop feeding the next chunk's
+// origin so the whole thing reads as one continuous route.
+const CHUNK_SIZE = 24;
+
+type LeadRow = {
+  id: string;
+  first_name: string | null;
+  last_name: string | null;
+  address_line: string;
+  city: string | null;
+  state: string | null;
+  zipcode: string;
+  lat: number;
+  lng: number;
+};
+
+function originStop(point: { lat: number; lng: number }): RouteStop {
+  return {
+    leadId: null,
+    name: "Your Location",
+    addressLine: null,
+    city: null,
+    state: null,
+    zipcode: null,
+    lat: point.lat,
+    lng: point.lng,
+    legFromPrevious: null,
+  };
+}
+
+function leadStop(lead: LeadRow, legFromPrevious: RouteStop["legFromPrevious"]): RouteStop {
+  return {
+    leadId: lead.id,
+    name: [lead.first_name, lead.last_name].filter(Boolean).join(" ") || "Lead",
+    addressLine: lead.address_line,
+    city: lead.city,
+    state: lead.state,
+    zipcode: lead.zipcode,
+    lat: lead.lat,
+    lng: lead.lng,
+    legFromPrevious,
+  };
+}
 
 function isCoords(value: unknown): value is { lat: number; lng: number } {
   return (
@@ -25,11 +72,16 @@ export async function POST(request: Request) {
 
   let leadIds: unknown;
   let origin: unknown;
+  let preserveOrder: unknown;
   try {
-    ({ leadIds, origin } = await request.json());
+    ({ leadIds, origin, preserveOrder } = await request.json());
   } catch {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
+  // "Reuse this route" replay — recompute fresh distances/times without
+  // letting Google reorder the stops. Defaults to normal optimize-on
+  // behavior for every other caller.
+  const preserveStopOrder = preserveOrder === true;
 
   if (!isCoords(origin)) {
     return NextResponse.json(
@@ -85,42 +137,44 @@ export async function POST(request: Request) {
     );
   }
 
-  // Single-lead case: nothing to optimize, just origin -> that lead.
-  // optimizeRoute handles this fine on its own (empty waypoints list).
-  const points = [origin, ...locatable.map((l) => ({ lat: l.lat as number, lng: l.lng as number }))];
-  const result = await optimizeRoute(points);
-
-  if (result.status !== "OK") {
-    return NextResponse.json({ error: result.error }, { status: 502 });
+  // Split into <=CHUNK_SIZE-lead groups, each run through its own
+  // Directions call (origin + up to 23 waypoints + 1 destination = 25
+  // points, the API's hard per-request cap). Each chunk's own last stop
+  // becomes the next chunk's origin, so the result reads as one
+  // continuous route rather than N independent ones. Single-lead/
+  // single-chunk routes fall out of this as the len-1 case — no separate
+  // code path needed.
+  const chunks: LeadRow[][] = [];
+  for (let i = 0; i < locatable.length; i += CHUNK_SIZE) {
+    chunks.push(locatable.slice(i, i + CHUNK_SIZE) as LeadRow[]);
   }
 
-  const stops = result.order.map((originalIndex, position) => {
-    if (originalIndex === 0) {
-      return {
-        leadId: null,
-        name: "Your Location",
-        addressLine: null,
-        city: null,
-        state: null,
-        zipcode: null,
-        lat: origin.lat,
-        lng: origin.lng,
-        legFromPrevious: null,
-      };
+  const stops: RouteStop[] = [];
+  let chunkOrigin = origin;
+  for (let i = 0; i < chunks.length; i++) {
+    const chunkLeads = chunks[i];
+    const points = [chunkOrigin, ...chunkLeads.map((l) => ({ lat: l.lat, lng: l.lng }))];
+    const result = await optimizeRoute(points, { optimize: !preserveStopOrder });
+
+    if (result.status !== "OK") {
+      return NextResponse.json({ error: result.error }, { status: 502 });
     }
-    const lead = locatable[originalIndex - 1];
-    return {
-      leadId: lead.id,
-      name: [lead.first_name, lead.last_name].filter(Boolean).join(" ") || "Lead",
-      addressLine: lead.address_line,
-      city: lead.city,
-      state: lead.state,
-      zipcode: lead.zipcode,
-      lat: lead.lat as number,
-      lng: lead.lng as number,
-      legFromPrevious: position === 0 ? null : (result.legs[position - 1] ?? null),
-    };
-  });
+
+    const chunkStops = result.order.map((originalIndex, position) => {
+      if (originalIndex === 0) return originStop(chunkOrigin);
+      return leadStop(chunkLeads[originalIndex - 1], position === 0 ? null : (result.legs[position - 1] ?? null));
+    });
+
+    // Chunk 0's local origin is the rep's real location — kept as the
+    // route's own first stop. Every later chunk's local origin is really
+    // just the previous chunk's final stop (passed in as `chunkOrigin`
+    // below), already emitted at the end of the prior iteration, so it's
+    // dropped here to avoid appearing twice.
+    stops.push(...(i === 0 ? chunkStops : chunkStops.slice(1)));
+
+    const lastStop = stops[stops.length - 1];
+    chunkOrigin = { lat: lastStop.lat, lng: lastStop.lng };
+  }
 
   // Logged for Route History (routes table, schema.sql — already existed
   // unused: nothing ever wrote to it before this). Best-effort: a failure
