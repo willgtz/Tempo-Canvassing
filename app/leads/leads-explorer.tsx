@@ -98,9 +98,12 @@ export function LeadsExplorer({
     return rerouteRequestedIds.filter((id) => visibleIds.has(id)).slice(0, MAX_ROUTE_STOPS);
   })();
   const rerouteDroppedCount = rerouteRequestedIds.length - rerouteLeadIds.length;
-  const [selectMode, setSelectMode] = useState(rerouteLeadIds.length > 0);
+  // Reusing a route skips select mode entirely and auto-builds on mount
+  // (see the effect below) — select mode only turns on here as a
+  // fallback if that auto-build fails, so the user has a manual retry.
+  const [selectMode, setSelectMode] = useState(false);
   const [selectedLeadIds, setSelectedLeadIds] = useState<string[]>(rerouteLeadIds);
-  const [showRerouteBanner, setShowRerouteBanner] = useState(rerouteLeadIds.length > 0);
+  const [showRerouteBanner, setShowRerouteBanner] = useState(false);
   // Set while the pending build is a "Reuse this route" replay — tells
   // the server to keep the given lead order instead of letting Google
   // reoptimize it. Reset back to false once consumed by a build (success
@@ -186,15 +189,20 @@ export function LeadsExplorer({
   const { restored: restoredRoute, save: saveActiveRoute } = usePersistedActiveRoute();
   const hasHydratedRoute = useRef(false);
 
+  // A "Reuse this route" link means the user explicitly wants a different
+  // route than whatever was previously left active — skip restoring the
+  // stale one out from under the fresh auto-build it's about to kick off.
+  const skipRouteRestore = rerouteLeadIds.length > 0;
+
   useEffect(() => {
-    if (!restoredRoute || hasHydratedRoute.current) return;
+    if (!restoredRoute || hasHydratedRoute.current || skipRouteRestore) return;
     hasHydratedRoute.current = true;
     setRouteStops(restoredRoute.stops);
     setRouteSkipped(restoredRoute.skippedCount);
     setRouteId(restoredRoute.routeId);
     setVisitedLeadIds(new Set(restoredRoute.visitedLeadIds));
     setRoutePreservesOrder(restoredRoute.preserveOrder);
-  }, [restoredRoute]);
+  }, [restoredRoute, skipRouteRestore]);
 
   useEffect(() => {
     if (routeStops) {
@@ -434,6 +442,11 @@ export function LeadsExplorer({
         origin = await getCurrentLocation();
       } catch (err) {
         setRouteError(err instanceof Error ? err.message : "Couldn't get your location.");
+        // Reusing a route skips select mode and builds straight away — if
+        // that fails, fall back into select mode (pins already selected)
+        // so the user has a manual Route button to retry with.
+        setSelectMode(true);
+        if (reuseExactOrder) setShowRerouteBanner(true);
         return;
       }
 
@@ -445,6 +458,8 @@ export function LeadsExplorer({
       const data = await res.json();
       if (!res.ok) {
         setRouteError(data.error ?? "Failed to build route.");
+        setSelectMode(true);
+        if (reuseExactOrder) setShowRerouteBanner(true);
         return;
       }
       setRouteStops(data.stops);
@@ -459,6 +474,22 @@ export function LeadsExplorer({
       setReuseExactOrder(false);
     });
   }
+
+  // "Reuse this route" (/leads?reroute=...) auto-builds immediately on
+  // arrival instead of requiring the user to re-click Route — selectMode/
+  // selectedLeadIds/reuseExactOrder above are already seeded for exactly
+  // this request. Guarded by a ref (not an empty-dep effect re-run check)
+  // so this fires exactly once per page load, even under Strict Mode's
+  // double-invoke in dev, and never again on a later re-render.
+  const hasAutoRouted = useRef(false);
+  useEffect(() => {
+    if (rerouteLeadIds.length === 0 || hasAutoRouted.current) return;
+    hasAutoRouted.current = true;
+    handleBuildRoute();
+    // Intentionally run once on mount only — rerouteLeadIds/handleBuildRoute
+    // are derived fresh every render, not meant to retrigger this.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function handleToggleVisited(leadId: string) {
     if (!routeId) return;
