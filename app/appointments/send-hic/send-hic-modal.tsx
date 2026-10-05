@@ -1,5 +1,6 @@
 "use client";
 
+import { createPortal } from "react-dom";
 import { useSlideIn } from "@/lib/use-slide-in";
 import { cn } from "@/components/ui/cn";
 
@@ -23,6 +24,25 @@ import { cn } from "@/components/ui/cn";
 // grow upward from a fixed bottom edge, so the header always stays in
 // view. Only switches to a centered floating card from sm: up, where
 // there's enough height for centering to not be an issue.
+//
+// Rendered via a portal into document.body — this component is always
+// mounted deep inside RepAppointmentDetail/AppointmentDetailPanel, and
+// BOTH of those panels have a CSS `transform` applied on their own root
+// element (Tailwind's translate-x/y utilities for their own slide-in
+// animation, which still sets `transform` even at rest). Per the CSS
+// spec, `position: fixed` resolves against the nearest ancestor with a
+// transform instead of the real viewport when one exists — so without
+// the portal, this modal was positioning itself relative to that
+// (possibly scrolled, less-than-full-height) panel rather than the
+// actual screen, which is exactly why it appeared to open "at the top"
+// whenever the panel itself was scrolled down first. Escaping to
+// document.body sidesteps the whole issue.
+//
+// No mount/SSR guard needed — unlike a component that could appear in
+// the initial server-rendered HTML, this only ever mounts in response
+// to a later client click (SendHicSection's mode state starts at
+// "idle"), well after hydration, so document is always available by
+// the time this ever renders at all.
 export function SendHicModal({
   title,
   onClose,
@@ -34,7 +54,7 @@ export function SendHicModal({
 }) {
   const visible = useSlideIn();
 
-  return (
+  return createPortal(
     <>
       <div
         className={cn(
@@ -67,6 +87,7 @@ export function SendHicModal({
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto p-5 pt-4 sm:p-6 sm:pt-4">{children}</div>
       </div>
-    </>
+    </>,
+    document.body
   );
 }
