@@ -42,21 +42,34 @@ function loadDancingScriptBytes(): Buffer {
   return dancingScriptBytesCache;
 }
 
-// Equipment supplement defaults — hardcoded here until Phase 5 adds a
-// real Settings UI over these (hic_equipment_supplement_defaults table,
-// per the plan); resolveFieldValue reads them as a fallback below.
-const EQUIPMENT_DEFAULTS: Record<string, string> = {
+// Hardcoded fallback only — Phase 5 added a real Settings UI over
+// these (hic_equipment_supplement_defaults table), read live below via
+// getEquipmentDefaults(); this only matters if that row is ever missing.
+const EQUIPMENT_DEFAULTS_FALLBACK: Record<string, string> = {
   inverter_make_model: "SolarEdge, SE11400-USSKBEZ8",
   inverter_quantity: "1",
   racking_manufacturer: "Unirac",
   racking_model: "Unirac Pegasus",
 };
 
+async function getEquipmentDefaults(
+  supabase: Awaited<ReturnType<typeof createClient>>
+): Promise<Record<string, string>> {
+  const { data } = await supabase.from("hic_equipment_supplement_defaults").select("*").limit(1).single();
+  if (!data) return EQUIPMENT_DEFAULTS_FALLBACK;
+  return {
+    inverter_make_model: data.inverter_make_model,
+    inverter_quantity: String(data.inverter_quantity),
+    racking_manufacturer: data.racking_manufacturer,
+    racking_model: data.racking_model,
+  };
+}
+
 // field_keys are shared across templates wherever the same logical value
 // applies (e.g. 'panel_brand' appears on both the HIC and the equipment
 // supplement) — this is the one place that maps every key back to the
 // hics row, regardless of which template/page placed it.
-function resolveFieldValue(fieldKey: string, hic: Hic): string | null {
+function resolveFieldValue(fieldKey: string, hic: Hic, equipmentDefaults: Record<string, string>): string | null {
   switch (fieldKey) {
     case "system_size_kw":
     case "system_size_dc":
@@ -117,7 +130,7 @@ function resolveFieldValue(fieldKey: string, hic: Hic): string | null {
     case "rep_name_p7":
       return hic.sales_rep_name;
     default:
-      return EQUIPMENT_DEFAULTS[fieldKey] ?? null;
+      return equipmentDefaults[fieldKey] ?? null;
   }
 }
 
@@ -207,6 +220,7 @@ export async function fillHicPackage(hic: Hic, signers: HicSigner[] = []): Promi
 
 async function fillSingleTemplate(templateKey: string, hic: Hic, signers: HicSigner[]): Promise<Uint8Array> {
   const supabase = await createClient();
+  const equipmentDefaults = await getEquipmentDefaults(supabase);
 
   const { data: template } = await supabase.from("hic_templates").select("id").eq("key", templateKey).single();
   if (!template) throw new Error(`Unknown template: ${templateKey}`);
@@ -323,7 +337,7 @@ async function fillSingleTemplate(templateKey: string, hic: Hic, signers: HicSig
       continue;
     }
 
-    const raw = resolveFieldValue(field.field_key, hic);
+    const raw = resolveFieldValue(field.field_key, hic, equipmentDefaults);
     if (raw == null || raw === "") continue;
     const text = applyFormat(raw, field.format);
     const size = fitFontSize(helvetica, text, field.font_size, field.width);
