@@ -17,6 +17,7 @@ import type {
   AppointmentStatus,
 } from "./types";
 import type { AppointmentFormField } from "@/app/leads/types";
+import type { Hic, HicFinancingType } from "@/app/appointments/send-hic/types";
 
 // Grouped-by-status list, same idea as iOS's AppointmentsListView (List
 // mode) — one section per status, ordered by each status's own sort_order.
@@ -31,6 +32,8 @@ export function AppointmentsExplorer({
   activeProfiles,
   sectionOrder,
   currentUserId,
+  hicFinancingTypes,
+  initialHics,
 }: {
   title: string;
   initialAppointments: Appointment[];
@@ -42,12 +45,15 @@ export function AppointmentsExplorer({
   activeProfiles: ActiveProfile[];
   sectionOrder: string[];
   currentUserId: string;
+  hicFinancingTypes: HicFinancingType[];
+  initialHics: Hic[];
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [appointments, setAppointments] = useState(initialAppointments);
   const [assignments, setAssignments] = useState(initialAssignments);
   const [notes, setNotes] = useState(initialNotes);
+  const [hics, setHics] = useState(initialHics);
   const [leadsState, setLeadsState] = useState(leads);
   const [isRefreshing, startRefresh] = useTransition();
   // Supports deep-linking from a notification ("View appointment") via
@@ -87,6 +93,11 @@ export function AppointmentsExplorer({
   if (initialNotes !== prevInitialNotes) {
     setPrevInitialNotes(initialNotes);
     setNotes(initialNotes);
+  }
+  const [prevInitialHics, setPrevInitialHics] = useState(initialHics);
+  if (initialHics !== prevInitialHics) {
+    setPrevInitialHics(initialHics);
+    setHics(initialHics);
   }
   const [prevLeads, setPrevLeads] = useState(leads);
   if (leads !== prevLeads) {
@@ -495,6 +506,8 @@ export function AppointmentsExplorer({
           activeProfiles={activeProfiles}
           sectionOrder={sectionOrder}
           currentUserId={currentUserId}
+          hicFinancingTypes={hicFinancingTypes}
+          hics={hics.filter((h) => h.appointment_id === selected.id)}
           onClose={() => setSelectedId(null)}
           onAppointmentUpdated={(updated) => {
             setAppointments((prev) => prev.map((a) => (a.id === updated.id ? updated : a)));
@@ -520,6 +533,9 @@ export function AppointmentsExplorer({
             setAppointments((prev) => prev.filter((a) => a.id !== id));
             setSelectedId(null);
           }}
+          onHicChanged={(hic) =>
+            setHics((prev) => (prev.some((h) => h.id === hic.id) ? prev.map((h) => (h.id === hic.id ? hic : h)) : [hic, ...prev]))
+          }
         />
       )}
 

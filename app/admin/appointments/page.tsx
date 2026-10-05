@@ -10,6 +10,7 @@ import type {
   AppointmentStatus,
 } from "./types";
 import type { AppointmentFormField } from "@/app/leads/types";
+import type { Hic, HicFinancingType } from "@/app/appointments/send-hic/types";
 
 type AssignmentJoinRow = {
   id: string;
@@ -50,6 +51,7 @@ export default async function AppointmentsPage() {
     { data: formFields },
     { data: activeProfiles },
     { data: detailSections },
+    { data: hicFinancingTypes },
   ] = await Promise.all([
     supabase
       .from("appointments")
@@ -67,6 +69,7 @@ export default async function AppointmentsPage() {
       .order("sort_order"),
     supabase.from("profiles").select("id, full_name").eq("active", true).order("full_name"),
     supabase.from("appointment_detail_sections").select("key").order("sort_order"),
+    supabase.from("hic_financing_types").select("id, key, label, is_enabled").order("sort_order"),
   ]);
 
   const sectionOrder = detailSections?.length
@@ -84,7 +87,7 @@ export default async function AppointmentsPage() {
   const leadIds = Array.from(new Set((appointments ?? []).map((a) => a.lead_id)));
   const appointmentIds = (appointments ?? []).map((a) => a.id);
 
-  const [{ data: leads }, { data: assignmentRows }, { data: noteRows }] = await Promise.all([
+  const [{ data: leads }, { data: assignmentRows }, { data: noteRows }, { data: hicRows }] = await Promise.all([
     leadIds.length
       ? supabase
           .from("leads")
@@ -104,6 +107,11 @@ export default async function AppointmentsPage() {
           .in("appointment_id", appointmentIds)
           .order("created_at", { ascending: false })
       : Promise.resolve({ data: [] as NoteJoinRow[] }),
+    // hics_select RLS lets is_admin(auth.uid()) see every HIC, not just
+    // ones they created themselves — no manual filtering needed here.
+    appointmentIds.length
+      ? supabase.from("hics").select("*").in("appointment_id", appointmentIds).order("created_at", { ascending: false })
+      : Promise.resolve({ data: [] as Hic[] }),
   ]);
 
   const assignments: AppointmentAssignment[] = ((assignmentRows ?? []) as unknown as AssignmentJoinRow[]).map(
@@ -147,6 +155,8 @@ export default async function AppointmentsPage() {
         activeProfiles={(activeProfiles ?? []) as ActiveProfile[]}
         sectionOrder={sectionOrder}
         currentUserId={session.userId}
+        hicFinancingTypes={(hicFinancingTypes ?? []) as HicFinancingType[]}
+        initialHics={(hicRows ?? []) as Hic[]}
       />
     </div>
   );

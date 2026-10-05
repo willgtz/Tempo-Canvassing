@@ -27,6 +27,8 @@ import type {
 } from "./types";
 import type { AppointmentFormField } from "@/app/leads/types";
 import { StatusSelect } from "./status-select";
+import { SendHicSection } from "@/app/appointments/send-hic/send-hic-section";
+import type { Hic, HicFinancingType } from "@/app/appointments/send-hic/types";
 
 // Configured once William confirms the deal tool's actual stable
 // production URL (Vercel Dashboard → tempo-deal-tool project → Domains —
@@ -59,6 +61,8 @@ export function AppointmentDetailPanel({
   activeProfiles,
   sectionOrder,
   currentUserId,
+  hicFinancingTypes,
+  hics,
   onClose,
   onAppointmentUpdated,
   onAssignmentsUpdated,
@@ -66,6 +70,7 @@ export function AppointmentDetailPanel({
   onNoteUpdated,
   onLeadNameUpdated,
   onDeleted,
+  onHicChanged,
 }: {
   appointment: Appointment;
   lead: AppointmentLead | null;
@@ -76,6 +81,8 @@ export function AppointmentDetailPanel({
   activeProfiles: ActiveProfile[];
   sectionOrder: string[];
   currentUserId: string;
+  hicFinancingTypes: HicFinancingType[];
+  hics: Hic[];
   onClose: () => void;
   onAppointmentUpdated: (updated: Appointment) => void;
   onAssignmentsUpdated: (newAssignments: AppointmentAssignment[]) => void;
@@ -83,6 +90,7 @@ export function AppointmentDetailPanel({
   onNoteUpdated: (note: AppointmentNote) => void;
   onLeadNameUpdated: (leadId: string, firstName: string | null, lastName: string | null) => void;
   onDeleted: (appointmentId: string) => void;
+  onHicChanged: (hic: Hic) => void;
 }) {
   const visible = useSlideIn();
   const originalName = [lead?.first_name, lead?.last_name].filter(Boolean).join(" ");
@@ -689,6 +697,20 @@ export function AppointmentDetailPanel({
             {sectionContent[key] ?? null}
           </div>
         ))}
+
+        {/* Fixed position (not one of the orderable sections above, same
+            treatment as dealBlock/the Slideshow links) — rendered after
+            whatever the admin's configured section order produces, so it
+            reads as "just above Delete" rather than something that could
+            get reordered away from a predictable spot. Mirrors the
+            rep-facing panel's own "right before Notes" placement. */}
+        <SendHicSection
+          appointment={appointment}
+          lead={lead}
+          financingTypes={hicFinancingTypes}
+          existingHics={hics}
+          onHicChanged={onHicChanged}
+        />
 
         <div className="mt-6 border-t border-black/10 pt-4 dark:border-white/10">
           <button
