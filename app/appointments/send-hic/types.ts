@@ -102,7 +102,13 @@ export type Hic = {
   panel_brand: string;
   panel_wattage_w: number;
   number_of_panels: number;
+  // Server-computed from the escalator formula for LightReach; manually
+  // entered by the rep for Sungage Loan / Cash (see HicFormInput below).
   contract_price: number | null;
+  // Sungage Loan only — null for LightReach/Cash.
+  fixed_apr: number | null;
+  loan_term_years: number | null;
+  payment_after_36_months: number | null;
   estimated_tax_credit: number;
   amount_due_at_signing: number;
   sales_rep_name: string;
@@ -177,6 +183,13 @@ export type HicFormInput = {
   firstYearMonthlyPayment: string;
   escalator: number;
   kwhRate: number;
+  // Sungage Loan / Cash only — manual contract price instead of the
+  // LightReach escalator-formula calculation.
+  contractPriceManual: string;
+  // Sungage Loan only.
+  fixedApr: number;
+  loanTermYears: number;
+  paymentAfter36Months: string;
   estimatedTaxCredit: string;
   amountDueAtSigning: string;
   monthlyPaymentMismatchAcknowledged: boolean;

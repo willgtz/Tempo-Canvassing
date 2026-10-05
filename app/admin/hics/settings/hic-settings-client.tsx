@@ -4,6 +4,7 @@ import { useMemo, useState, useTransition } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
+import { cn } from "@/components/ui/cn";
 import {
   addNotificationRecipient,
   addPackageRule,
@@ -14,8 +15,10 @@ import {
   saveEmailTemplate,
   saveEquipmentSupplementDefaults,
   saveFormulaDefaults,
+  saveLoanOptionLists,
   saveOptionLists,
   saveReminderSettings,
+  toggleFinancingTypeEnabled,
   updateNotificationRecipientFlags,
   updatePackageRule,
   updatePanelOption,
@@ -98,15 +101,68 @@ export function HicSettingsClient({
         </p>
       </div>
 
+      <FinancingTypesCard financingTypes={financingTypes} />
       <RemindersCard settings={settings} />
       <FormulaDefaultsCard settings={settings} />
       <OptionListsCard settings={settings} />
+      <LoanOptionListsCard settings={settings} />
       <PanelsCard financingTypes={financingTypes} panelOptions={panelOptions} financingTypeById={financingTypeById} />
       <EquipmentSupplementCard equipmentDefaults={equipmentDefaults} />
       <PackageRulesCard financingTypes={financingTypes} packageRules={packageRules} financingTypeById={financingTypeById} />
       <NotificationRecipientsCard notificationRecipients={notificationRecipients} profiles={profiles} />
       <EmailTemplatesCard emailTemplates={emailTemplates} />
     </div>
+  );
+}
+
+// ------------------------------------------------------------
+function FinancingTypesCard({ financingTypes }: { financingTypes: HicFinancingType[] }) {
+  const [types, setTypes] = useState(financingTypes);
+  const [error, setError] = useState<string | null>(null);
+  const [isSaving, startSaving] = useTransition();
+
+  function handleToggle(type: HicFinancingType) {
+    setError(null);
+    startSaving(async () => {
+      const result = await toggleFinancingTypeEnabled(type.id, !type.is_enabled);
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      setTypes((prev) => prev.map((t) => (t.id === type.id ? { ...t, is_enabled: !t.is_enabled } : t)));
+    });
+  }
+
+  return (
+    <Card className="p-4 space-y-3">
+      <h2 className="text-sm font-medium">Financing types</h2>
+      <p className="text-xs text-black/50 dark:text-white/50">
+        Only enabled types are selectable on the Send HIC form. Enable a type only once its templates actually have
+        fields positioned in the Templates editor — enabling it before then lets a rep send a HIC with blank or
+        broken stamping.
+      </p>
+      <div className="space-y-1.5">
+        {types.map((t) => (
+          <div key={t.id} className="flex items-center justify-between rounded border border-black/10 px-2 py-1.5 text-sm dark:border-white/10">
+            <span>{t.label}</span>
+            <button
+              type="button"
+              onClick={() => handleToggle(t)}
+              disabled={isSaving}
+              className={cn(
+                "rounded-full px-3 py-1 text-xs font-medium disabled:opacity-50",
+                t.is_enabled
+                  ? "bg-green-600/10 text-green-700 hover:bg-green-600/20 dark:bg-green-500/20 dark:text-green-300"
+                  : "bg-black/10 text-black/60 hover:bg-black/20 dark:bg-white/10 dark:text-white/60"
+              )}
+            >
+              {t.is_enabled ? "Enabled" : "Disabled"}
+            </button>
+          </div>
+        ))}
+      </div>
+      {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+    </Card>
   );
 }
 
@@ -280,6 +336,57 @@ function OptionListsCard({ settings }: { settings: HicSettings }) {
       <div className="space-y-1">
         <label className="text-xs font-medium">kWh-rate options ($)</label>
         <Input value={kwhRateText} onChange={(e) => { setKwhRateText(e.target.value); setSaved(false); }} placeholder="0, 0.100, 0.105, 0.110" className="block w-full" />
+      </div>
+      <SaveRow isSaving={isSaving} saved={saved} error={error} onSave={handleSave} />
+    </Card>
+  );
+}
+
+// ------------------------------------------------------------
+function LoanOptionListsCard({ settings }: { settings: HicSettings }) {
+  const [aprText, setAprText] = useState(settings.aprOptions.map((n) => (n * 100).toFixed(2)).join(", "));
+  const [loanTermText, setLoanTermText] = useState(settings.loanTermOptions.join(", "));
+  const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+  const [isSaving, startSaving] = useTransition();
+
+  function parseList(text: string): number[] | null {
+    const parts = text.split(",").map((p) => p.trim()).filter(Boolean);
+    const nums = parts.map(Number);
+    if (nums.some((n) => !Number.isFinite(n))) return null;
+    return nums;
+  }
+
+  function handleSave() {
+    setError(null);
+    setSaved(false);
+    const aprPcts = parseList(aprText);
+    const loanTerms = parseList(loanTermText);
+    if (!aprPcts || !loanTerms) {
+      setError("Enter comma-separated numbers only.");
+      return;
+    }
+    startSaving(async () => {
+      const result = await saveLoanOptionLists(aprPcts.map((n) => n / 100), loanTerms);
+      if (!result.ok) setError(result.error);
+      else setSaved(true);
+    });
+  }
+
+  return (
+    <Card className="p-4 space-y-3">
+      <h2 className="text-sm font-medium">Sungage Loan choices</h2>
+      <p className="text-xs text-black/50 dark:text-white/50">
+        The Fixed APR and Loan Term dropdown choices reps see when a HIC is financed with Sungage Loan.
+        Comma-separated.
+      </p>
+      <div className="space-y-1">
+        <label className="text-xs font-medium">Fixed APR options (%)</label>
+        <Input value={aprText} onChange={(e) => { setAprText(e.target.value); setSaved(false); }} placeholder="3.99, 4.49, 4.99, 5.99" className="block w-full" />
+      </div>
+      <div className="space-y-1">
+        <label className="text-xs font-medium">Loan term options (years)</label>
+        <Input value={loanTermText} onChange={(e) => { setLoanTermText(e.target.value); setSaved(false); }} placeholder="5, 10, 15, 20, 25, 30" className="block w-full" />
       </div>
       <SaveRow isSaving={isSaving} saved={saved} error={error} onSave={handleSave} />
     </Card>

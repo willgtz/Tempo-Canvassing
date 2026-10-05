@@ -152,6 +152,68 @@ export async function saveOptionLists(escalatorOptions: number[], kwhRateOptions
 }
 
 // ------------------------------------------------------------
+// Sungage Loan: APR / loan-term option lists
+// ------------------------------------------------------------
+export async function saveLoanOptionLists(aprOptions: number[], loanTermOptions: number[]): Promise<SettingsResult> {
+  const session = await getAdminSession();
+  if (!session) return { ok: false, error: "Unauthorized" };
+  if (aprOptions.length === 0) return { ok: false, error: "APR list can't be empty." };
+  if (loanTermOptions.length === 0) return { ok: false, error: "Loan term list can't be empty." };
+  if (aprOptions.some((n) => !(n >= 0) || n >= 1)) {
+    return { ok: false, error: "APR values must be between 0 and 1 (e.g. 0.0599 for 5.99%)." };
+  }
+  if (loanTermOptions.some((n) => !(n > 0) || !Number.isInteger(n))) {
+    return { ok: false, error: "Loan term values must be whole years." };
+  }
+
+  const supabase = await createClient();
+  const sortedApr = [...new Set(aprOptions)].sort((a, b) => a - b);
+  const sortedTerms = [...new Set(loanTermOptions)].sort((a, b) => a - b);
+
+  const writes = await Promise.all([
+    writeAppSetting(supabase, session.userId, "hic_apr_options", sortedApr),
+    writeAppSetting(supabase, session.userId, "hic_loan_term_options", sortedTerms),
+  ]);
+  const failed = writes.find((w) => !w.ok);
+  if (failed) return failed;
+
+  revalidatePath(SETTINGS_PATH);
+  revalidatePath("/appointments");
+  revalidatePath("/admin/hics");
+  return { ok: true };
+}
+
+// ------------------------------------------------------------
+// Financing types — the on/off switch reps' Send HIC form checks
+// before a type is selectable at all. Flip this only once a financing
+// type's templates actually have their fields positioned — enabling
+// it before then lets a rep send a HIC that stamps onto a template
+// with no (or incomplete) field positions.
+// ------------------------------------------------------------
+export async function toggleFinancingTypeEnabled(id: string, isEnabled: boolean): Promise<SettingsResult> {
+  const session = await getAdminSession();
+  if (!session) return { ok: false, error: "Unauthorized" };
+
+  const supabase = await createClient();
+  const { data: old } = await supabase.from("hic_financing_types").select("*").eq("id", id).single();
+  const { error } = await supabase.from("hic_financing_types").update({ is_enabled: isEnabled }).eq("id", id);
+  if (error) return { ok: false, error: error.message };
+
+  await supabase.from("hic_settings_history").insert({
+    setting_key: "hic_financing_types",
+    old_value: old ?? null,
+    new_value: { ...old, is_enabled: isEnabled },
+    changed_by: session.userId,
+  });
+
+  revalidatePath(SETTINGS_PATH);
+  revalidatePath("/appointments");
+  revalidatePath("/admin/hics");
+  revalidatePath("/admin/appointments");
+  return { ok: true };
+}
+
+// ------------------------------------------------------------
 // Panels per financing type
 // ------------------------------------------------------------
 export type PanelOptionResult = { ok: true; panel: HicPanelOption } | { ok: false; error: string };

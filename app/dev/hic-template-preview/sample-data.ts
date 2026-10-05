@@ -4,6 +4,7 @@ import type { Hic } from "@/app/appointments/send-hic/types";
 // since it's seeded by the Phase 1 migration, but hardcoded here rather
 // than queried since this is a throwaway dev tool, not app code.
 const LIGHTREACH_FINANCING_TYPE_ID = "014876c0-6506-4e75-aa53-94ff07c59314";
+const SUNGAGE_LOAN_FINANCING_TYPE_ID = "8cc2a84e-62da-40d1-9c53-9fc07ba29147";
 
 // Base values straight from the original feature spec's own worked
 // example — using the real numbers means the contract price shown here
@@ -29,6 +30,9 @@ const BASE: Omit<Hic, "id" | "language" | "has_co_borrower" | "co_borrower_name"
   panel_wattage_w: 450,
   number_of_panels: 19,
   contract_price: 47694.12,
+  fixed_apr: null,
+  loan_term_years: null,
+  payment_after_36_months: null,
   estimated_tax_credit: 0,
   amount_due_at_signing: 0,
   sales_rep_name: "Pere Briggs",
@@ -115,6 +119,52 @@ export const SAMPLE_SCENARIOS: { key: string; label: string; hic: Hic }[] = [
       co_borrower_name: null,
       co_borrower_phone: null,
       co_borrower_email: null,
+      status: "draft",
+      created_at: new Date().toISOString(),
+      sent_at: null,
+      completed_at: null,
+    },
+  },
+  {
+    key: "en-loan-co-borrower",
+    label: "English · Sungage Loan · WITH co-borrower (new template field-position check)",
+    hic: {
+      ...BASE,
+      id: "dev-sample-en-loan-co-borrower",
+      financing_type_id: SUNGAGE_LOAN_FINANCING_TYPE_ID,
+      language: "en",
+      install_city: "Las Vegas",
+      has_co_borrower: true,
+      co_borrower_name: "Jane Doe",
+      co_borrower_phone: "999-999-0000",
+      co_borrower_email: "jane@example.com",
+      contract_price: 52000,
+      fixed_apr: 0.0599,
+      loan_term_years: 25,
+      payment_after_36_months: 312.45,
+      status: "draft",
+      created_at: new Date().toISOString(),
+      sent_at: null,
+      completed_at: null,
+    },
+  },
+  {
+    key: "es-loan-solo",
+    label: "Spanish · Sungage Loan · no co-borrower (new template field-position check)",
+    hic: {
+      ...BASE,
+      id: "dev-sample-es-loan-solo",
+      financing_type_id: SUNGAGE_LOAN_FINANCING_TYPE_ID,
+      language: "es",
+      install_city: "Las Vegas",
+      has_co_borrower: false,
+      co_borrower_name: null,
+      co_borrower_phone: null,
+      co_borrower_email: null,
+      contract_price: 52000,
+      fixed_apr: 0.0599,
+      loan_term_years: 25,
+      payment_after_36_months: 312.45,
       status: "draft",
       created_at: new Date().toISOString(),
       sent_at: null,

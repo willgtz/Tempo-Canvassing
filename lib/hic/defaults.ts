@@ -15,3 +15,7 @@ export const HIC_MONTHLY_PAYMENT_MISMATCH_THRESHOLD = 1;
 export const HIC_LINK_EXPIRATION_DAYS = 14;
 export const HIC_REMINDER_DAYS_BETWEEN = 3;
 export const HIC_REMINDER_MAX_COUNT = 3;
+// Sungage Loan — fixed_apr stored as a decimal fraction (0.0599 = 5.99%),
+// consistent with HIC_ESCALATOR_OPTIONS above.
+export const HIC_APR_OPTIONS = [0.0399, 0.0449, 0.0499, 0.0599, 0.0699, 0.0799, 0.0899, 0.0949, 0.0974];
+export const HIC_LOAN_TERM_OPTIONS = [5, 10, 15, 20, 25, 30];

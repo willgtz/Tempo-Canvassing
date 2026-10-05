@@ -75,6 +75,10 @@ export function HicDetailClient({
   const canVoid = hic.status !== "voided";
   const canCorrect = hic.status !== "draft" && !hic.corrected_into_hic_id;
 
+  const selectedFinancingKey = financingTypes.find((f) => f.id === hic.financing_type_id)?.key ?? null;
+  const isLightreach = selectedFinancingKey === "lightreach";
+  const isSungageLoan = selectedFinancingKey === "sungage_loan";
+
   const lastResentAt = events.find((e) => e.event_type === "resent")?.occurred_at ?? null;
 
   function handleResend() {
@@ -261,22 +265,35 @@ export function HicDetailClient({
         <SectionLabel>System &amp; pricing</SectionLabel>
         <Row label="System size" value={formatKw(hic.system_size_kw)} />
         <Row label="Panels" value={`${hic.number_of_panels} × ${hic.panel_brand}`} />
-        <Row label="Est. first-year production" value={formatKwh(hic.est_production_kwh)} />
-        <Row label="kWh rate" value={`$${hic.kwh_rate.toFixed(3)}`} />
-        <Row label="Escalator" value={formatPercent(hic.escalator)} />
-        <Row label="1st-year monthly payment" value={formatCurrency(hic.first_year_monthly_payment)} />
+        {(isLightreach || isSungageLoan) && (
+          <>
+            <Row label="Est. first-year production" value={formatKwh(hic.est_production_kwh)} />
+            {isLightreach && <Row label="kWh rate" value={`$${hic.kwh_rate.toFixed(3)}`} />}
+            {isLightreach && <Row label="Escalator" value={formatPercent(hic.escalator)} />}
+            <Row label={isLightreach ? "1st-year monthly payment" : "Monthly payment"} value={formatCurrency(hic.first_year_monthly_payment)} />
+          </>
+        )}
+        {isSungageLoan && (
+          <>
+            <Row label="Fixed APR" value={hic.fixed_apr != null ? formatPercent(hic.fixed_apr) : "—"} />
+            <Row label="Loan term" value={hic.loan_term_years != null ? `${hic.loan_term_years} yr` : "—"} />
+            <Row label="Payment after 36 months" value={hic.payment_after_36_months != null ? formatCurrency(hic.payment_after_36_months) : "—"} />
+          </>
+        )}
         <div className="mt-2 flex items-baseline justify-between border-t border-black/10 pt-2 dark:border-white/10">
-          <span className="text-sm font-medium">Contract price (25-year total)</span>
+          <span className="text-sm font-medium">{isLightreach ? "Contract price (25-year total)" : "Contract price"}</span>
           <span className="text-xl font-semibold">{hic.contract_price != null ? formatCurrency(hic.contract_price) : "—"}</span>
         </div>
-        <button
-          type="button"
-          onClick={() => setShowSchedule((v) => !v)}
-          className="mt-2 text-xs underline text-black/60 hover:text-black dark:text-white/60 dark:hover:text-white"
-        >
-          {showSchedule ? "Hide" : "Show"} 25-year schedule
-        </button>
-        {showSchedule && (
+        {isLightreach && (
+          <button
+            type="button"
+            onClick={() => setShowSchedule((v) => !v)}
+            className="mt-2 text-xs underline text-black/60 hover:text-black dark:text-white/60 dark:hover:text-white"
+          >
+            {showSchedule ? "Hide" : "Show"} 25-year schedule
+          </button>
+        )}
+        {isLightreach && showSchedule && (
           <div className="mt-2 max-h-64 overflow-y-auto rounded border border-black/10 dark:border-white/10">
             <table className="w-full text-left text-xs">
               <thead className="bg-black/5 dark:bg-white/5">

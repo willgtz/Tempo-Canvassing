@@ -88,7 +88,16 @@ function resolveFieldValue(fieldKey: string, hic: Hic, equipmentDefaults: Record
     case "kwh_rate":
       return String(hic.kwh_rate);
     case "contract_price":
+    case "total_loan_amount":
       return hic.contract_price != null ? String(hic.contract_price) : null;
+    case "fixed_apr":
+      return hic.fixed_apr != null ? String(hic.fixed_apr) : null;
+    case "loan_term_years":
+      // No "years" format exists in applyFormat below — self-contained
+      // text is simpler here than inventing one for a single field_key.
+      return hic.loan_term_years != null ? `${hic.loan_term_years} ${hic.language === "es" ? "años" : "years"}` : null;
+    case "payment_after_36_months":
+      return hic.payment_after_36_months != null ? String(hic.payment_after_36_months) : null;
     case "customer_name":
     case "customer_name_p7":
     case "primary_buyer_name":
@@ -194,7 +203,14 @@ export async function resolveApplicableTemplateKeys(hic: Hic): Promise<string[]>
       }
       return true;
     })
-    .map((r) => (r.template_key === "hic" ? `hic_${hic.language}` : r.template_key));
+    .map((r) => {
+      if (r.template_key === "hic") return `hic_${hic.language}`;
+      // Sungage Loan's two templates don't share LightReach's hic_en/
+      // hic_es naming (loan_hic / loan_hic_es instead), so this needs
+      // its own sentinel the same way "hic" does above.
+      if (r.template_key === "loan_hic") return hic.language === "es" ? "loan_hic_es" : "loan_hic";
+      return r.template_key;
+    });
 }
 
 // Freezes which template_version a HIC's package used at the moment

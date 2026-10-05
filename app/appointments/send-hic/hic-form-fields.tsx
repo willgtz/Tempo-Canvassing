@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Input, Select } from "@/components/ui/input";
 import { formatCurrency, formatPhoneInput } from "@/lib/hic/format";
-import { HIC_ESCALATOR_OPTIONS, HIC_KWH_RATE_OPTIONS } from "@/lib/hic/defaults";
+import { HIC_APR_OPTIONS, HIC_ESCALATOR_OPTIONS, HIC_KWH_RATE_OPTIONS, HIC_LOAN_TERM_OPTIONS } from "@/lib/hic/defaults";
 import { getHicOptionLists } from "./actions";
 import type { AppointmentLead } from "@/app/admin/appointments/types";
 import type { Hic, HicFinancingType, HicFormInput } from "./types";
@@ -40,6 +40,10 @@ export function blankFormInput(lead: AppointmentLead | null, financingTypeId: st
     firstYearMonthlyPayment: "",
     escalator: HIC_ESCALATOR_OPTIONS[0],
     kwhRate: HIC_KWH_RATE_OPTIONS[0],
+    contractPriceManual: "",
+    fixedApr: HIC_APR_OPTIONS[0],
+    loanTermYears: HIC_LOAN_TERM_OPTIONS[0],
+    paymentAfter36Months: "",
     estimatedTaxCredit: "",
     amountDueAtSigning: "",
     monthlyPaymentMismatchAcknowledged: false,
@@ -66,6 +70,10 @@ export function hicToFormInput(hic: Hic): HicFormInput {
     firstYearMonthlyPayment: String(hic.first_year_monthly_payment),
     escalator: hic.escalator,
     kwhRate: hic.kwh_rate,
+    contractPriceManual: hic.contract_price != null ? String(hic.contract_price) : "",
+    fixedApr: hic.fixed_apr ?? HIC_APR_OPTIONS[0],
+    loanTermYears: hic.loan_term_years ?? HIC_LOAN_TERM_OPTIONS[0],
+    paymentAfter36Months: hic.payment_after_36_months != null ? String(hic.payment_after_36_months) : "",
     estimatedTaxCredit: String(hic.estimated_tax_credit),
     amountDueAtSigning: String(hic.amount_due_at_signing),
     monthlyPaymentMismatchAcknowledged: hic.monthly_payment_mismatch_acknowledged,
@@ -89,12 +97,19 @@ export function HicFormFields({
   const numberOfPanelsPreview =
     Number(form.systemSizeKw) > 0 ? Math.round((Number(form.systemSizeKw) * 1000) / 450) : null;
 
+  const selectedFinancingKey = financingTypes.find((f) => f.id === form.financingTypeId)?.key ?? null;
+  const isLightreach = selectedFinancingKey === "lightreach";
+  const isSungageLoan = selectedFinancingKey === "sungage_loan";
+  const isCash = selectedFinancingKey === "cash";
+
   // Starts with the hardcoded fallback lists so the form is usable
   // immediately, then swaps in the admin-editable live lists (Phase 5
   // settings) once they resolve — avoids threading these through every
   // appointment-panel/admin-page call site just for a dropdown.
   const [escalatorOptions, setEscalatorOptions] = useState<number[]>(HIC_ESCALATOR_OPTIONS);
   const [kwhRateOptions, setKwhRateOptions] = useState<number[]>(HIC_KWH_RATE_OPTIONS);
+  const [aprOptions, setAprOptions] = useState<number[]>(HIC_APR_OPTIONS);
+  const [loanTermOptions, setLoanTermOptions] = useState<number[]>(HIC_LOAN_TERM_OPTIONS);
 
   useEffect(() => {
     let cancelled = false;
@@ -102,6 +117,8 @@ export function HicFormFields({
       if (cancelled) return;
       setEscalatorOptions(result.escalatorOptions);
       setKwhRateOptions(result.kwhRateOptions);
+      setAprOptions(result.aprOptions);
+      setLoanTermOptions(result.loanTermOptions);
     });
     return () => {
       cancelled = true;
@@ -122,7 +139,12 @@ export function HicFormFields({
           </div>
           <div className="space-y-1">
             <label className="text-xs font-medium">Financing</label>
-            <Select value={form.financingTypeId} disabled className="block w-full">
+            <Select
+              value={form.financingTypeId}
+              disabled={financingTypes.filter((f) => f.is_enabled).length <= 1}
+              onChange={(e) => update("financingTypeId", e.target.value)}
+              className="block w-full"
+            >
               {financingTypes.map((f) => (
                 <option key={f.id} value={f.id} disabled={!f.is_enabled}>
                   {f.label}{!f.is_enabled ? " (Coming soon)" : ""}
@@ -220,60 +242,125 @@ export function HicFormFields({
               </p>
             )}
           </div>
+          {(isLightreach || isSungageLoan) && (
+            <div className="space-y-1">
+              <label className="text-xs font-medium">Est. production, first year (kWh)</label>
+              <Input
+                type="number"
+                step="0.01"
+                value={form.estProductionKwh}
+                onChange={(e) => update("estProductionKwh", e.target.value)}
+                className="block w-full"
+              />
+              <p className="text-[11px] text-black/50 dark:text-white/50">
+                {isLightreach ? "Enter exactly as LightReach shows, including decimals." : "Estimated first-year production for this system."}
+              </p>
+            </div>
+          )}
+        </div>
+
+        {(isLightreach || isSungageLoan) && (
+          <div className="grid grid-cols-3 gap-2">
+            <div className="space-y-1">
+              <label className="text-xs font-medium">{isLightreach ? "1st-yr monthly payment" : "Monthly payment"}</label>
+              <Input
+                type="number"
+                step="0.01"
+                value={form.firstYearMonthlyPayment}
+                onChange={(e) => update("firstYearMonthlyPayment", e.target.value)}
+                className="block w-full"
+              />
+              {isSungageLoan && (
+                <p className="text-[11px] text-black/50 dark:text-white/50">From Sungage&apos;s loan quote.</p>
+              )}
+            </div>
+            {isLightreach && (
+              <>
+                <div className="space-y-1">
+                  <label className="text-xs font-medium">Escalator</label>
+                  <Select
+                    value={form.escalator}
+                    onChange={(e) => update("escalator", Number(e.target.value))}
+                    className="block w-full"
+                  >
+                    {escalatorOptions.map((e) => (
+                      <option key={e} value={e}>
+                        {(e * 100).toFixed(2)}%
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-medium">kWh rate</label>
+                  <Select value={form.kwhRate} onChange={(e) => update("kwhRate", Number(e.target.value))} className="block w-full">
+                    {kwhRateOptions.map((r) => (
+                      <option key={r} value={r}>
+                        ${r.toFixed(3)}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
+        {(isSungageLoan || isCash) && (
           <div className="space-y-1">
-            <label className="text-xs font-medium">Est. production, first year (kWh)</label>
+            <label className="text-xs font-medium">Contract price</label>
             <Input
               type="number"
               step="0.01"
-              value={form.estProductionKwh}
-              onChange={(e) => update("estProductionKwh", e.target.value)}
+              value={form.contractPriceManual}
+              onChange={(e) => update("contractPriceManual", e.target.value)}
               className="block w-full"
             />
             <p className="text-[11px] text-black/50 dark:text-white/50">
-              Enter exactly as LightReach shows, including decimals.
+              Total contract price for this {isCash ? "cash" : "loan"} deal — entered manually, not calculated.
             </p>
           </div>
-        </div>
+        )}
 
-        <div className="grid grid-cols-3 gap-2">
-          <div className="space-y-1">
-            <label className="text-xs font-medium">1st-yr monthly payment</label>
-            <Input
-              type="number"
-              step="0.01"
-              value={form.firstYearMonthlyPayment}
-              onChange={(e) => update("firstYearMonthlyPayment", e.target.value)}
-              className="block w-full"
-            />
+        {isSungageLoan && (
+          <div className="space-y-2 rounded-md border border-black/10 p-2 dark:border-white/10">
+            <SectionLabel>Loan details</SectionLabel>
+            <div className="grid grid-cols-3 gap-2">
+              <div className="space-y-1">
+                <label className="text-xs font-medium">Fixed APR</label>
+                <Select value={form.fixedApr} onChange={(e) => update("fixedApr", Number(e.target.value))} className="block w-full">
+                  {aprOptions.map((a) => (
+                    <option key={a} value={a}>
+                      {(a * 100).toFixed(2)}%
+                    </option>
+                  ))}
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium">Loan term</label>
+                <Select value={form.loanTermYears} onChange={(e) => update("loanTermYears", Number(e.target.value))} className="block w-full">
+                  {loanTermOptions.map((t) => (
+                    <option key={t} value={t}>
+                      {t} yr
+                    </option>
+                  ))}
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium">Payment after 36 months</label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={form.paymentAfter36Months}
+                  onChange={(e) => update("paymentAfter36Months", e.target.value)}
+                  className="block w-full"
+                />
+              </div>
+            </div>
           </div>
-          <div className="space-y-1">
-            <label className="text-xs font-medium">Escalator</label>
-            <Select
-              value={form.escalator}
-              onChange={(e) => update("escalator", Number(e.target.value))}
-              className="block w-full"
-            >
-              {escalatorOptions.map((e) => (
-                <option key={e} value={e}>
-                  {(e * 100).toFixed(2)}%
-                </option>
-              ))}
-            </Select>
-          </div>
-          <div className="space-y-1">
-            <label className="text-xs font-medium">kWh rate</label>
-            <Select value={form.kwhRate} onChange={(e) => update("kwhRate", Number(e.target.value))} className="block w-full">
-              {kwhRateOptions.map((r) => (
-                <option key={r} value={r}>
-                  ${r.toFixed(3)}
-                </option>
-              ))}
-            </Select>
-          </div>
-        </div>
+        )}
       </div>
 
-      {mismatchWarning && (
+      {isLightreach && mismatchWarning && (
         <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-2 text-xs text-amber-700 dark:text-amber-300">
           LightReach&apos;s first-year payment for these numbers is usually{" "}
           {formatCurrency(

@@ -159,6 +159,21 @@ export async function activateTemplateVersion(versionId: string): Promise<Settin
     .single();
   if (targetError || !target) return { ok: false, error: "Version not found." };
 
+  // The one point unlabeled fields actually block anything — going
+  // live with a field that has nowhere to pull its value from would
+  // just stamp blank text (or nothing) onto a real sent document.
+  const { count: unlabeledCount } = await supabase
+    .from("hic_template_fields")
+    .select("id", { count: "exact", head: true })
+    .eq("template_version_id", versionId)
+    .eq("field_key", "");
+  if (unlabeledCount && unlabeledCount > 0) {
+    return {
+      ok: false,
+      error: `${unlabeledCount} field${unlabeledCount === 1 ? "" : "s"} on this version still ${unlabeledCount === 1 ? "has" : "have"} no field key. Fill those in before activating.`,
+    };
+  }
+
   const { error: deactivateError } = await supabase
     .from("hic_template_versions")
     .update({ is_active: false })
@@ -215,8 +230,12 @@ export async function saveTemplateFields(
 ): Promise<SaveFieldsResult> {
   const session = await getAdminSession();
   if (!session) return { ok: false, error: "Unauthorized" };
+  // Deliberately NOT requiring a non-empty field_key here — a long
+  // positioning session across many pages shouldn't lose all its work
+  // just because a few boxes haven't been labeled yet. Unlabeled
+  // fields are flagged in the editor UI instead, and a real field key
+  // is only required before a version goes live (activateTemplateVersion).
   for (const f of fields) {
-    if (!f.field_key.trim()) return { ok: false, error: "Every field needs a field key." };
     if (!(f.width > 0) || !(f.height > 0)) return { ok: false, error: "Field width/height must be greater than 0." };
   }
 

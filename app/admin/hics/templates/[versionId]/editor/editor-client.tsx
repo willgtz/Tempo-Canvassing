@@ -31,7 +31,8 @@ const KNOWN_FIELD_KEYS = [
   "co_buyer_name", "co_buyer_name_p5", "co_buyer_phone", "co_buyer_email",
   "install_street", "install_city", "install_state", "install_zip", "henderson_address",
   "system_size_kw", "system_size_dc", "est_production_first_year", "est_first_year_production_p3",
-  "first_year_monthly_payment", "escalator", "kwh_rate", "contract_price",
+  "first_year_monthly_payment", "escalator", "kwh_rate", "contract_price", "total_loan_amount",
+  "fixed_apr", "loan_term_years", "payment_after_36_months",
   "estimated_tax_credit", "amount_due_at_signing",
   "panel_brand", "number_of_panels",
   "inverter_make_model", "inverter_quantity", "racking_manufacturer", "racking_model",
@@ -135,6 +136,7 @@ export function EditorClient({
   const scale = canvasSize ? canvasSize.width / PAGE_WIDTH_PT : null;
   const fieldsOnPage = fields.filter((f) => f.page === currentPage);
   const selected = fields.find((f) => f.clientId === selectedClientId) ?? null;
+  const unlabeledCount = fields.filter((f) => !f.field_key.trim()).length;
 
   function update(clientId: string, patch: Partial<EditableField>) {
     setFields((prev) => prev.map((f) => (f.clientId === clientId ? { ...f, ...patch } : f)));
@@ -254,6 +256,12 @@ export function EditorClient({
 
       {saved && !error && <p className="text-sm text-green-600 dark:text-green-400">Saved.</p>}
       {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+      {unlabeledCount > 0 && (
+        <p className="text-sm text-amber-700 dark:text-amber-400">
+          {unlabeledCount} field{unlabeledCount === 1 ? "" : "s"} still {unlabeledCount === 1 ? "needs" : "need"} a field
+          key (shown with a dashed border below) — fine to save as-is, but required before this version can be activated.
+        </p>
+      )}
 
       {otherVersions.length > 0 && (
         <div className="flex flex-wrap items-end gap-2 rounded-lg border border-black/10 p-3 text-sm dark:border-white/10">
@@ -290,6 +298,9 @@ export function EditorClient({
               {fields.some((f) => f.page === p) && (
                 <span className="ml-1 opacity-70">({fields.filter((f) => f.page === p).length})</span>
               )}
+              {fields.some((f) => f.page === p && !f.field_key.trim()) && (
+                <span className="ml-1 inline-block h-1.5 w-1.5 rounded-full bg-red-500" />
+              )}
             </button>
           ))}
         </div>
@@ -323,8 +334,9 @@ export function EditorClient({
                     }
                     onMouseDown={() => setSelectedClientId(field.clientId)}
                     className={cn(
-                      "flex items-center overflow-hidden rounded-sm border text-[10px] leading-none",
-                      FIELD_TYPE_COLOR[field.field_type],
+                      "flex items-center overflow-hidden text-[10px] leading-none",
+                      field.field_key.trim() ? "rounded-sm border" : "rounded-sm border-2 border-dashed border-red-500 bg-red-500/10",
+                      field.field_key.trim() ? FIELD_TYPE_COLOR[field.field_type] : "",
                       isSelected ? "ring-2 ring-blue-600" : ""
                     )}
                   >

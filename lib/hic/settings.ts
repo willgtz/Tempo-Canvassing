@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
+  HIC_APR_OPTIONS,
   HIC_DEFAULT_AMOUNT_DUE_AT_SIGNING,
   HIC_DEFAULT_CONTRACTOR_NAME,
   HIC_DEFAULT_TAX_CREDIT,
@@ -7,6 +8,7 @@ import {
   HIC_ESCALATOR_OPTIONS,
   HIC_KWH_RATE_OPTIONS,
   HIC_LINK_EXPIRATION_DAYS,
+  HIC_LOAN_TERM_OPTIONS,
   HIC_MONTHLY_PAYMENT_MISMATCH_THRESHOLD,
   HIC_REMINDER_DAYS_BETWEEN,
   HIC_REMINDER_MAX_COUNT,
@@ -21,6 +23,8 @@ export type HicSettings = {
   repsCanDownloadSigned: boolean;
   escalatorOptions: number[];
   kwhRateOptions: number[];
+  aprOptions: number[];
+  loanTermOptions: number[];
   degradationRate: number;
   termYears: number;
   defaultTaxCredit: number;
@@ -51,6 +55,8 @@ export async function getHicSettings(
     repsCanDownloadSigned: (map.hic_reps_can_download_signed as boolean | undefined) ?? true,
     escalatorOptions: (map.hic_escalator_options as number[] | undefined) ?? HIC_ESCALATOR_OPTIONS,
     kwhRateOptions: (map.hic_kwh_rate_options as number[] | undefined) ?? HIC_KWH_RATE_OPTIONS,
+    aprOptions: (map.hic_apr_options as number[] | undefined) ?? HIC_APR_OPTIONS,
+    loanTermOptions: (map.hic_loan_term_options as number[] | undefined) ?? HIC_LOAN_TERM_OPTIONS,
     degradationRate: Number(map.hic_degradation_rate ?? HIC_DEGRADATION_RATE),
     termYears: Number(map.hic_term_years ?? HIC_TERM_YEARS),
     defaultTaxCredit: Number(map.hic_default_tax_credit ?? HIC_DEFAULT_TAX_CREDIT),

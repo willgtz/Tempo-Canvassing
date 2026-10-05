@@ -25,7 +25,7 @@ export type SendHicResult = { ok: true; warning?: string } | { ok: false; error:
 // real session, then let RLS (hics_insert/hics_update: created_by =
 // auth.uid() or is_admin) be the actual authorization boundary — this
 // just validates shape/business rules before attempting the write.
-function validateInput(input: HicFormInput, settings: HicSettings): string | null {
+function validateInput(input: HicFormInput, settings: HicSettings, financingTypeKey: string): string | null {
   if (!input.customerName.trim()) return "Customer name is required.";
   if (!isValidPhoneInput(input.customerPhone)) return "Enter a valid 10-digit customer phone number.";
   if (!isValidEmail(input.customerEmail)) return "Enter a valid customer email address.";
@@ -39,13 +39,46 @@ function validateInput(input: HicFormInput, settings: HicSettings): string | nul
   }
   const systemSizeKw = Number(input.systemSizeKw);
   if (!(systemSizeKw > 0)) return "System size must be greater than 0.";
-  const estProductionKwh = Number(input.estProductionKwh);
-  if (!(estProductionKwh > 0)) return "Estimated first-year production must be greater than 0.";
-  const firstYearMonthlyPayment = Number(input.firstYearMonthlyPayment);
-  if (!(firstYearMonthlyPayment >= 0)) return "First-year monthly payment is required.";
-  if (!settings.escalatorOptions.includes(input.escalator)) return "Invalid escalator option.";
-  if (!settings.kwhRateOptions.includes(input.kwhRate)) return "Invalid kWh rate option.";
+
+  // Est. production + monthly payment are collected for both LightReach
+  // and Sungage Loan — the loan document stamps these too (from
+  // Sungage's own quote), just without the escalator/kWh-rate math
+  // that's unique to LightReach's PPA formula.
+  if (financingTypeKey === "lightreach" || financingTypeKey === "sungage_loan") {
+    const estProductionKwh = Number(input.estProductionKwh);
+    if (!(estProductionKwh > 0)) return "Estimated first-year production must be greater than 0.";
+    const firstYearMonthlyPayment = Number(input.firstYearMonthlyPayment);
+    if (!(firstYearMonthlyPayment >= 0)) return "Monthly payment is required.";
+  }
+
+  if (financingTypeKey === "lightreach") {
+    if (!settings.escalatorOptions.includes(input.escalator)) return "Invalid escalator option.";
+    if (!settings.kwhRateOptions.includes(input.kwhRate)) return "Invalid kWh rate option.";
+  } else {
+    // Sungage Loan / Cash — no escalator formula; the rep enters the
+    // contract price directly.
+    if (!(Number(input.contractPriceManual) > 0)) return "Contract price is required.";
+    if (financingTypeKey === "sungage_loan") {
+      if (!settings.aprOptions.includes(input.fixedApr)) return "Invalid APR option.";
+      if (!settings.loanTermOptions.includes(input.loanTermYears)) return "Invalid loan term option.";
+      if (!(Number(input.paymentAfter36Months) >= 0)) return "Payment after 36 months is required.";
+    }
+  }
   return null;
+}
+
+async function resolveFinancingType(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  financingTypeId: string
+): Promise<{ ok: true; key: string } | { ok: false; error: string }> {
+  const { data, error } = await supabase
+    .from("hic_financing_types")
+    .select("key, is_enabled")
+    .eq("id", financingTypeId)
+    .single();
+  if (error || !data) return { ok: false, error: "Invalid financing type." };
+  if (!data.is_enabled) return { ok: false, error: "This financing type isn't available yet." };
+  return { ok: true, key: data.key };
 }
 
 // Number of panels must divide evenly (systemSize in W / panel wattage) —
@@ -62,19 +95,12 @@ function computeNumberOfPanels(systemSizeKw: number, panelWattageW: number): num
 async function resolvePanelAndPrice(
   supabase: Awaited<ReturnType<typeof createClient>>,
   input: HicFormInput,
-  settings: HicSettings
+  settings: HicSettings,
+  financingTypeKey: string
 ): Promise<
   | { ok: true; panelBrand: string; panelWattageW: number; numberOfPanels: number; contractPrice: number }
   | { ok: false; error: string }
 > {
-  const { data: financingType, error: financingError } = await supabase
-    .from("hic_financing_types")
-    .select("id, is_enabled")
-    .eq("id", input.financingTypeId)
-    .single();
-  if (financingError || !financingType) return { ok: false, error: "Invalid financing type." };
-  if (!financingType.is_enabled) return { ok: false, error: "This financing type isn't available yet." };
-
   const { data: panelOption, error: panelError } = await supabase
     .from("hic_panel_options")
     .select("model_name, wattage_w")
@@ -96,12 +122,18 @@ async function resolvePanelAndPrice(
     };
   }
 
-  const contractPrice = calculateContractPrice(
-    Number(input.estProductionKwh),
-    input.kwhRate,
-    input.escalator,
-    { degradation: settings.degradationRate, termYears: settings.termYears }
-  );
+  // Only LightReach uses the escalator-formula calculation — Sungage
+  // Loan / Cash take the rep's manually entered contract price as-is
+  // (validateInput already confirmed it's a positive number).
+  const contractPrice =
+    financingTypeKey === "lightreach"
+      ? calculateContractPrice(
+          Number(input.estProductionKwh),
+          input.kwhRate,
+          input.escalator,
+          { degradation: settings.degradationRate, termYears: settings.termYears }
+        )
+      : Number(input.contractPriceManual);
 
   return {
     ok: true,
@@ -112,7 +144,8 @@ async function resolvePanelAndPrice(
   };
 }
 
-function toRow(input: HicFormInput, settings: HicSettings) {
+function toRow(input: HicFormInput, settings: HicSettings, financingTypeKey: string) {
+  const isSungageLoan = financingTypeKey === "sungage_loan";
   return {
     language: input.language,
     customer_name: input.customerName.trim(),
@@ -127,10 +160,13 @@ function toRow(input: HicFormInput, settings: HicSettings) {
     install_state: input.installState.trim(),
     install_zip: input.installZip.trim(),
     system_size_kw: Number(input.systemSizeKw),
-    est_production_kwh: Number(input.estProductionKwh),
-    first_year_monthly_payment: Number(input.firstYearMonthlyPayment),
+    est_production_kwh: Number(input.estProductionKwh) || 0,
+    first_year_monthly_payment: Number(input.firstYearMonthlyPayment) || 0,
     escalator: input.escalator,
     kwh_rate: input.kwhRate,
+    fixed_apr: isSungageLoan ? input.fixedApr : null,
+    loan_term_years: isSungageLoan ? input.loanTermYears : null,
+    payment_after_36_months: isSungageLoan ? Number(input.paymentAfter36Months) || 0 : null,
     estimated_tax_credit: input.estimatedTaxCredit ? Number(input.estimatedTaxCredit) : settings.defaultTaxCredit,
     amount_due_at_signing: input.amountDueAtSigning
       ? Number(input.amountDueAtSigning)
@@ -139,7 +175,10 @@ function toRow(input: HicFormInput, settings: HicSettings) {
   };
 }
 
-function mismatchCheck(input: HicFormInput, settings: HicSettings): boolean {
+function mismatchCheck(input: HicFormInput, settings: HicSettings, financingTypeKey: string): boolean {
+  // The mismatch warning only makes sense against LightReach's own
+  // production/rate math — Sungage Loan/Cash don't have an equivalent.
+  if (financingTypeKey !== "lightreach") return false;
   const expected = calculateMonthlyPaymentCheck(Number(input.estProductionKwh), input.kwhRate);
   const entered = Number(input.firstYearMonthlyPayment);
   return Math.abs(expected - entered) > settings.monthlyPaymentMismatchThreshold;
@@ -150,7 +189,10 @@ export async function createHicDraft(appointmentId: string, input: HicFormInput)
   const supabase = await createClient();
   const settings = await getHicSettings(supabase);
 
-  const validationError = validateInput(input, settings);
+  const financingType = await resolveFinancingType(supabase, input.financingTypeId);
+  if (!financingType.ok) return financingType;
+
+  const validationError = validateInput(input, settings, financingType.key);
   if (validationError) return { ok: false, error: validationError };
 
   // appointments_select RLS (admin or anyone assigned) already scopes
@@ -165,7 +207,7 @@ export async function createHicDraft(appointmentId: string, input: HicFormInput)
     return { ok: false, error: "Appointment not found." };
   }
 
-  const resolved = await resolvePanelAndPrice(supabase, input, settings);
+  const resolved = await resolvePanelAndPrice(supabase, input, settings, financingType.key);
   if (!resolved.ok) return resolved;
 
   const { data: hic, error } = await supabase
@@ -182,7 +224,7 @@ export async function createHicDraft(appointmentId: string, input: HicFormInput)
       panel_wattage_w: resolved.panelWattageW,
       number_of_panels: resolved.numberOfPanels,
       contract_price: resolved.contractPrice,
-      ...toRow(input, settings),
+      ...toRow(input, settings, financingType.key),
     })
     .select("*")
     .single();
@@ -196,7 +238,7 @@ export async function createHicDraft(appointmentId: string, input: HicFormInput)
   });
 
   revalidatePath("/appointments");
-  return { ok: true, hic: hic as Hic, monthlyPaymentMismatch: mismatchCheck(input, settings) };
+  return { ok: true, hic: hic as Hic, monthlyPaymentMismatch: mismatchCheck(input, settings, financingType.key) };
 }
 
 // Same as createHicDraft, but for a HIC with no appointment to hang off
@@ -209,10 +251,13 @@ export async function createStandaloneHicDraft(input: HicFormInput): Promise<Hic
   const supabase = await createClient();
   const settings = await getHicSettings(supabase);
 
-  const validationError = validateInput(input, settings);
+  const financingType = await resolveFinancingType(supabase, input.financingTypeId);
+  if (!financingType.ok) return financingType;
+
+  const validationError = validateInput(input, settings, financingType.key);
   if (validationError) return { ok: false, error: validationError };
 
-  const resolved = await resolvePanelAndPrice(supabase, input, settings);
+  const resolved = await resolvePanelAndPrice(supabase, input, settings, financingType.key);
   if (!resolved.ok) return resolved;
 
   const { data: hic, error } = await supabase
@@ -229,7 +274,7 @@ export async function createStandaloneHicDraft(input: HicFormInput): Promise<Hic
       panel_wattage_w: resolved.panelWattageW,
       number_of_panels: resolved.numberOfPanels,
       contract_price: resolved.contractPrice,
-      ...toRow(input, settings),
+      ...toRow(input, settings, financingType.key),
     })
     .select("*")
     .single();
@@ -243,7 +288,7 @@ export async function createStandaloneHicDraft(input: HicFormInput): Promise<Hic
   });
 
   revalidatePath("/admin/hics");
-  return { ok: true, hic: hic as Hic, monthlyPaymentMismatch: mismatchCheck(input, settings) };
+  return { ok: true, hic: hic as Hic, monthlyPaymentMismatch: mismatchCheck(input, settings, financingType.key) };
 }
 
 export async function updateHicDraft(hicId: string, input: HicFormInput): Promise<HicActionResult> {
@@ -251,10 +296,13 @@ export async function updateHicDraft(hicId: string, input: HicFormInput): Promis
   const supabase = await createClient();
   const settings = await getHicSettings(supabase);
 
-  const validationError = validateInput(input, settings);
+  const financingType = await resolveFinancingType(supabase, input.financingTypeId);
+  if (!financingType.ok) return financingType;
+
+  const validationError = validateInput(input, settings, financingType.key);
   if (validationError) return { ok: false, error: validationError };
 
-  const resolved = await resolvePanelAndPrice(supabase, input, settings);
+  const resolved = await resolvePanelAndPrice(supabase, input, settings, financingType.key);
   if (!resolved.ok) return resolved;
 
   const { data: hic, error, count } = await supabase
@@ -267,7 +315,7 @@ export async function updateHicDraft(hicId: string, input: HicFormInput): Promis
         number_of_panels: resolved.numberOfPanels,
         contract_price: resolved.contractPrice,
         updated_at: new Date().toISOString(),
-        ...toRow(input, settings),
+        ...toRow(input, settings, financingType.key),
       },
       { count: "exact" }
     )
@@ -291,7 +339,7 @@ export async function updateHicDraft(hicId: string, input: HicFormInput): Promis
 
   revalidatePath("/appointments");
   revalidatePath("/admin/hics");
-  return { ok: true, hic: hic as Hic, monthlyPaymentMismatch: mismatchCheck(input, settings) };
+  return { ok: true, hic: hic as Hic, monthlyPaymentMismatch: mismatchCheck(input, settings, financingType.key) };
 }
 
 // Flips the HIC to "sent", creates signer rows with their own hashed
@@ -465,11 +513,21 @@ export async function generateHicPreview(
 // every appointment-panel/admin-page call site — HicFormFields fetches
 // this itself on mount and falls back to the lib/hic/defaults.ts
 // constants until it resolves.
-export async function getHicOptionLists(): Promise<{ escalatorOptions: number[]; kwhRateOptions: number[] }> {
+export async function getHicOptionLists(): Promise<{
+  escalatorOptions: number[];
+  kwhRateOptions: number[];
+  aprOptions: number[];
+  loanTermOptions: number[];
+}> {
   await requireSession();
   const supabase = await createClient();
   const settings = await getHicSettings(supabase);
-  return { escalatorOptions: settings.escalatorOptions, kwhRateOptions: settings.kwhRateOptions };
+  return {
+    escalatorOptions: settings.escalatorOptions,
+    kwhRateOptions: settings.kwhRateOptions,
+    aprOptions: settings.aprOptions,
+    loanTermOptions: settings.loanTermOptions,
+  };
 }
 
 export type HicMutationResult = { ok: true } | { ok: false; error: string };
@@ -641,6 +699,9 @@ export async function correctHic(hicId: string): Promise<CorrectHicResult> {
       panel_wattage_w: original.panel_wattage_w,
       number_of_panels: original.number_of_panels,
       contract_price: original.contract_price,
+      fixed_apr: original.fixed_apr,
+      loan_term_years: original.loan_term_years,
+      payment_after_36_months: original.payment_after_36_months,
       estimated_tax_credit: original.estimated_tax_credit,
       amount_due_at_signing: original.amount_due_at_signing,
       sales_rep_name: original.sales_rep_name,
