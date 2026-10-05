@@ -10,12 +10,14 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@pdf-lib/fontkit": "^1.1.1",
     "@supabase/ssr": "^0.12.4",
     "@supabase/supabase-js": "^2.111.0",
     "decimal.js": "^10.6.0",
     "mapbox-gl": "^3.28.1",
     "next": "16.2.12",
     "papaparse": "^5.5.4",
+    "pdf-lib": "^1.17.1",
     "pdfjs-dist": "^6.3.289",
     "react": "19.2.4",
     "react-dom": "19.2.4",

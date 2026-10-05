@@ -35,6 +35,22 @@ export function formatKwh(value: number): string {
   return `${formatted} kWh`;
 }
 
+// Same as formatCurrency but without the leading "$" — used on the
+// English HIC's Contract Price cell, which already has a "$" pre-printed
+// on the template itself (stamping another one would double it up).
+export function formatCurrencyNoSymbol(value: number): string {
+  return new Intl.NumberFormat("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(value);
+}
+
+// "$0.135" — 3 decimal places, matching the spec's exact display
+// convention for the kWh rate (distinct from formatCurrency's 2dp).
+export function formatKwhRate(value: number): string {
+  return `$${value.toFixed(3)}`;
+}
+
 export function formatPercent(value: number): string {
   return new Intl.NumberFormat("en-US", {
     style: "percent",
