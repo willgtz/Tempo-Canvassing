@@ -5,8 +5,9 @@ import Link from "next/link";
 import { useState, useTransition } from "react";
 import { cn } from "@/components/ui/cn";
 import { correctHic, getHicDownloadUrl, resendHic, voidHic } from "@/app/appointments/send-hic/actions";
+import { HicFormModal } from "../hic-form-modal";
 import { formatCurrency, formatKw, formatKwh, formatPercent } from "@/lib/hic/format";
-import type { Hic, HicStatus, HicSigner } from "@/app/appointments/send-hic/types";
+import type { Hic, HicFinancingType, HicStatus, HicSigner } from "@/app/appointments/send-hic/types";
 import type { ContractPriceYear } from "@/lib/hic/contract-price";
 import type { HicEvent } from "./page";
 
@@ -54,55 +55,78 @@ export function HicDetailClient({
   signers,
   events,
   schedule,
+  financingTypes,
 }: {
   hic: Hic;
   signers: HicSigner[];
   events: HicEvent[];
   schedule: ContractPriceYear[];
+  financingTypes: HicFinancingType[];
 }) {
   const router = useRouter();
   const [actionError, setActionError] = useState<string | null>(null);
+  const [actionNotice, setActionNotice] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const [pendingAction, setPendingAction] = useState<"download" | "resend" | "correct" | "void" | null>(null);
   const [showSchedule, setShowSchedule] = useState(false);
+  const [correctingHic, setCorrectingHic] = useState<Hic | null>(null);
 
   const canResend = ["sent", "viewed", "partially_signed"].includes(hic.status);
   const canVoid = hic.status !== "voided";
   const canCorrect = hic.status !== "draft" && !hic.corrected_into_hic_id;
 
+  const lastResentAt = events.find((e) => e.event_type === "resent")?.occurred_at ?? null;
+
   function handleResend() {
     setActionError(null);
+    setActionNotice(null);
+    setPendingAction("resend");
     startTransition(async () => {
       const result = await resendHic(hic.id);
       if (!result.ok) setActionError(result.error);
-      else router.refresh();
+      else {
+        setActionNotice(`Resent ${timestamp(new Date().toISOString())}.`);
+        router.refresh();
+      }
     });
   }
 
   function handleVoid() {
-    const reason = window.prompt("Reason for voiding this HIC (optional):") ?? undefined;
-    if (reason === undefined && !window.confirm("Void this HIC without a reason?")) return;
+    const reason = window.prompt("Reason for voiding this HIC (optional — leave blank and press OK to void without one):");
+    // Cancel on the prompt itself (not just an empty reason) aborts —
+    // previously this fell through to a second, confusing confirm
+    // dialog instead of just stopping.
+    if (reason === null) return;
     setActionError(null);
+    setActionNotice(null);
+    setPendingAction("void");
     startTransition(async () => {
-      const result = await voidHic(hic.id, reason || undefined);
+      const result = await voidHic(hic.id, reason.trim() || undefined);
       if (!result.ok) setActionError(result.error);
-      else router.refresh();
+      else {
+        setActionNotice("Voided.");
+        router.refresh();
+      }
     });
   }
 
   function handleCorrect() {
     setActionError(null);
+    setActionNotice(null);
+    setPendingAction("correct");
     startTransition(async () => {
       const result = await correctHic(hic.id);
       if (!result.ok) {
         setActionError(result.error);
         return;
       }
-      router.push(`/admin/hics/${result.hic.id}`);
+      setCorrectingHic(result.hic);
     });
   }
 
   function handleDownload() {
     setActionError(null);
+    setPendingAction("download");
     startTransition(async () => {
       const result = await getHicDownloadUrl(hic.id);
       if (!result.ok) {
@@ -146,6 +170,7 @@ export function HicDetailClient({
       </div>
 
       {actionError && <p className="text-sm text-red-600 dark:text-red-400">{actionError}</p>}
+      {actionNotice && !actionError && <p className="text-sm text-green-600 dark:text-green-400">{actionNotice}</p>}
 
       <div className="flex flex-wrap gap-2">
         <button
@@ -154,7 +179,7 @@ export function HicDetailClient({
           disabled={isPending}
           className="rounded-full border border-black/15 px-3 py-1.5 text-sm font-medium hover:bg-black/5 disabled:opacity-50 dark:border-white/20 dark:hover:bg-white/10"
         >
-          Download
+          {isPending && pendingAction === "download" ? "Opening…" : "Download"}
         </button>
         {canResend && (
           <button
@@ -163,7 +188,7 @@ export function HicDetailClient({
             disabled={isPending}
             className="rounded-full border border-black/15 px-3 py-1.5 text-sm font-medium hover:bg-black/5 disabled:opacity-50 dark:border-white/20 dark:hover:bg-white/10"
           >
-            Resend
+            {isPending && pendingAction === "resend" ? "Resending…" : "Resend"}
           </button>
         )}
         {canCorrect && (
@@ -173,7 +198,7 @@ export function HicDetailClient({
             disabled={isPending}
             className="rounded-full border border-black/15 px-3 py-1.5 text-sm font-medium hover:bg-black/5 disabled:opacity-50 dark:border-white/20 dark:hover:bg-white/10"
           >
-            Correct
+            {isPending && pendingAction === "correct" ? "Preparing…" : "Correct"}
           </button>
         )}
         {canVoid && (
@@ -183,10 +208,13 @@ export function HicDetailClient({
             disabled={isPending}
             className="rounded-full border border-red-600/30 px-3 py-1.5 text-sm font-medium text-red-600 hover:bg-red-600/5 disabled:opacity-50 dark:border-red-400/30 dark:text-red-400 dark:hover:bg-red-400/10"
           >
-            Void
+            {isPending && pendingAction === "void" ? "Voiding…" : "Void"}
           </button>
         )}
       </div>
+      {lastResentAt && (
+        <p className="text-xs text-black/50 dark:text-white/50">Last resent: {timestamp(lastResentAt)}</p>
+      )}
 
       <div className="space-y-1.5 rounded-md border border-black/10 p-3 dark:border-white/10">
         <SectionLabel>Signers</SectionLabel>
@@ -257,6 +285,20 @@ export function HicDetailClient({
           {events.length === 0 && <p className="text-sm italic text-black/40 dark:text-white/40">No events yet.</p>}
         </ul>
       </div>
+
+      {correctingHic && (
+        <HicFormModal
+          initialHic={correctingHic}
+          financingTypes={financingTypes}
+          title="Correct HIC"
+          onClose={() => setCorrectingHic(null)}
+          onSent={() => {
+            setCorrectingHic(null);
+            setActionNotice("Correction sent — the original was voided.");
+            router.refresh();
+          }}
+        />
+      )}
     </div>
   );
 }

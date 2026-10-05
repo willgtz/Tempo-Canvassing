@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { calculateContractPriceSchedule } from "@/lib/hic/contract-price";
 import { HicDetailClient } from "./hic-detail-client";
-import type { Hic, HicSigner } from "@/app/appointments/send-hic/types";
+import type { Hic, HicFinancingType, HicSigner } from "@/app/appointments/send-hic/types";
 
 export type HicEvent = {
   id: string;
@@ -24,13 +24,14 @@ export default async function AdminHicDetailPage({ params }: { params: Promise<{
   const { data: hic, error } = await supabase.from("hics").select("*").eq("id", id).single();
   if (error || !hic) notFound();
 
-  const [{ data: signers }, { data: events }] = await Promise.all([
+  const [{ data: signers }, { data: events }, { data: financingTypes }] = await Promise.all([
     supabase.from("hic_signers").select("*").eq("hic_id", id).order("created_at"),
     supabase
       .from("hic_events")
       .select("id, event_type, old_value, new_value, occurred_at, user_id, signer_id")
       .eq("hic_id", id)
       .order("occurred_at", { ascending: false }),
+    supabase.from("hic_financing_types").select("*").order("sort_order"),
   ]);
 
   const schedule = calculateContractPriceSchedule(hic.est_production_kwh, hic.kwh_rate, hic.escalator, {
@@ -44,6 +45,7 @@ export default async function AdminHicDetailPage({ params }: { params: Promise<{
       signers={(signers ?? []) as HicSigner[]}
       events={(events ?? []) as HicEvent[]}
       schedule={schedule}
+      financingTypes={(financingTypes ?? []) as HicFinancingType[]}
     />
   );
 }

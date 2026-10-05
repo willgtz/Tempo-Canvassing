@@ -32,6 +32,12 @@ const ICONS = {
       <path strokeLinecap="round" d="M15.5 4.5a3 3 0 0 1 0 6M17.5 20c0-3-1.5-5.2-3.8-5.9" />
     </svg>
   ),
+  hics: (active: boolean) => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={active ? 2.2 : 1.8} className="h-6 w-6">
+      <path d="M7 3.5h7.5L18.5 7.5V20.5H7Z" />
+      <path strokeLinecap="round" d="M14 3.5V7.5H18.5M9.5 12h5M9.5 15.5h5" />
+    </svg>
+  ),
 };
 
 // Mobile-only (hidden at md and up, where the existing top nav takes
@@ -54,7 +60,12 @@ export function MobileTabBar({ isAdmin = false }: { isAdmin?: boolean }) {
     // Admin-only fourth tab — Reps management previously had no mobile
     // entry point at all (the desktop nav's Reps link is hidden below
     // md, and the mobile header strip only had notifications/sign-out).
-    ...(isAdmin ? [{ href: "/admin/reps/manage", label: "Reps", icon: ICONS.reps }] : []),
+    ...(isAdmin
+      ? [
+          { href: "/admin/reps/manage", label: "Reps", icon: ICONS.reps },
+          { href: "/admin/hics", label: "HICs", icon: ICONS.hics },
+        ]
+      : []),
   ];
 
   return (

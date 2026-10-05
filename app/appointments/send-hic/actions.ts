@@ -206,6 +206,52 @@ export async function createHicDraft(appointmentId: string, input: HicFormInput)
   return { ok: true, hic: hic as Hic, monthlyPaymentMismatch: mismatchCheck(input) };
 }
 
+// Same as createHicDraft, but for a HIC with no appointment to hang off
+// of — the admin HICs list's manual "Send HIC" button, and the Correct
+// flow (its new draft is pre-filled from the original but otherwise
+// stands alone; the original's own appointment_id isn't copied forward
+// since a correction isn't really "about" that appointment anymore).
+export async function createStandaloneHicDraft(input: HicFormInput): Promise<HicActionResult> {
+  const session = await requireSession();
+  const supabase = await createClient();
+
+  const validationError = validateInput(input);
+  if (validationError) return { ok: false, error: validationError };
+
+  const resolved = await resolvePanelAndPrice(supabase, input);
+  if (!resolved.ok) return resolved;
+
+  const { data: hic, error } = await supabase
+    .from("hics")
+    .insert({
+      appointment_id: null,
+      lead_id: null,
+      financing_type_id: input.financingTypeId,
+      status: "draft",
+      created_by: session.userId,
+      sales_rep_name: session.fullName,
+      contractor_name: HIC_DEFAULT_CONTRACTOR_NAME,
+      panel_brand: resolved.panelBrand,
+      panel_wattage_w: resolved.panelWattageW,
+      number_of_panels: resolved.numberOfPanels,
+      contract_price: resolved.contractPrice,
+      ...toRow(input),
+    })
+    .select("*")
+    .single();
+
+  if (error || !hic) return { ok: false, error: error?.message ?? "Failed to create draft." };
+
+  await supabase.from("hic_events").insert({
+    hic_id: hic.id,
+    user_id: session.userId,
+    event_type: "created",
+  });
+
+  revalidatePath("/admin/hics");
+  return { ok: true, hic: hic as Hic, monthlyPaymentMismatch: mismatchCheck(input) };
+}
+
 export async function updateHicDraft(hicId: string, input: HicFormInput): Promise<HicActionResult> {
   const session = await requireSession();
   const supabase = await createClient();
@@ -249,6 +295,7 @@ export async function updateHicDraft(hicId: string, input: HicFormInput): Promis
   });
 
   revalidatePath("/appointments");
+  revalidatePath("/admin/hics");
   return { ok: true, hic: hic as Hic, monthlyPaymentMismatch: mismatchCheck(input) };
 }
 
@@ -381,6 +428,7 @@ export async function sendHic(hicId: string): Promise<SendHicResult> {
   }
 
   revalidatePath("/appointments");
+  revalidatePath("/admin/hics");
   if (emailFailures.length > 0) {
     return { ok: true, warning: `Sent, but the invite email failed for: ${emailFailures.join("; ")}` };
   }

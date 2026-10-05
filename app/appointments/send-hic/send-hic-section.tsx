@@ -2,13 +2,11 @@
 
 import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
-import { Input, Select } from "@/components/ui/input";
 import { cn } from "@/components/ui/cn";
 import { createHicDraft, updateHicDraft } from "./actions";
 import { HicReviewScreen } from "./hic-review-screen";
 import { SendHicModal } from "./send-hic-modal";
-import { formatCurrency, formatPhoneInput } from "@/lib/hic/format";
-import { HIC_ESCALATOR_OPTIONS, HIC_KWH_RATE_OPTIONS } from "@/lib/hic/defaults";
+import { HicFormFields, blankFormInput, hicToFormInput } from "./hic-form-fields";
 import type { Appointment, AppointmentLead } from "@/app/admin/appointments/types";
 import type { Hic, HicFinancingType, HicFormInput } from "./types";
 
@@ -33,72 +31,6 @@ const STATUS_COLOR: Record<Hic["status"], string> = {
   expired: "bg-black/10 text-black/50 dark:bg-white/10 dark:text-white/50",
   voided: "bg-black/10 text-black/50 dark:bg-white/10 dark:text-white/50",
 };
-
-// Small uppercase section dividers inside the form/review modals — same
-// "Appointment Note" label treatment already used elsewhere in both
-// appointment panels, repurposed here to group a long form into
-// scannable chunks instead of one undifferentiated list of fields.
-function SectionLabel({ children }: { children: React.ReactNode }) {
-  return (
-    <p className="text-xs font-semibold uppercase tracking-wide text-black/50 dark:text-white/50">
-      {children}
-    </p>
-  );
-}
-
-function blankFormInput(lead: AppointmentLead | null, financingTypeId: string): HicFormInput {
-  return {
-    financingTypeId,
-    language: "en",
-    // Never pre-filled from the lead, even though the name is right
-    // there — re-entered by the rep for verification, per spec.
-    customerName: "",
-    customerPhone: "",
-    customerEmail: "",
-    hasCoBorrower: false,
-    coBorrowerName: "",
-    coBorrowerPhone: "",
-    coBorrowerEmail: "",
-    installAddressLine: lead?.address_line ?? "",
-    installCity: lead?.city ?? "",
-    installState: lead?.state ?? "",
-    installZip: lead?.zipcode ?? "",
-    systemSizeKw: "",
-    estProductionKwh: "",
-    firstYearMonthlyPayment: "",
-    escalator: HIC_ESCALATOR_OPTIONS[0],
-    kwhRate: HIC_KWH_RATE_OPTIONS[0],
-    estimatedTaxCredit: "",
-    amountDueAtSigning: "",
-    monthlyPaymentMismatchAcknowledged: false,
-  };
-}
-
-function hicToFormInput(hic: Hic): HicFormInput {
-  return {
-    financingTypeId: hic.financing_type_id,
-    language: hic.language,
-    customerName: hic.customer_name,
-    customerPhone: hic.customer_phone,
-    customerEmail: hic.customer_email,
-    hasCoBorrower: hic.has_co_borrower,
-    coBorrowerName: hic.co_borrower_name ?? "",
-    coBorrowerPhone: hic.co_borrower_phone ?? "",
-    coBorrowerEmail: hic.co_borrower_email ?? "",
-    installAddressLine: hic.install_address_line,
-    installCity: hic.install_city,
-    installState: hic.install_state,
-    installZip: hic.install_zip,
-    systemSizeKw: String(hic.system_size_kw),
-    estProductionKwh: String(hic.est_production_kwh),
-    firstYearMonthlyPayment: String(hic.first_year_monthly_payment),
-    escalator: hic.escalator,
-    kwhRate: hic.kwh_rate,
-    estimatedTaxCredit: String(hic.estimated_tax_credit),
-    amountDueAtSigning: String(hic.amount_due_at_signing),
-    monthlyPaymentMismatchAcknowledged: hic.monthly_payment_mismatch_acknowledged,
-  };
-}
 
 export function SendHicSection({
   appointment,
@@ -194,191 +126,10 @@ export function SendHicSection({
   }
 
   if (mode === "form" && form) {
-    const numberOfPanelsPreview =
-      Number(form.systemSizeKw) > 0 ? Math.round((Number(form.systemSizeKw) * 1000) / 450) : null;
-
     return (
       <SendHicModal title="Send HIC" onClose={handleCloseModal}>
         <div className="space-y-4">
-          <div className="space-y-2">
-            <SectionLabel>Document</SectionLabel>
-            <div className="grid grid-cols-2 gap-2">
-              <div className="space-y-1">
-                <label className="text-xs font-medium">Language</label>
-                <Select value={form.language} onChange={(e) => update("language", e.target.value as "en" | "es")} className="block w-full">
-                  <option value="en">English</option>
-                  <option value="es">Spanish</option>
-                </Select>
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs font-medium">Financing</label>
-                <Select value={form.financingTypeId} disabled className="block w-full">
-                  {financingTypes.map((f) => (
-                    <option key={f.id} value={f.id} disabled={!f.is_enabled}>
-                      {f.label}{!f.is_enabled ? " (Coming soon)" : ""}
-                    </option>
-                  ))}
-                </Select>
-              </div>
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <SectionLabel>Customer</SectionLabel>
-            <Input value={form.customerName} onChange={(e) => update("customerName", e.target.value)} placeholder="Customer name" className="block w-full" />
-            <div className="grid grid-cols-2 gap-2">
-              <Input
-                value={form.customerPhone}
-                onChange={(e) => update("customerPhone", formatPhoneInput(e.target.value))}
-                placeholder="999-999-9999"
-                className="block w-full"
-              />
-              <Input
-                type="email"
-                value={form.customerEmail}
-                onChange={(e) => update("customerEmail", e.target.value)}
-                placeholder="Customer email"
-                className="block w-full"
-              />
-            </div>
-            <label className="flex items-center gap-2 text-xs font-medium">
-              <input
-                type="checkbox"
-                checked={form.hasCoBorrower}
-                onChange={(e) => update("hasCoBorrower", e.target.checked)}
-                className="h-4 w-4"
-              />
-              Has co-borrower
-            </label>
-            {form.hasCoBorrower && (
-              <div className="space-y-2 rounded-md border border-black/10 p-2 dark:border-white/10">
-                <Input
-                  value={form.coBorrowerName}
-                  onChange={(e) => update("coBorrowerName", e.target.value)}
-                  placeholder="Co-borrower name"
-                  className="block w-full"
-                />
-                <div className="grid grid-cols-2 gap-2">
-                  <Input
-                    value={form.coBorrowerPhone}
-                    onChange={(e) => update("coBorrowerPhone", formatPhoneInput(e.target.value))}
-                    placeholder="999-999-9999"
-                    className="block w-full"
-                  />
-                  <Input
-                    type="email"
-                    value={form.coBorrowerEmail}
-                    onChange={(e) => update("coBorrowerEmail", e.target.value)}
-                    placeholder="Co-borrower email"
-                    className="block w-full"
-                  />
-                </div>
-              </div>
-            )}
-          </div>
-
-          <div className="space-y-2">
-            <SectionLabel>Installation address</SectionLabel>
-            <Input
-              value={form.installAddressLine}
-              onChange={(e) => update("installAddressLine", e.target.value)}
-              placeholder="Street"
-              className="block w-full"
-            />
-            <div className="grid grid-cols-3 gap-2">
-              <Input value={form.installCity} onChange={(e) => update("installCity", e.target.value)} placeholder="City" />
-              <Input value={form.installState} onChange={(e) => update("installState", e.target.value)} placeholder="State" />
-              <Input value={form.installZip} onChange={(e) => update("installZip", e.target.value)} placeholder="ZIP" />
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <SectionLabel>System &amp; pricing</SectionLabel>
-            <div className="grid grid-cols-2 gap-2">
-              <div className="space-y-1">
-                <label className="text-xs font-medium">System size (kW)</label>
-                <Input
-                  type="number"
-                  step="0.01"
-                  value={form.systemSizeKw}
-                  onChange={(e) => update("systemSizeKw", e.target.value)}
-                  className="block w-full"
-                />
-                {numberOfPanelsPreview !== null && (
-                  <p className="text-[11px] text-black/50 dark:text-white/50">
-                    ≈ {numberOfPanelsPreview} panels (450W) — must divide evenly to send
-                  </p>
-                )}
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs font-medium">Est. production, first year (kWh)</label>
-                <Input
-                  type="number"
-                  step="0.01"
-                  value={form.estProductionKwh}
-                  onChange={(e) => update("estProductionKwh", e.target.value)}
-                  className="block w-full"
-                />
-                <p className="text-[11px] text-black/50 dark:text-white/50">
-                  Enter exactly as LightReach shows, including decimals.
-                </p>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-3 gap-2">
-              <div className="space-y-1">
-                <label className="text-xs font-medium">1st-yr monthly payment</label>
-                <Input
-                  type="number"
-                  step="0.01"
-                  value={form.firstYearMonthlyPayment}
-                  onChange={(e) => update("firstYearMonthlyPayment", e.target.value)}
-                  className="block w-full"
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs font-medium">Escalator</label>
-                <Select
-                  value={form.escalator}
-                  onChange={(e) => update("escalator", Number(e.target.value))}
-                  className="block w-full"
-                >
-                  {HIC_ESCALATOR_OPTIONS.map((e) => (
-                    <option key={e} value={e}>
-                      {(e * 100).toFixed(2)}%
-                    </option>
-                  ))}
-                </Select>
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs font-medium">kWh rate</label>
-                <Select value={form.kwhRate} onChange={(e) => update("kwhRate", Number(e.target.value))} className="block w-full">
-                  {HIC_KWH_RATE_OPTIONS.map((r) => (
-                    <option key={r} value={r}>
-                      ${r.toFixed(3)}
-                    </option>
-                  ))}
-                </Select>
-              </div>
-            </div>
-          </div>
-
-          {mismatchWarning && (
-            <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-2 text-xs text-amber-700 dark:text-amber-300">
-              LightReach&apos;s first-year payment for these numbers is usually{" "}
-              {formatCurrency(
-                Math.round(((Number(form.estProductionKwh) * form.kwhRate) / 12) * 100) / 100
-              )}{" "}
-              — double-check your entry.
-              <button
-                type="button"
-                onClick={() => update("monthlyPaymentMismatchAcknowledged", true)}
-                className="ml-2 underline"
-              >
-                Looks right, continue
-              </button>
-            </div>
-          )}
+          <HicFormFields form={form} update={update} financingTypes={financingTypes} mismatchWarning={mismatchWarning} />
 
           {formError && <p className="text-xs text-red-600 dark:text-red-400">{formError}</p>}
           {savedNotice && !formError && <p className="text-xs text-green-600 dark:text-green-400">Saved as draft.</p>}

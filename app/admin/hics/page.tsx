@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllRows } from "@/lib/supabase/fetch-all-rows";
 import { AllHicsExplorer } from "./all-hics-explorer";
-import type { Hic } from "@/app/appointments/send-hic/types";
+import type { Hic, HicFinancingType } from "@/app/appointments/send-hic/types";
 
 // Gated by app/admin/layout.tsx's own requireAdmin() call — admin-only
 // across the whole /admin subtree, same as every other page here (see
@@ -12,11 +12,12 @@ import type { Hic } from "@/app/appointments/send-hic/types";
 export default async function AdminHicsPage() {
   const supabase = await createClient();
 
-  const [{ data: hics, error: hicsError }, { data: profiles }] = await Promise.all([
+  const [{ data: hics, error: hicsError }, { data: profiles }, { data: financingTypes }] = await Promise.all([
     fetchAllRows((from, to) =>
       supabase.from("hics").select("*").order("created_at", { ascending: false }).order("id", { ascending: true }).range(from, to)
     ),
     supabase.from("profiles").select("id, full_name").order("full_name"),
+    supabase.from("hic_financing_types").select("*").order("sort_order"),
   ]);
 
   if (hicsError) {
@@ -28,6 +29,10 @@ export default async function AdminHicsPage() {
   }
 
   return (
-    <AllHicsExplorer hics={(hics ?? []) as Hic[]} profiles={(profiles ?? []) as { id: string; full_name: string }[]} />
+    <AllHicsExplorer
+      hics={(hics ?? []) as Hic[]}
+      profiles={(profiles ?? []) as { id: string; full_name: string }[]}
+      financingTypes={(financingTypes ?? []) as HicFinancingType[]}
+    />
   );
 }
