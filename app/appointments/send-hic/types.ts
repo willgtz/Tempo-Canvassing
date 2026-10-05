@@ -64,6 +64,15 @@ export type Hic = {
   sales_rep_name: string;
   contractor_name: string;
   monthly_payment_mismatch_acknowledged: boolean;
+  original_hic_id: string | null;
+  corrected_into_hic_id: string | null;
+  void_reason: string | null;
+  voided_at: string | null;
+  voided_by: string | null;
+  declined_at: string | null;
+  expired_at: string | null;
+  final_pdf_storage_path: string | null;
+  final_pdf_sha256: string | null;
 };
 
 export type HicSignerStatus = "pending" | "sent" | "viewed" | "signed" | "declined";

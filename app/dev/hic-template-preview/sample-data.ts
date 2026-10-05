@@ -34,6 +34,15 @@ const BASE: Omit<Hic, "id" | "language" | "has_co_borrower" | "co_borrower_name"
   sales_rep_name: "Pere Briggs",
   contractor_name: "Tempo Solar World",
   monthly_payment_mismatch_acknowledged: true,
+  original_hic_id: null,
+  corrected_into_hic_id: null,
+  void_reason: null,
+  voided_at: null,
+  voided_by: null,
+  declined_at: null,
+  expired_at: null,
+  final_pdf_storage_path: null,
+  final_pdf_sha256: null,
 };
 
 export const SAMPLE_SCENARIOS: { key: string; label: string; hic: Hic }[] = [

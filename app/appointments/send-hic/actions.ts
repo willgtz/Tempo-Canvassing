@@ -10,6 +10,7 @@ import { isValidEmail, isValidPhoneInput } from "@/lib/hic/format";
 import { generateSigningToken } from "@/lib/hic/signing-token";
 import { sendHicEmail } from "@/lib/hic/send-email";
 import { getSiteUrl } from "@/lib/hic/site-url";
+import { getHicSignedUrl } from "@/lib/hic/storage";
 import {
   HIC_DEFAULT_AMOUNT_DUE_AT_SIGNING,
   HIC_DEFAULT_CONTRACTOR_NAME,
@@ -361,6 +362,24 @@ export async function sendHic(hicId: string): Promise<SendHicResult> {
     }
   }
 
+  // A HIC sent as a correction (see correctHic below) automatically
+  // voids the original it replaces, right at the moment it's actually
+  // sent — not when the correction draft was merely created, since the
+  // rep might still abandon editing it and the original should stay
+  // live until a real replacement exists.
+  if (hic.original_hic_id) {
+    await supabase
+      .from("hics")
+      .update({ status: "voided", voided_at: new Date().toISOString(), corrected_into_hic_id: hicId })
+      .eq("id", hic.original_hic_id);
+    await supabase.from("hic_events").insert({
+      hic_id: hic.original_hic_id,
+      user_id: session.userId,
+      event_type: "voided",
+      new_value: `Superseded by correction ${hicId}`,
+    });
+  }
+
   revalidatePath("/appointments");
   if (emailFailures.length > 0) {
     return { ok: true, warning: `Sent, but the invite email failed for: ${emailFailures.join("; ")}` };
@@ -385,5 +404,183 @@ export async function generateHicPreview(
     return { ok: true, ...preview };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "Failed to generate preview." };
+  }
+}
+
+export type HicMutationResult = { ok: true } | { ok: false; error: string };
+
+// Re-emails the CURRENT signing link(s) to anyone who hasn't signed yet
+// — a fresh token each time (the old one stops working the moment the
+// new hash overwrites it), expiration reset per HIC_LINK_EXPIRATION_DAYS.
+// Doesn't touch reminder_count — that's Phase 4's automatic-reminder
+// counter specifically, a manual resend is a different action.
+export async function resendHic(hicId: string): Promise<HicMutationResult> {
+  const session = await requireSession();
+  const supabase = await createClient();
+
+  const { data: hic, error: hicError } = await supabase.from("hics").select("*").eq("id", hicId).single();
+  if (hicError || !hic) return { ok: false, error: "HIC not found." };
+  if (!["sent", "viewed", "partially_signed"].includes(hic.status)) {
+    return { ok: false, error: "This HIC isn't currently awaiting a signature." };
+  }
+
+  const { data: signers, error: signersError } = await supabase
+    .from("hic_signers")
+    .select("id, full_name, email, status")
+    .eq("hic_id", hicId)
+    .neq("status", "signed");
+  if (signersError) return { ok: false, error: signersError.message };
+  if (!signers || signers.length === 0) return { ok: false, error: "No unsigned signers to resend to." };
+
+  const siteUrl = await getSiteUrl();
+  const tokenExpiresAt = new Date(Date.now() + HIC_LINK_EXPIRATION_DAYS * 24 * 60 * 60 * 1000).toISOString();
+  const emailFailures: string[] = [];
+
+  for (const signer of signers) {
+    const { token, tokenHash } = generateSigningToken();
+    await supabase.from("hic_signers").update({ token_hash: tokenHash, token_expires_at: tokenExpiresAt }).eq("id", signer.id);
+
+    const result = await sendHicEmail({
+      emailType: "signer_invite",
+      language: hic.language,
+      to: signer.email,
+      mergeFields: {
+        signer_name: signer.full_name,
+        rep_name: hic.sales_rep_name,
+        sign_link: `${siteUrl}/sign/${signer.id}?t=${token}`,
+        expires_in_days: String(HIC_LINK_EXPIRATION_DAYS),
+      },
+    });
+    if (!result.ok) emailFailures.push(`${signer.email}: ${result.error}`);
+  }
+
+  await supabase.from("hic_events").insert({ hic_id: hicId, user_id: session.userId, event_type: "resent" });
+  revalidatePath("/appointments");
+  revalidatePath("/admin/hics");
+
+  if (emailFailures.length > 0) return { ok: false, error: `Resend email failed for: ${emailFailures.join("; ")}` };
+  return { ok: true };
+}
+
+// Cancels the HIC outright and invalidates all signer links — the
+// public GET/sign/decline routes all check hics.status directly, not
+// just the token, so this takes effect immediately without needing to
+// touch the signer rows themselves.
+export async function voidHic(hicId: string, reason?: string): Promise<HicMutationResult> {
+  const session = await requireSession();
+  const supabase = await createClient();
+
+  const { data: hic, error: hicError } = await supabase.from("hics").select("status").eq("id", hicId).single();
+  if (hicError || !hic) return { ok: false, error: "HIC not found." };
+  if (hic.status === "voided") return { ok: false, error: "This HIC is already voided." };
+
+  const { error: updateError, count } = await supabase
+    .from("hics")
+    .update({ status: "voided", voided_at: new Date().toISOString(), voided_by: session.userId, void_reason: reason ?? null }, { count: "exact" })
+    .eq("id", hicId);
+  if (updateError || !count) return { ok: false, error: updateError?.message ?? "Failed to void." };
+
+  await supabase.from("hic_events").insert({ hic_id: hicId, user_id: session.userId, event_type: "voided", new_value: reason ?? null });
+  revalidatePath("/appointments");
+  revalidatePath("/admin/hics");
+  return { ok: true };
+}
+
+export type CorrectHicResult = { ok: true; hic: Hic } | { ok: false; error: string };
+
+// Creates a new editable draft pre-filled from a sent/signed HIC, for
+// fixing a mistake or handling a change order — a signed/sent HIC can
+// never be edited directly (hics_prevent_content_edit_after_send
+// blocks it), this is the only path to changing one. The original stays
+// live and signable until the correction is actually SENT (see the
+// original_hic_id check at the end of sendHic above), not the moment
+// this draft is merely created.
+export async function correctHic(hicId: string): Promise<CorrectHicResult> {
+  const session = await requireSession();
+  const supabase = await createClient();
+
+  const { data: original, error: fetchError } = await supabase.from("hics").select("*").eq("id", hicId).single();
+  if (fetchError || !original) return { ok: false, error: "HIC not found." };
+  if (original.status === "draft") return { ok: false, error: "A draft can be edited directly — no need to correct it." };
+  if (original.corrected_into_hic_id) return { ok: false, error: "This HIC has already been corrected." };
+
+  const { data: newHic, error: insertError } = await supabase
+    .from("hics")
+    .insert({
+      appointment_id: original.appointment_id,
+      lead_id: original.lead_id,
+      financing_type_id: original.financing_type_id,
+      language: original.language,
+      status: "draft",
+      created_by: session.userId,
+      customer_name: original.customer_name,
+      customer_phone: original.customer_phone,
+      customer_email: original.customer_email,
+      has_co_borrower: original.has_co_borrower,
+      co_borrower_name: original.co_borrower_name,
+      co_borrower_phone: original.co_borrower_phone,
+      co_borrower_email: original.co_borrower_email,
+      install_address_line: original.install_address_line,
+      install_city: original.install_city,
+      install_state: original.install_state,
+      install_zip: original.install_zip,
+      system_size_kw: original.system_size_kw,
+      est_production_kwh: original.est_production_kwh,
+      first_year_monthly_payment: original.first_year_monthly_payment,
+      escalator: original.escalator,
+      kwh_rate: original.kwh_rate,
+      panel_brand: original.panel_brand,
+      panel_wattage_w: original.panel_wattage_w,
+      number_of_panels: original.number_of_panels,
+      contract_price: original.contract_price,
+      estimated_tax_credit: original.estimated_tax_credit,
+      amount_due_at_signing: original.amount_due_at_signing,
+      sales_rep_name: original.sales_rep_name,
+      contractor_name: original.contractor_name,
+      monthly_payment_mismatch_acknowledged: true,
+      original_hic_id: original.id,
+    })
+    .select("*")
+    .single();
+  if (insertError || !newHic) return { ok: false, error: insertError?.message ?? "Failed to create correction." };
+
+  await supabase.from("hic_events").insert([
+    { hic_id: newHic.id, user_id: session.userId, event_type: "created", new_value: `Correction of ${hicId}` },
+    { hic_id: hicId, user_id: session.userId, event_type: "corrected", new_value: `Correction draft ${newHic.id} created` },
+  ]);
+
+  revalidatePath("/appointments");
+  revalidatePath("/admin/hics");
+  return { ok: true, hic: newHic as Hic };
+}
+
+// Admins can download any HIC regardless of status (draft preview or
+// final signed copy); a rep can only download their own, and only once
+// actually signed (hic_reps_can_download_signed — hardcoded true until
+// Phase 5's settings UI exists, per the default). RLS already scopes
+// the initial select to "admin or own," so a rep attempting another
+// rep's HIC id gets the same "not found" a nonexistent id would.
+export async function getHicDownloadUrl(hicId: string): Promise<{ ok: true; url: string } | { ok: false; error: string }> {
+  const session = await requireSession();
+  const supabase = await createClient();
+
+  const { data: hic, error } = await supabase
+    .from("hics")
+    .select("id, status, final_pdf_storage_path, created_by")
+    .eq("id", hicId)
+    .single();
+  if (error || !hic) return { ok: false, error: "HIC not found." };
+
+  const isAdmin = session.role === "admin" || session.role === "super_admin";
+  if (!isAdmin && hic.status !== "signed") {
+    return { ok: false, error: "This HIC hasn't been signed yet." };
+  }
+
+  const path = hic.status === "signed" && hic.final_pdf_storage_path ? hic.final_pdf_storage_path : `generated/${hicId}/draft.pdf`;
+  try {
+    const url = await getHicSignedUrl(path, 300);
+    return { ok: true, url };
+  } catch {
+    return { ok: false, error: "No document is available for this HIC yet." };
   }
 }

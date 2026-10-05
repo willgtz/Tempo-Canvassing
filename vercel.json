@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/hic-reminders",
+      "schedule": "0 16 * * *"
+    }
+  ]
+}
