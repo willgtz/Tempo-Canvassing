@@ -1,8 +1,10 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { Input, Select } from "@/components/ui/input";
 import { formatCurrency, formatPhoneInput } from "@/lib/hic/format";
 import { HIC_ESCALATOR_OPTIONS, HIC_KWH_RATE_OPTIONS } from "@/lib/hic/defaults";
+import { getHicOptionLists } from "./actions";
 import type { AppointmentLead } from "@/app/admin/appointments/types";
 import type { Hic, HicFinancingType, HicFormInput } from "./types";
 
@@ -86,6 +88,25 @@ export function HicFormFields({
 }) {
   const numberOfPanelsPreview =
     Number(form.systemSizeKw) > 0 ? Math.round((Number(form.systemSizeKw) * 1000) / 450) : null;
+
+  // Starts with the hardcoded fallback lists so the form is usable
+  // immediately, then swaps in the admin-editable live lists (Phase 5
+  // settings) once they resolve — avoids threading these through every
+  // appointment-panel/admin-page call site just for a dropdown.
+  const [escalatorOptions, setEscalatorOptions] = useState<number[]>(HIC_ESCALATOR_OPTIONS);
+  const [kwhRateOptions, setKwhRateOptions] = useState<number[]>(HIC_KWH_RATE_OPTIONS);
+
+  useEffect(() => {
+    let cancelled = false;
+    getHicOptionLists().then((result) => {
+      if (cancelled) return;
+      setEscalatorOptions(result.escalatorOptions);
+      setKwhRateOptions(result.kwhRateOptions);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   return (
     <>
@@ -232,7 +253,7 @@ export function HicFormFields({
               onChange={(e) => update("escalator", Number(e.target.value))}
               className="block w-full"
             >
-              {HIC_ESCALATOR_OPTIONS.map((e) => (
+              {escalatorOptions.map((e) => (
                 <option key={e} value={e}>
                   {(e * 100).toFixed(2)}%
                 </option>
@@ -242,7 +263,7 @@ export function HicFormFields({
           <div className="space-y-1">
             <label className="text-xs font-medium">kWh rate</label>
             <Select value={form.kwhRate} onChange={(e) => update("kwhRate", Number(e.target.value))} className="block w-full">
-              {HIC_KWH_RATE_OPTIONS.map((r) => (
+              {kwhRateOptions.map((r) => (
                 <option key={r} value={r}>
                   ${r.toFixed(3)}
                 </option>

@@ -10,6 +10,7 @@ export type HicPanelOption = {
   financing_type_id: string;
   model_name: string;
   wattage_w: number;
+  is_active: boolean;
 };
 
 export type HicStatus =
@@ -127,4 +128,52 @@ export type HicFormInput = {
   estimatedTaxCredit: string;
   amountDueAtSigning: string;
   monthlyPaymentMismatchAcknowledged: boolean;
+};
+
+// Phase 5 settings — document package rules, notification recipients,
+// email templates, equipment supplement defaults. Mirrors their
+// respective tables in schema.sql.
+export type HicPackageRule = {
+  id: string;
+  template_key: string;
+  financing_type_id: string | null;
+  condition_type: "always" | "city_in_list";
+  city_list: string[] | null;
+  is_enabled: boolean;
+  sort_order: number;
+};
+
+export type HicNotificationRecipient = {
+  id: string;
+  recipient_type: "user" | "email";
+  user_id: string | null;
+  raw_email: string | null;
+  notify_on_signed: boolean;
+  notify_on_viewed: boolean;
+  notify_on_declined: boolean;
+};
+
+export type HicEmailTemplateType =
+  | "signer_invite"
+  | "reminder"
+  | "signed_confirmation"
+  | "viewed_notify"
+  | "signed_notify"
+  | "declined_notify"
+  | "voided_notify";
+
+export type HicEmailTemplate = {
+  id: string;
+  email_type: HicEmailTemplateType;
+  language: "en" | "es";
+  subject: string;
+  body: string;
+};
+
+export type HicEquipmentSupplementDefaults = {
+  id: string;
+  inverter_make_model: string;
+  inverter_quantity: number;
+  racking_manufacturer: string;
+  racking_model: string;
 };

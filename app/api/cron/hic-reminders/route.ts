@@ -3,11 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { sendHicEmail } from "@/lib/hic/send-email";
 import { getSiteUrl } from "@/lib/hic/site-url";
 import { generateSigningToken } from "@/lib/hic/signing-token";
-import {
-  HIC_LINK_EXPIRATION_DAYS,
-  HIC_REMINDER_DAYS_BETWEEN,
-  HIC_REMINDER_MAX_COUNT,
-} from "@/lib/hic/defaults";
+import { getHicSettings } from "@/lib/hic/settings";
 
 const AWAITING_SIGNATURE_STATUSES = ["sent", "viewed", "partially_signed"];
 
@@ -25,29 +21,20 @@ export async function GET(request: Request) {
   }
 
   const admin = createAdminClient();
-
-  const { data: settingsRows } = await admin
-    .from("app_settings")
-    .select("key, value")
-    .in("key", ["hic_reminders_enabled", "hic_reminder_days_between", "hic_reminder_max_count", "hic_link_expiration_days"]);
-  const settings = Object.fromEntries((settingsRows ?? []).map((r) => [r.key, r.value]));
-  const remindersEnabled = settings.hic_reminders_enabled ?? true;
-  const reminderDaysBetween = Number(settings.hic_reminder_days_between ?? HIC_REMINDER_DAYS_BETWEEN);
-  const reminderMaxCount = Number(settings.hic_reminder_max_count ?? HIC_REMINDER_MAX_COUNT);
-  const linkExpirationDays = Number(settings.hic_link_expiration_days ?? HIC_LINK_EXPIRATION_DAYS);
+  const settings = await getHicSettings(admin);
 
   let remindersSent = 0;
   let expired = 0;
 
-  if (remindersEnabled) {
-    const reminderCutoff = new Date(Date.now() - reminderDaysBetween * 24 * 60 * 60 * 1000).toISOString();
+  if (settings.remindersEnabled) {
+    const reminderCutoff = new Date(Date.now() - settings.reminderDaysBetween * 24 * 60 * 60 * 1000).toISOString();
 
     const { data: candidates } = await admin
       .from("hic_signers")
       .select("id, hic_id, full_name, email, sent_at, token_expires_at, reminder_count, last_reminder_at")
       .in("status", ["sent", "viewed"])
       .not("sent_at", "is", null)
-      .lt("reminder_count", reminderMaxCount)
+      .lt("reminder_count", settings.reminderMaxCount)
       .or(`last_reminder_at.is.null,last_reminder_at.lt.${reminderCutoff}`);
 
     const siteUrl = await getSiteUrl();
@@ -65,7 +52,7 @@ export async function GET(request: Request) {
       // Fresh token on every automatic reminder too — no reason for a
       // reminder link to be weaker than a manual resend's.
       const { token, tokenHash } = generateSigningToken();
-      const tokenExpiresAt = new Date(Date.now() + linkExpirationDays * 24 * 60 * 60 * 1000).toISOString();
+      const tokenExpiresAt = new Date(Date.now() + settings.linkExpirationDays * 24 * 60 * 60 * 1000).toISOString();
       await admin.from("hic_signers").update({ token_hash: tokenHash, token_expires_at: tokenExpiresAt }).eq("id", signer.id);
 
       const result = await sendHicEmail({

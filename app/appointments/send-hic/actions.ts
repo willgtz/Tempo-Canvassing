@@ -11,17 +11,7 @@ import { generateSigningToken } from "@/lib/hic/signing-token";
 import { sendHicEmail } from "@/lib/hic/send-email";
 import { getSiteUrl } from "@/lib/hic/site-url";
 import { getHicSignedUrl } from "@/lib/hic/storage";
-import {
-  HIC_DEFAULT_AMOUNT_DUE_AT_SIGNING,
-  HIC_DEFAULT_CONTRACTOR_NAME,
-  HIC_DEFAULT_TAX_CREDIT,
-  HIC_DEGRADATION_RATE,
-  HIC_ESCALATOR_OPTIONS,
-  HIC_KWH_RATE_OPTIONS,
-  HIC_LINK_EXPIRATION_DAYS,
-  HIC_MONTHLY_PAYMENT_MISMATCH_THRESHOLD,
-  HIC_TERM_YEARS,
-} from "@/lib/hic/defaults";
+import { getHicSettings, type HicSettings } from "@/lib/hic/settings";
 import type { Hic, HicFormInput } from "./types";
 
 export type HicActionResult =
@@ -34,7 +24,7 @@ export type SendHicResult = { ok: true; warning?: string } | { ok: false; error:
 // real session, then let RLS (hics_insert/hics_update: created_by =
 // auth.uid() or is_admin) be the actual authorization boundary — this
 // just validates shape/business rules before attempting the write.
-function validateInput(input: HicFormInput): string | null {
+function validateInput(input: HicFormInput, settings: HicSettings): string | null {
   if (!input.customerName.trim()) return "Customer name is required.";
   if (!isValidPhoneInput(input.customerPhone)) return "Enter a valid 10-digit customer phone number.";
   if (!isValidEmail(input.customerEmail)) return "Enter a valid customer email address.";
@@ -52,8 +42,8 @@ function validateInput(input: HicFormInput): string | null {
   if (!(estProductionKwh > 0)) return "Estimated first-year production must be greater than 0.";
   const firstYearMonthlyPayment = Number(input.firstYearMonthlyPayment);
   if (!(firstYearMonthlyPayment >= 0)) return "First-year monthly payment is required.";
-  if (!HIC_ESCALATOR_OPTIONS.includes(input.escalator)) return "Invalid escalator option.";
-  if (!HIC_KWH_RATE_OPTIONS.includes(input.kwhRate)) return "Invalid kWh rate option.";
+  if (!settings.escalatorOptions.includes(input.escalator)) return "Invalid escalator option.";
+  if (!settings.kwhRateOptions.includes(input.kwhRate)) return "Invalid kWh rate option.";
   return null;
 }
 
@@ -70,7 +60,8 @@ function computeNumberOfPanels(systemSizeKw: number, panelWattageW: number): num
 
 async function resolvePanelAndPrice(
   supabase: Awaited<ReturnType<typeof createClient>>,
-  input: HicFormInput
+  input: HicFormInput,
+  settings: HicSettings
 ): Promise<
   | { ok: true; panelBrand: string; panelWattageW: number; numberOfPanels: number; contractPrice: number }
   | { ok: false; error: string }
@@ -108,7 +99,7 @@ async function resolvePanelAndPrice(
     Number(input.estProductionKwh),
     input.kwhRate,
     input.escalator,
-    { degradation: HIC_DEGRADATION_RATE, termYears: HIC_TERM_YEARS }
+    { degradation: settings.degradationRate, termYears: settings.termYears }
   );
 
   return {
@@ -120,7 +111,7 @@ async function resolvePanelAndPrice(
   };
 }
 
-function toRow(input: HicFormInput) {
+function toRow(input: HicFormInput, settings: HicSettings) {
   return {
     language: input.language,
     customer_name: input.customerName.trim(),
@@ -139,25 +130,26 @@ function toRow(input: HicFormInput) {
     first_year_monthly_payment: Number(input.firstYearMonthlyPayment),
     escalator: input.escalator,
     kwh_rate: input.kwhRate,
-    estimated_tax_credit: input.estimatedTaxCredit ? Number(input.estimatedTaxCredit) : HIC_DEFAULT_TAX_CREDIT,
+    estimated_tax_credit: input.estimatedTaxCredit ? Number(input.estimatedTaxCredit) : settings.defaultTaxCredit,
     amount_due_at_signing: input.amountDueAtSigning
       ? Number(input.amountDueAtSigning)
-      : HIC_DEFAULT_AMOUNT_DUE_AT_SIGNING,
+      : settings.defaultAmountDueAtSigning,
     monthly_payment_mismatch_acknowledged: input.monthlyPaymentMismatchAcknowledged,
   };
 }
 
-function mismatchCheck(input: HicFormInput): boolean {
+function mismatchCheck(input: HicFormInput, settings: HicSettings): boolean {
   const expected = calculateMonthlyPaymentCheck(Number(input.estProductionKwh), input.kwhRate);
   const entered = Number(input.firstYearMonthlyPayment);
-  return Math.abs(expected - entered) > HIC_MONTHLY_PAYMENT_MISMATCH_THRESHOLD;
+  return Math.abs(expected - entered) > settings.monthlyPaymentMismatchThreshold;
 }
 
 export async function createHicDraft(appointmentId: string, input: HicFormInput): Promise<HicActionResult> {
   const session = await requireSession();
   const supabase = await createClient();
+  const settings = await getHicSettings(supabase);
 
-  const validationError = validateInput(input);
+  const validationError = validateInput(input, settings);
   if (validationError) return { ok: false, error: validationError };
 
   // appointments_select RLS (admin or anyone assigned) already scopes
@@ -172,7 +164,7 @@ export async function createHicDraft(appointmentId: string, input: HicFormInput)
     return { ok: false, error: "Appointment not found." };
   }
 
-  const resolved = await resolvePanelAndPrice(supabase, input);
+  const resolved = await resolvePanelAndPrice(supabase, input, settings);
   if (!resolved.ok) return resolved;
 
   const { data: hic, error } = await supabase
@@ -184,12 +176,12 @@ export async function createHicDraft(appointmentId: string, input: HicFormInput)
       status: "draft",
       created_by: session.userId,
       sales_rep_name: session.fullName,
-      contractor_name: HIC_DEFAULT_CONTRACTOR_NAME,
+      contractor_name: settings.defaultContractorName,
       panel_brand: resolved.panelBrand,
       panel_wattage_w: resolved.panelWattageW,
       number_of_panels: resolved.numberOfPanels,
       contract_price: resolved.contractPrice,
-      ...toRow(input),
+      ...toRow(input, settings),
     })
     .select("*")
     .single();
@@ -203,7 +195,7 @@ export async function createHicDraft(appointmentId: string, input: HicFormInput)
   });
 
   revalidatePath("/appointments");
-  return { ok: true, hic: hic as Hic, monthlyPaymentMismatch: mismatchCheck(input) };
+  return { ok: true, hic: hic as Hic, monthlyPaymentMismatch: mismatchCheck(input, settings) };
 }
 
 // Same as createHicDraft, but for a HIC with no appointment to hang off
@@ -214,11 +206,12 @@ export async function createHicDraft(appointmentId: string, input: HicFormInput)
 export async function createStandaloneHicDraft(input: HicFormInput): Promise<HicActionResult> {
   const session = await requireSession();
   const supabase = await createClient();
+  const settings = await getHicSettings(supabase);
 
-  const validationError = validateInput(input);
+  const validationError = validateInput(input, settings);
   if (validationError) return { ok: false, error: validationError };
 
-  const resolved = await resolvePanelAndPrice(supabase, input);
+  const resolved = await resolvePanelAndPrice(supabase, input, settings);
   if (!resolved.ok) return resolved;
 
   const { data: hic, error } = await supabase
@@ -230,12 +223,12 @@ export async function createStandaloneHicDraft(input: HicFormInput): Promise<Hic
       status: "draft",
       created_by: session.userId,
       sales_rep_name: session.fullName,
-      contractor_name: HIC_DEFAULT_CONTRACTOR_NAME,
+      contractor_name: settings.defaultContractorName,
       panel_brand: resolved.panelBrand,
       panel_wattage_w: resolved.panelWattageW,
       number_of_panels: resolved.numberOfPanels,
       contract_price: resolved.contractPrice,
-      ...toRow(input),
+      ...toRow(input, settings),
     })
     .select("*")
     .single();
@@ -249,17 +242,18 @@ export async function createStandaloneHicDraft(input: HicFormInput): Promise<Hic
   });
 
   revalidatePath("/admin/hics");
-  return { ok: true, hic: hic as Hic, monthlyPaymentMismatch: mismatchCheck(input) };
+  return { ok: true, hic: hic as Hic, monthlyPaymentMismatch: mismatchCheck(input, settings) };
 }
 
 export async function updateHicDraft(hicId: string, input: HicFormInput): Promise<HicActionResult> {
   const session = await requireSession();
   const supabase = await createClient();
+  const settings = await getHicSettings(supabase);
 
-  const validationError = validateInput(input);
+  const validationError = validateInput(input, settings);
   if (validationError) return { ok: false, error: validationError };
 
-  const resolved = await resolvePanelAndPrice(supabase, input);
+  const resolved = await resolvePanelAndPrice(supabase, input, settings);
   if (!resolved.ok) return resolved;
 
   const { data: hic, error, count } = await supabase
@@ -272,7 +266,7 @@ export async function updateHicDraft(hicId: string, input: HicFormInput): Promis
         number_of_panels: resolved.numberOfPanels,
         contract_price: resolved.contractPrice,
         updated_at: new Date().toISOString(),
-        ...toRow(input),
+        ...toRow(input, settings),
       },
       { count: "exact" }
     )
@@ -296,7 +290,7 @@ export async function updateHicDraft(hicId: string, input: HicFormInput): Promis
 
   revalidatePath("/appointments");
   revalidatePath("/admin/hics");
-  return { ok: true, hic: hic as Hic, monthlyPaymentMismatch: mismatchCheck(input) };
+  return { ok: true, hic: hic as Hic, monthlyPaymentMismatch: mismatchCheck(input, settings) };
 }
 
 // Flips the HIC to "sent", creates signer rows with their own hashed
@@ -311,6 +305,7 @@ export async function updateHicDraft(hicId: string, input: HicFormInput): Promis
 export async function sendHic(hicId: string): Promise<SendHicResult> {
   const session = await requireSession();
   const supabase = await createClient();
+  const settings = await getHicSettings(supabase);
 
   // Full row (not just the signer-contact columns) — fillHicPackage
   // needs every field (system size, pricing, install address, etc.) to
@@ -328,7 +323,7 @@ export async function sendHic(hicId: string): Promise<SendHicResult> {
     return { ok: false, error: updateError?.message ?? "This HIC has already been sent." };
   }
 
-  const tokenExpiresAt = new Date(Date.now() + HIC_LINK_EXPIRATION_DAYS * 24 * 60 * 60 * 1000).toISOString();
+  const tokenExpiresAt = new Date(Date.now() + settings.linkExpirationDays * 24 * 60 * 60 * 1000).toISOString();
   const homeowner = generateSigningToken();
   const coBorrower = hic.has_co_borrower ? generateSigningToken() : null;
 
@@ -395,7 +390,7 @@ export async function sendHic(hicId: string): Promise<SendHicResult> {
         signer_name: signer.full_name,
         rep_name: hic.sales_rep_name,
         sign_link: signLink,
-        expires_in_days: String(HIC_LINK_EXPIRATION_DAYS),
+        expires_in_days: String(settings.linkExpirationDays),
       },
     });
 
@@ -455,16 +450,30 @@ export async function generateHicPreview(
   }
 }
 
+// Lets the client-side form read the live, admin-editable escalator/
+// kWh-rate option lists without threading them as props down through
+// every appointment-panel/admin-page call site — HicFormFields fetches
+// this itself on mount and falls back to the lib/hic/defaults.ts
+// constants until it resolves.
+export async function getHicOptionLists(): Promise<{ escalatorOptions: number[]; kwhRateOptions: number[] }> {
+  await requireSession();
+  const supabase = await createClient();
+  const settings = await getHicSettings(supabase);
+  return { escalatorOptions: settings.escalatorOptions, kwhRateOptions: settings.kwhRateOptions };
+}
+
 export type HicMutationResult = { ok: true } | { ok: false; error: string };
 
 // Re-emails the CURRENT signing link(s) to anyone who hasn't signed yet
 // — a fresh token each time (the old one stops working the moment the
-// new hash overwrites it), expiration reset per HIC_LINK_EXPIRATION_DAYS.
-// Doesn't touch reminder_count — that's Phase 4's automatic-reminder
-// counter specifically, a manual resend is a different action.
+// new hash overwrites it), expiration reset per the live
+// hic_link_expiration_days setting. Doesn't touch reminder_count —
+// that's Phase 4's automatic-reminder counter specifically, a manual
+// resend is a different action.
 export async function resendHic(hicId: string): Promise<HicMutationResult> {
   const session = await requireSession();
   const supabase = await createClient();
+  const settings = await getHicSettings(supabase);
 
   const { data: hic, error: hicError } = await supabase.from("hics").select("*").eq("id", hicId).single();
   if (hicError || !hic) return { ok: false, error: "HIC not found." };
@@ -481,7 +490,7 @@ export async function resendHic(hicId: string): Promise<HicMutationResult> {
   if (!signers || signers.length === 0) return { ok: false, error: "No unsigned signers to resend to." };
 
   const siteUrl = await getSiteUrl();
-  const tokenExpiresAt = new Date(Date.now() + HIC_LINK_EXPIRATION_DAYS * 24 * 60 * 60 * 1000).toISOString();
+  const tokenExpiresAt = new Date(Date.now() + settings.linkExpirationDays * 24 * 60 * 60 * 1000).toISOString();
   const emailFailures: string[] = [];
 
   for (const signer of signers) {
@@ -496,7 +505,7 @@ export async function resendHic(hicId: string): Promise<HicMutationResult> {
         signer_name: signer.full_name,
         rep_name: hic.sales_rep_name,
         sign_link: `${siteUrl}/sign/${signer.id}?t=${token}`,
-        expires_in_days: String(HIC_LINK_EXPIRATION_DAYS),
+        expires_in_days: String(settings.linkExpirationDays),
       },
     });
     if (!result.ok) emailFailures.push(`${signer.email}: ${result.error}`);
@@ -604,10 +613,10 @@ export async function correctHic(hicId: string): Promise<CorrectHicResult> {
 
 // Admins can download any HIC regardless of status (draft preview or
 // final signed copy); a rep can only download their own, and only once
-// actually signed (hic_reps_can_download_signed — hardcoded true until
-// Phase 5's settings UI exists, per the default). RLS already scopes
-// the initial select to "admin or own," so a rep attempting another
-// rep's HIC id gets the same "not found" a nonexistent id would.
+// actually signed, and only while hic_reps_can_download_signed is on.
+// RLS already scopes the initial select to "admin or own," so a rep
+// attempting another rep's HIC id gets the same "not found" a
+// nonexistent id would.
 export async function getHicDownloadUrl(hicId: string): Promise<{ ok: true; url: string } | { ok: false; error: string }> {
   const session = await requireSession();
   const supabase = await createClient();
@@ -620,8 +629,12 @@ export async function getHicDownloadUrl(hicId: string): Promise<{ ok: true; url:
   if (error || !hic) return { ok: false, error: "HIC not found." };
 
   const isAdmin = session.role === "admin" || session.role === "super_admin";
-  if (!isAdmin && hic.status !== "signed") {
-    return { ok: false, error: "This HIC hasn't been signed yet." };
+  if (!isAdmin) {
+    if (hic.status !== "signed") return { ok: false, error: "This HIC hasn't been signed yet." };
+    const settings = await getHicSettings(supabase);
+    if (!settings.repsCanDownloadSigned) {
+      return { ok: false, error: "Downloading signed HICs is currently disabled. Contact an admin." };
+    }
   }
 
   const path = hic.status === "signed" && hic.final_pdf_storage_path ? hic.final_pdf_storage_path : `generated/${hicId}/draft.pdf`;
