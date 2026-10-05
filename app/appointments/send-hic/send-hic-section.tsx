@@ -383,7 +383,18 @@ export function SendHicSection({
           {formError && <p className="text-xs text-red-600 dark:text-red-400">{formError}</p>}
           {savedNotice && !formError && <p className="text-xs text-green-600 dark:text-green-400">Saved as draft.</p>}
 
-          <div className="flex gap-2 border-t border-black/10 pt-3 dark:border-white/10">
+          {/* Cancel repeated down here (not just in the modal's header
+              row) so it's reachable without scrolling back up on a long
+              form — same reasoning as the header fix itself. */}
+          <div className="flex items-center gap-3 border-t border-black/10 pt-3 dark:border-white/10">
+            <button
+              type="button"
+              onClick={handleCloseModal}
+              disabled={isSaving}
+              className="shrink-0 text-sm text-black/50 hover:text-black disabled:opacity-50 dark:text-white/50 dark:hover:text-white"
+            >
+              Cancel
+            </button>
             <Button type="button" variant="secondary" size="sm" disabled={isSaving} onClick={() => handleSave(false)} className="flex-1">
               {isSaving ? "Saving…" : "Save as draft"}
             </Button>
