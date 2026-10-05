@@ -44,6 +44,8 @@ const BASE: Omit<Hic, "id" | "language" | "has_co_borrower" | "co_borrower_name"
   final_pdf_storage_path: null,
   final_pdf_sha256: null,
   template_version_snapshot: null,
+  archived_at: null,
+  archived_by: null,
 };
 
 export const SAMPLE_SCENARIOS: { key: string; label: string; hic: Hic }[] = [

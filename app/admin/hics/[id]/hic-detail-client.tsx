@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useState, useTransition } from "react";
 import { cn } from "@/components/ui/cn";
-import { correctHic, getHicDownloadUrl, resendHic, voidHic } from "@/app/appointments/send-hic/actions";
+import { archiveHic, correctHic, getHicDownloadUrl, resendHic, unarchiveHic, voidHic } from "@/app/appointments/send-hic/actions";
 import { HicFormModal } from "../hic-form-modal";
 import { formatCurrency, formatKw, formatKwh, formatPercent } from "@/lib/hic/format";
 import type { Hic, HicFinancingType, HicStatus, HicSigner } from "@/app/appointments/send-hic/types";
@@ -67,7 +67,7 @@ export function HicDetailClient({
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionNotice, setActionNotice] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
-  const [pendingAction, setPendingAction] = useState<"download" | "resend" | "correct" | "void" | null>(null);
+  const [pendingAction, setPendingAction] = useState<"download" | "resend" | "correct" | "void" | "archive" | null>(null);
   const [showSchedule, setShowSchedule] = useState(false);
   const [correctingHic, setCorrectingHic] = useState<Hic | null>(null);
 
@@ -124,6 +124,20 @@ export function HicDetailClient({
     });
   }
 
+  function handleArchiveToggle() {
+    setActionError(null);
+    setActionNotice(null);
+    setPendingAction("archive");
+    startTransition(async () => {
+      const result = hic.archived_at ? await unarchiveHic(hic.id) : await archiveHic(hic.id);
+      if (!result.ok) setActionError(result.error);
+      else {
+        setActionNotice(hic.archived_at ? "Unarchived." : "Archived.");
+        router.refresh();
+      }
+    });
+  }
+
   function handleDownload() {
     setActionError(null);
     setPendingAction("download");
@@ -149,6 +163,11 @@ export function HicDetailClient({
             <span className={cn("rounded-full px-2 py-0.5 text-xs font-medium", STATUS_COLOR[hic.status])}>
               {STATUS_LABEL[hic.status]}
             </span>
+            {hic.archived_at && (
+              <span className="rounded-full bg-black/10 px-2 py-0.5 text-xs font-medium text-black/60 dark:bg-white/10 dark:text-white/60">
+                Archived
+              </span>
+            )}
           </div>
           {hic.original_hic_id && (
             <p className="mt-1 text-xs text-black/50 dark:text-white/50">
@@ -211,6 +230,16 @@ export function HicDetailClient({
             {isPending && pendingAction === "void" ? "Voiding…" : "Void"}
           </button>
         )}
+        <button
+          type="button"
+          onClick={handleArchiveToggle}
+          disabled={isPending}
+          className="rounded-full border border-black/15 px-3 py-1.5 text-sm font-medium hover:bg-black/5 disabled:opacity-50 dark:border-white/20 dark:hover:bg-white/10"
+        >
+          {isPending && pendingAction === "archive"
+            ? hic.archived_at ? "Unarchiving…" : "Archiving…"
+            : hic.archived_at ? "Unarchive" : "Archive"}
+        </button>
       </div>
       {lastResentAt && (
         <p className="text-xs text-black/50 dark:text-white/50">Last resent: {timestamp(lastResentAt)}</p>

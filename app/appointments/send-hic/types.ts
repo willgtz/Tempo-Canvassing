@@ -121,6 +121,11 @@ export type Hic = {
   // (Phase 6) so an in-flight HIC keeps rendering the exact version a
   // signer was shown even if the template is edited afterward.
   template_version_snapshot: Record<string, string> | null;
+  // Pure visibility declutter (list pages only) — never affects status,
+  // signer tokens, or anything else. Admins/the owning rep can still see
+  // an archived HIC directly; it's just filtered out of the main list.
+  archived_at: string | null;
+  archived_by: string | null;
 };
 
 export type HicSignerStatus = "pending" | "sent" | "viewed" | "signed" | "declined";

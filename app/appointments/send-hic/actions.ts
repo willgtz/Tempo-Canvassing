@@ -553,6 +553,47 @@ export async function voidHic(hicId: string, reason?: string): Promise<HicMutati
   return { ok: true };
 }
 
+// Pure visibility declutter for the admin HICs list — never touches
+// status, never affects signer tokens or anything a signer sees.
+// RLS (hics_update: is_admin or created_by) is the real boundary here,
+// same as every other mutation in this file.
+export async function archiveHic(hicId: string): Promise<HicMutationResult> {
+  const session = await requireSession();
+  const supabase = await createClient();
+
+  const { data: hic, error: hicError } = await supabase.from("hics").select("archived_at").eq("id", hicId).single();
+  if (hicError || !hic) return { ok: false, error: "HIC not found." };
+  if (hic.archived_at) return { ok: false, error: "This HIC is already archived." };
+
+  const { error: updateError, count } = await supabase
+    .from("hics")
+    .update({ archived_at: new Date().toISOString(), archived_by: session.userId }, { count: "exact" })
+    .eq("id", hicId);
+  if (updateError || !count) return { ok: false, error: updateError?.message ?? "Failed to archive." };
+
+  await supabase.from("hic_events").insert({ hic_id: hicId, user_id: session.userId, event_type: "archived" });
+  revalidatePath("/appointments");
+  revalidatePath("/admin/hics");
+  return { ok: true };
+}
+
+export async function unarchiveHic(hicId: string): Promise<HicMutationResult> {
+  const session = await requireSession();
+  const supabase = await createClient();
+
+  const { error: updateError, count } = await supabase
+    .from("hics")
+    .update({ archived_at: null, archived_by: null }, { count: "exact" })
+    .eq("id", hicId)
+    .not("archived_at", "is", null);
+  if (updateError || !count) return { ok: false, error: updateError?.message ?? "This HIC isn't archived." };
+
+  await supabase.from("hic_events").insert({ hic_id: hicId, user_id: session.userId, event_type: "unarchived" });
+  revalidatePath("/appointments");
+  revalidatePath("/admin/hics");
+  return { ok: true };
+}
+
 export type CorrectHicResult = { ok: true; hic: Hic } | { ok: false; error: string };
 
 // Creates a new editable draft pre-filled from a sent/signed HIC, for
