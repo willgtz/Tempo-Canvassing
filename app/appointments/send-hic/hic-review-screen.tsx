@@ -80,6 +80,19 @@ export function HicReviewScreen({
         a sent HIC can&apos;t be edited directly.
       </p>
 
+      {/* Repeated at the bottom too — this one just means a rep who's
+          already satisfied doesn't have to scroll past the full document
+          preview (which can run to 9+ pages) to find Send. */}
+      <div className="flex gap-2 border-b border-black/10 pb-4 dark:border-white/10">
+        <Button type="button" variant="secondary" size="sm" onClick={onBack} disabled={isSending} className="flex-1">
+          Back to form
+        </Button>
+        <Button type="button" disabled={isSending} onClick={handleSend} className="flex-1">
+          {isSending ? "Sending…" : "Send"}
+        </Button>
+      </div>
+      {error && <p className="text-xs text-red-600 dark:text-red-400">{error}</p>}
+
       <div className="space-y-1.5 rounded-md border border-black/10 p-3 dark:border-white/10">
         <SectionLabel>Document</SectionLabel>
         <Row label="Language" value={hic.language === "en" ? "English" : "Spanish"} />
