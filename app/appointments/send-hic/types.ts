@@ -13,6 +13,49 @@ export type HicPanelOption = {
   is_active: boolean;
 };
 
+// Phase 6 — template/version/field editor. Mirrors hic_templates /
+// hic_template_versions / hic_template_fields in schema.sql.
+export type HicTemplate = {
+  id: string;
+  key: string;
+  label: string;
+  language: "en" | "es" | null;
+  financing_type_id: string | null;
+  is_active: boolean;
+};
+
+export type HicTemplateVersion = {
+  id: string;
+  template_id: string;
+  version: number;
+  storage_path: string;
+  page_count: number;
+  is_active: boolean;
+  created_at: string;
+};
+
+export type HicTemplateFieldType = "text" | "signature" | "initials" | "date" | "checkbox" | "static_text";
+export type HicTemplateFieldSignerRole = "homeowner" | "co_borrower" | "rep" | "none";
+
+export type HicTemplateField = {
+  id: string;
+  template_version_id: string;
+  page: number;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  field_key: string;
+  field_type: HicTemplateFieldType;
+  signer_role: HicTemplateFieldSignerRole;
+  font_size: number;
+  alignment: "left" | "center" | "right";
+  required: boolean;
+  format: string | null;
+  show_only_if: string | null;
+  sort_order: number;
+};
+
 export type HicStatus =
   | "draft"
   | "sent"
@@ -74,6 +117,10 @@ export type Hic = {
   expired_at: string | null;
   final_pdf_storage_path: string | null;
   final_pdf_sha256: string | null;
+  // { [templateKey]: hic_template_versions.id } — frozen at send time
+  // (Phase 6) so an in-flight HIC keeps rendering the exact version a
+  // signer was shown even if the template is edited afterward.
+  template_version_snapshot: Record<string, string> | null;
 };
 
 export type HicSignerStatus = "pending" | "sent" | "viewed" | "signed" | "declined";

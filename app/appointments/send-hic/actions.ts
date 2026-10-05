@@ -6,6 +6,7 @@ import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { calculateContractPrice, calculateMonthlyPaymentCheck } from "@/lib/hic/contract-price";
 import { generateDraftPreview } from "@/lib/hic/pdf/generate-draft-preview";
+import { resolveTemplateVersionSnapshot } from "@/lib/hic/pdf/fill-hic-package";
 import { isValidEmail, isValidPhoneInput } from "@/lib/hic/format";
 import { generateSigningToken } from "@/lib/hic/signing-token";
 import { sendHicEmail } from "@/lib/hic/send-email";
@@ -314,14 +315,23 @@ export async function sendHic(hicId: string): Promise<SendHicResult> {
   if (fetchError || !hic) return { ok: false, error: "HIC not found." };
   if (hic.status !== "draft") return { ok: false, error: "This HIC has already been sent." };
 
+  // Frozen now, before status flips — every later re-render of this
+  // HIC's package (reminders, resend, the signer reopening their link)
+  // uses this exact version even if a template is edited afterward.
+  const templateVersionSnapshot = await resolveTemplateVersionSnapshot(hic as Hic);
+
   const { error: updateError, count } = await supabase
     .from("hics")
-    .update({ status: "sent", sent_at: new Date().toISOString() }, { count: "exact" })
+    .update(
+      { status: "sent", sent_at: new Date().toISOString(), template_version_snapshot: templateVersionSnapshot },
+      { count: "exact" }
+    )
     .eq("id", hicId)
     .eq("status", "draft");
   if (updateError || !count) {
     return { ok: false, error: updateError?.message ?? "This HIC has already been sent." };
   }
+  (hic as Hic).template_version_snapshot = templateVersionSnapshot;
 
   const tokenExpiresAt = new Date(Date.now() + settings.linkExpirationDays * 24 * 60 * 60 * 1000).toISOString();
   const homeowner = generateSigningToken();

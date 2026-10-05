@@ -197,6 +197,30 @@ export async function resolveApplicableTemplateKeys(hic: Hic): Promise<string[]>
     .map((r) => (r.template_key === "hic" ? `hic_${hic.language}` : r.template_key));
 }
 
+// Freezes which template_version a HIC's package used at the moment
+// it's actually sent (Phase 6) — called once inside sendHic(), so later
+// edits to a template's active version don't change what an in-flight
+// (sent/viewed/partially_signed) HIC renders when its draft preview is
+// re-generated or a signer reopens their link.
+export async function resolveTemplateVersionSnapshot(hic: Hic): Promise<Record<string, string>> {
+  const supabase = await createClient();
+  const applicableKeys = await resolveApplicableTemplateKeys(hic);
+
+  const snapshot: Record<string, string> = {};
+  for (const templateKey of applicableKeys) {
+    const { data: template } = await supabase.from("hic_templates").select("id").eq("key", templateKey).single();
+    if (!template) continue;
+    const { data: version } = await supabase
+      .from("hic_template_versions")
+      .select("id")
+      .eq("template_id", template.id)
+      .eq("is_active", true)
+      .single();
+    if (version) snapshot[templateKey] = version.id;
+  }
+  return snapshot;
+}
+
 // Core stamping function — resolves which documents apply via
 // hic_package_rules, then fills each one from the live hics row. Returns
 // each document's bytes separately (not merged) — generate-draft-preview.ts
@@ -225,12 +249,20 @@ async function fillSingleTemplate(templateKey: string, hic: Hic, signers: HicSig
   const { data: template } = await supabase.from("hic_templates").select("id").eq("key", templateKey).single();
   if (!template) throw new Error(`Unknown template: ${templateKey}`);
 
-  const { data: version } = await supabase
-    .from("hic_template_versions")
-    .select("id, storage_path")
-    .eq("template_id", template.id)
-    .eq("is_active", true)
-    .single();
+  // Prefer the version frozen at send time (Phase 6) so an already-
+  // in-flight HIC keeps rendering what its signer was actually shown,
+  // even if the template's active version changes afterward — falls
+  // back to "whatever is active now" for drafts (no snapshot yet) and
+  // for HICs sent before this snapshot existed.
+  const snapshotVersionId = hic.template_version_snapshot?.[templateKey] ?? null;
+  const { data: version } = snapshotVersionId
+    ? await supabase.from("hic_template_versions").select("id, storage_path").eq("id", snapshotVersionId).single()
+    : await supabase
+        .from("hic_template_versions")
+        .select("id, storage_path")
+        .eq("template_id", template.id)
+        .eq("is_active", true)
+        .single();
   if (!version) throw new Error(`No active version for template: ${templateKey}`);
 
   const { data: fields } = await supabase
