@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
-import { sendHic } from "./actions";
+import { generateHicPreview, sendHic } from "./actions";
+import { PackagePreview } from "./package-preview";
 import { formatCurrency, formatKw, formatKwh, formatPercent } from "@/lib/hic/format";
 import type { Hic } from "./types";
 
@@ -39,6 +40,25 @@ export function HicReviewScreen({
 }) {
   const [error, setError] = useState<string | null>(null);
   const [isSending, startSending] = useTransition();
+
+  const [preview, setPreview] = useState<{ url: string; pageCount: number } | null>(null);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+  const [isLoadingPreview, setIsLoadingPreview] = useState(true);
+
+  // Generates the real filled package once, as soon as the review
+  // screen opens — exactly what Send will produce, not a mockup.
+  useEffect(() => {
+    let cancelled = false;
+    generateHicPreview(hic.id).then((result) => {
+      if (cancelled) return;
+      if (result.ok) setPreview({ url: result.url, pageCount: result.pageCount });
+      else setPreviewError(result.error);
+      setIsLoadingPreview(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [hic.id]);
 
   function handleSend() {
     setError(null);
@@ -113,9 +133,14 @@ export function HicReviewScreen({
         </div>
       </div>
 
-      {/* TODO Phase 2: a full live preview of the filled document package
-          (every page of every document) renders here once real PDF
-          generation exists — Phase 1 only has the underlying numbers. */}
+      <div className="space-y-1.5">
+        <SectionLabel>Document preview</SectionLabel>
+        {isLoadingPreview && <p className="text-sm text-black/50 dark:text-white/50">Generating preview…</p>}
+        {previewError && (
+          <p className="text-xs text-red-600 dark:text-red-400">Couldn&apos;t generate a preview: {previewError}</p>
+        )}
+        {preview && <PackagePreview url={preview.url} pageCount={preview.pageCount} />}
+      </div>
 
       {error && <p className="text-xs text-red-600 dark:text-red-400">{error}</p>}
 

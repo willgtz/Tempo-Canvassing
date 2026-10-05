@@ -5,6 +5,7 @@ import Decimal from "decimal.js";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { calculateContractPrice, calculateMonthlyPaymentCheck } from "@/lib/hic/contract-price";
+import { generateDraftPreview } from "@/lib/hic/pdf/generate-draft-preview";
 import { isValidEmail, isValidPhoneInput } from "@/lib/hic/format";
 import {
   HIC_DEFAULT_AMOUNT_DUE_AT_SIGNING,
@@ -253,11 +254,10 @@ export async function sendHic(hicId: string): Promise<SendHicResult> {
   const session = await requireSession();
   const supabase = await createClient();
 
-  const { data: hic, error: fetchError } = await supabase
-    .from("hics")
-    .select("id, status, customer_name, customer_email, customer_phone, has_co_borrower, co_borrower_name, co_borrower_email, co_borrower_phone")
-    .eq("id", hicId)
-    .single();
+  // Full row (not just the signer-contact columns) — fillHicPackage
+  // needs every field (system size, pricing, install address, etc.) to
+  // actually stamp the real documents below.
+  const { data: hic, error: fetchError } = await supabase.from("hics").select("*").eq("id", hicId).single();
   if (fetchError || !hic) return { ok: false, error: "HIC not found." };
   if (hic.status !== "draft") return { ok: false, error: "This HIC has already been sent." };
 
@@ -293,6 +293,41 @@ export async function sendHic(hicId: string): Promise<SendHicResult> {
     event_type: "sent",
   });
 
+  // Best-effort for now — Phase 3 regenerates (and actually emails) the
+  // real package at send/sign time anyway, so a generation hiccup here
+  // shouldn't block the rep's send. Logged either way so it's visible on
+  // the Phase 4 admin timeline.
+  try {
+    await generateDraftPreview(hic as Hic);
+    await supabase.from("hic_events").insert({ hic_id: hicId, event_type: "draft_pdf_generated" });
+  } catch (err) {
+    await supabase.from("hic_events").insert({
+      hic_id: hicId,
+      event_type: "draft_pdf_generation_failed",
+      new_value: err instanceof Error ? err.message : "Unknown error",
+    });
+  }
+
   revalidatePath("/appointments");
   return { ok: true };
+}
+
+// Used by the review screen to show a live preview of the actual
+// filled package before Send is ever clicked — generates against the
+// current draft without touching its status.
+export async function generateHicPreview(
+  hicId: string
+): Promise<{ ok: true; url: string; pageCount: number } | { ok: false; error: string }> {
+  await requireSession();
+  const supabase = await createClient();
+
+  const { data: hic, error } = await supabase.from("hics").select("*").eq("id", hicId).single();
+  if (error || !hic) return { ok: false, error: "HIC not found." };
+
+  try {
+    const preview = await generateDraftPreview(hic as Hic);
+    return { ok: true, ...preview };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Failed to generate preview." };
+  }
 }

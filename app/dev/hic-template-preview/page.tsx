@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { requireAdmin } from "@/lib/auth/admin";
 import { generateDraftPreview } from "@/lib/hic/pdf/generate-draft-preview";
 import { SAMPLE_SCENARIOS } from "./sample-data";
-import { PreviewPages } from "./preview-pages";
+import { PackagePreview } from "@/app/appointments/send-hic/package-preview";
 
 // Dev-only, admin-gated field-position verification tool — doubles as
 // the spec's required "sample filled package" generator. Blocked only on
@@ -59,7 +59,7 @@ export default async function HicTemplatePreviewPage({
       </div>
 
       {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
-      {preview && <PreviewPages url={preview.url} pageCount={preview.pageCount} />}
+      {preview && <PackagePreview url={preview.url} pageCount={preview.pageCount} />}
     </div>
   );
 }

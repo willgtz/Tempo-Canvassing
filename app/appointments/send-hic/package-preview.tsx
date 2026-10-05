@@ -3,10 +3,10 @@
 import { PdfPageCanvas } from "@/components/slideshow/pdf-page-canvas";
 
 // Reuses the exact same page-by-page canvas renderer already proven for
-// the slideshow admin tool — no new PDF-rendering code needed for this
-// dev tool, or (later) for Phase 3's signing page / Phase 6's template
-// editor, all of which render pages the same way.
-export function PreviewPages({ url, pageCount }: { url: string; pageCount: number }) {
+// the slideshow admin tool — no new PDF-rendering code needed here, in
+// the dev template-preview tool, or (later) for Phase 3's signing page /
+// Phase 6's template editor, all of which render pages the same way.
+export function PackagePreview({ url, pageCount }: { url: string; pageCount: number }) {
   return (
     <div className="space-y-4">
       {Array.from({ length: pageCount }, (_, i) => i + 1).map((page) => (
