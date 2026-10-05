@@ -8,6 +8,7 @@ import {
   addMyAppointmentNote,
   markMyDealSubmitted,
 } from "./actions";
+import { SendHicSection } from "./send-hic/send-hic-section";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -22,6 +23,7 @@ import type {
   AppointmentStatus,
 } from "@/app/admin/appointments/types";
 import type { AppointmentFormField } from "@/app/leads/types";
+import type { Hic, HicFinancingType } from "./send-hic/types";
 
 // Deliberately simpler than app/admin/appointments/appointment-detail-panel.tsx
 // — no assignment editing (that's an admin-only action either way, per
@@ -52,11 +54,14 @@ export function RepAppointmentDetail({
   currentUserId,
   assignments,
   notes,
+  hicFinancingTypes,
+  hics,
   onClose,
   onStatusChanged,
   onScheduledAtChanged,
   onNoteAdded,
   onDealSubmitted,
+  onHicChanged,
 }: {
   appointment: Appointment;
   lead: AppointmentLead | null;
@@ -65,11 +70,14 @@ export function RepAppointmentDetail({
   currentUserId: string;
   assignments: AppointmentAssignment[];
   notes: AppointmentNote[];
+  hicFinancingTypes: HicFinancingType[];
+  hics: Hic[];
   onClose: () => void;
   onStatusChanged: (appointmentId: string, statusId: string) => void;
   onScheduledAtChanged: (appointmentId: string, scheduledAt: string) => void;
   onNoteAdded: (note: AppointmentNote) => void;
   onDealSubmitted: (appointmentId: string, dealSubmittedAt: string) => void;
+  onHicChanged: (hic: Hic) => void;
 }) {
   const isMyCloseJob = assignments.some((a) => a.role === "closer" && a.user_id === currentUserId);
   // Broader than isMyCloseJob — any role, opener or closer. The date/time
@@ -352,6 +360,14 @@ export function RepAppointmentDetail({
             {dealError && <p className="mt-1 text-xs text-red-600 dark:text-red-400">{dealError}</p>}
           </div>
         )}
+
+        <SendHicSection
+          appointment={appointment}
+          lead={lead}
+          financingTypes={hicFinancingTypes}
+          existingHics={hics}
+          onHicChanged={onHicChanged}
+        />
 
         <div className="mt-5 space-y-2 border-t border-black/10 pt-4 dark:border-white/10">
           <p className="text-sm font-medium">Notes</p>

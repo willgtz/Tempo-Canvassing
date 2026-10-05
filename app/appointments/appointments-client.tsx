@@ -14,6 +14,7 @@ import type {
   AppointmentStatus,
 } from "@/app/admin/appointments/types";
 import type { AppointmentFormField } from "@/app/leads/types";
+import type { Hic, HicFinancingType } from "./send-hic/types";
 
 export function AppointmentsClient({
   currentUserId,
@@ -23,6 +24,8 @@ export function AppointmentsClient({
   formFields,
   initialAssignments,
   initialNotes,
+  hicFinancingTypes,
+  initialHics,
 }: {
   currentUserId: string;
   appointments: Appointment[];
@@ -31,6 +34,8 @@ export function AppointmentsClient({
   formFields: AppointmentFormField[];
   initialAssignments: AppointmentAssignment[];
   initialNotes: AppointmentNote[];
+  hicFinancingTypes: HicFinancingType[];
+  initialHics: Hic[];
 }) {
   const [appointmentsState, setAppointmentsState] = useState(appointments);
   const [leadsState, setLeadsState] = useState(leads);
@@ -39,6 +44,7 @@ export function AppointmentsClient({
   // so the initial fetch is all it'll ever show.
   const assignments = initialAssignments;
   const [notes, setNotes] = useState(initialNotes);
+  const [hics, setHics] = useState(initialHics);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<"calendar" | "list">("calendar");
   const [showAddAppointment, setShowAddAppointment] = useState(false);
@@ -110,6 +116,8 @@ export function AppointmentsClient({
           currentUserId={currentUserId}
           assignments={assignments.filter((a) => a.appointment_id === selected.id)}
           notes={notes.filter((n) => n.appointment_id === selected.id)}
+          hicFinancingTypes={hicFinancingTypes}
+          hics={hics.filter((h) => h.appointment_id === selected.id)}
           onClose={() => setSelectedId(null)}
           onStatusChanged={(appointmentId, statusId) => {
             setAppointmentsState((prev) =>
@@ -127,6 +135,9 @@ export function AppointmentsClient({
               prev.map((a) => (a.id === appointmentId ? { ...a, deal_submitted_at: dealSubmittedAt } : a))
             );
           }}
+          onHicChanged={(hic) =>
+            setHics((prev) => (prev.some((h) => h.id === hic.id) ? prev.map((h) => (h.id === hic.id ? hic : h)) : [hic, ...prev]))
+          }
         />
       )}
 

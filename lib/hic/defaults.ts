@@ -1,0 +1,14 @@
+// Hardcoded Phase 1 defaults for values the spec calls out as
+// "editable in settings" — Phase 5 replaces these with real DB-backed
+// settings (app_settings rows), read through this same module so no
+// call site needs to change when that happens.
+export const HIC_ESCALATOR_OPTIONS = [0, 0.0199, 0.0299];
+export const HIC_KWH_RATE_OPTIONS = [0, 0.1, 0.105, 0.11, 0.115, 0.12, 0.125, 0.13, 0.135];
+export const HIC_DEGRADATION_RATE = 0.005;
+export const HIC_TERM_YEARS = 25;
+export const HIC_DEFAULT_CONTRACTOR_NAME = "Tempo Solar World";
+export const HIC_DEFAULT_TAX_CREDIT = 0;
+export const HIC_DEFAULT_AMOUNT_DUE_AT_SIGNING = 0;
+// Non-blocking warning when the rep's entered monthly payment differs
+// from the computed check by more than this amount.
+export const HIC_MONTHLY_PAYMENT_MISMATCH_THRESHOLD = 1;

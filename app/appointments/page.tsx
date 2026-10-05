@@ -9,6 +9,7 @@ import type {
   AppointmentStatus,
 } from "@/app/admin/appointments/types";
 import type { AppointmentFormField } from "@/app/leads/types";
+import type { Hic, HicFinancingType } from "./send-hic/types";
 
 type AssignmentJoinRow = {
   id: string;
@@ -44,6 +45,7 @@ export default async function AppointmentsPage() {
     { data: appointments, error: apptError },
     { data: statuses, error: statusError },
     { data: formFields },
+    { data: hicFinancingTypes },
   ] = await Promise.all([
     supabase
       .from("appointments")
@@ -62,6 +64,10 @@ export default async function AppointmentsPage() {
       .from("appointment_form_fields")
       .select("id, label, field_type, options, is_required, sort_order")
       .order("sort_order"),
+    // Send HIC's financing-type dropdown (only LightReach enabled for
+    // now) — small, static-ish lookup table, fine to fetch unconditionally
+    // alongside everything else this page already always needs.
+    supabase.from("hic_financing_types").select("id, key, label, is_enabled").order("sort_order"),
   ]);
 
   if (apptError || statusError) {
@@ -75,7 +81,7 @@ export default async function AppointmentsPage() {
   const leadIds = Array.from(new Set((appointments ?? []).map((a) => a.lead_id)));
   const appointmentIds = (appointments ?? []).map((a) => a.id);
 
-  const [{ data: leads }, { data: assignmentRows }, { data: noteRows }] = await Promise.all([
+  const [{ data: leads }, { data: assignmentRows }, { data: noteRows }, { data: hicRows }] = await Promise.all([
     leadIds.length
       ? supabase
           .from("leads")
@@ -95,6 +101,12 @@ export default async function AppointmentsPage() {
           .in("appointment_id", appointmentIds)
           .order("created_at", { ascending: false })
       : Promise.resolve({ data: [] as NoteJoinRow[] }),
+    // hics_select RLS (created_by = auth.uid() or is_admin) already
+    // scopes this to just this rep's own HICs — no manual filtering
+    // needed, same reasoning as appointments_select above.
+    appointmentIds.length
+      ? supabase.from("hics").select("*").in("appointment_id", appointmentIds).order("created_at", { ascending: false })
+      : Promise.resolve({ data: [] as Hic[] }),
   ]);
 
   const assignments: AppointmentAssignment[] = ((assignmentRows ?? []) as unknown as AssignmentJoinRow[]).map(
@@ -125,6 +137,8 @@ export default async function AppointmentsPage() {
       formFields={(formFields ?? []) as AppointmentFormField[]}
       initialAssignments={assignments}
       initialNotes={notes}
+      hicFinancingTypes={(hicFinancingTypes ?? []) as HicFinancingType[]}
+      initialHics={(hicRows ?? []) as Hic[]}
     />
   );
 }
