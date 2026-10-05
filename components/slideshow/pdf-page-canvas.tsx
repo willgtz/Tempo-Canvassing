@@ -23,7 +23,13 @@ export function PdfPageCanvas({
   fileUrl: string;
   page: number;
   className?: string;
-  onLoaded?: () => void;
+  // Reports the rendered page's actual CSS size (not the raster buffer
+  // size, which is DPR-scaled) — added for the HIC signing page's
+  // click-to-sign overlay, which needs to position itself in the same
+  // CSS pixel space the canvas actually occupies on screen. Optional and
+  // additive: existing callers (the slideshow admin tool) that only care
+  // about "has it loaded" can keep ignoring the argument.
+  onLoaded?: (size: { width: number; height: number }) => void;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -64,7 +70,7 @@ export function PdfPageCanvas({
         renderTask?.cancel();
         renderTask = pdfPage.render({ canvasContext: ctx, viewport, canvas });
         await renderTask.promise;
-        if (!cancelled) onLoaded?.();
+        if (!cancelled) onLoaded?.({ width: containerWidth, height: viewport.height / dpr });
       } catch (err) {
         // Cancelled renders reject too — not a real error, don't surface it.
         if (!cancelled && !(err instanceof Error && err.name === "RenderingCancelledException")) {

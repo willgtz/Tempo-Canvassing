@@ -1,5 +1,5 @@
 import "server-only";
-import { PDFDocument, PDFFont, StandardFonts, rgb } from "pdf-lib";
+import { PDFDocument, PDFFont, PDFImage, StandardFonts, rgb } from "pdf-lib";
 import fontkit from "@pdf-lib/fontkit";
 import { readFileSync } from "fs";
 import path from "path";
@@ -14,7 +14,7 @@ import {
   formatKwhRate,
   formatPercent,
 } from "../format";
-import type { Hic } from "@/app/appointments/send-hic/types";
+import type { Hic, HicSigner } from "@/app/appointments/send-hic/types";
 
 type TemplateField = {
   page: number;
@@ -156,12 +156,14 @@ function fitFontSize(font: PDFFont, text: string, startSize: number, maxWidth: n
 
 export type PackageDocument = { templateKey: string; bytes: Uint8Array };
 
-// Core stamping function — resolves which documents apply via
-// hic_package_rules, then fills each one from the live hics row. Returns
-// each document's bytes separately (not merged) — generate-draft-preview.ts
-// merges them for a rep-facing preview; Phase 3's complete-hic.ts does
-// the final merge + appends the certificate of completion once signed.
-export async function fillHicPackage(hic: Hic): Promise<PackageDocument[]> {
+// Which documents apply to this specific HIC, in order — driven
+// entirely by hic_package_rules (always the HIC itself; + equipment
+// supplement if LightReach; + Henderson form if the install city
+// matches). Exported separately from fillHicPackage (not just inlined
+// there) because the public signing routes need this same resolution
+// order to map each template's field positions into the final MERGED
+// document's global page numbers — see resolveSignerFields below.
+export async function resolveApplicableTemplateKeys(hic: Hic): Promise<string[]> {
   const supabase = await createClient();
 
   const { data: rules } = await supabase
@@ -171,7 +173,7 @@ export async function fillHicPackage(hic: Hic): Promise<PackageDocument[]> {
     .order("sort_order");
 
   const installCity = hic.install_city.trim().toLowerCase();
-  const applicableKeys = (rules ?? [])
+  return (rules ?? [])
     .filter((r) => {
       if (r.financing_type_id && r.financing_type_id !== hic.financing_type_id) return false;
       if (r.condition_type === "city_in_list") {
@@ -180,15 +182,30 @@ export async function fillHicPackage(hic: Hic): Promise<PackageDocument[]> {
       return true;
     })
     .map((r) => (r.template_key === "hic" ? `hic_${hic.language}` : r.template_key));
+}
+
+// Core stamping function — resolves which documents apply via
+// hic_package_rules, then fills each one from the live hics row. Returns
+// each document's bytes separately (not merged) — generate-draft-preview.ts
+// merges them for a rep-facing preview; Phase 3's complete-hic.ts does
+// the final merge + appends the certificate of completion once signed.
+//
+// `signers` defaults to empty (Phase 2's pre-send/draft callers never
+// pass it) — when provided (Phase 3's signing routes, re-generating
+// after each signature), any homeowner/co-borrower signer with
+// status='signed' gets their stored signature/initials/date stamped in;
+// everyone else's fields stay blank, same as before.
+export async function fillHicPackage(hic: Hic, signers: HicSigner[] = []): Promise<PackageDocument[]> {
+  const applicableKeys = await resolveApplicableTemplateKeys(hic);
 
   const documents: PackageDocument[] = [];
   for (const templateKey of applicableKeys) {
-    documents.push({ templateKey, bytes: await fillSingleTemplate(templateKey, hic) });
+    documents.push({ templateKey, bytes: await fillSingleTemplate(templateKey, hic, signers) });
   }
   return documents;
 }
 
-async function fillSingleTemplate(templateKey: string, hic: Hic): Promise<Uint8Array> {
+async function fillSingleTemplate(templateKey: string, hic: Hic, signers: HicSigner[]): Promise<Uint8Array> {
   const supabase = await createClient();
 
   const { data: template } = await supabase.from("hic_templates").select("id").eq("key", templateKey).single();
@@ -217,6 +234,43 @@ async function fillSingleTemplate(templateKey: string, hic: Hic): Promise<Uint8A
   const helvetica = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const dancingScript = await pdfDoc.embedFont(loadDancingScriptBytes());
   const pages = pdfDoc.getPages();
+
+  // Downloaded/embedded once per signer (not once per field) — the same
+  // signer can have 2-3 signature fields across a package (e.g. pages
+  // 1, 5, and 7 of the HIC), all showing the identical adopted image.
+  const imageCache = new Map<string, PDFImage>();
+  async function embedSignerImage(storagePath: string): Promise<PDFImage> {
+    const cached = imageCache.get(storagePath);
+    if (cached) return cached;
+    const bytes = await downloadHicDocument(storagePath);
+    const image = await pdfDoc.embedPng(bytes);
+    imageCache.set(storagePath, image);
+    return image;
+  }
+
+  // Draws either a typed (script-font text) or drawn (embedded PNG)
+  // signature/initials image within the field's box — images are
+  // scaled to fit (preserving aspect ratio) rather than stretched.
+  async function drawSignerArtifact(
+    page: (typeof pages)[number],
+    field: TemplateField,
+    text: string | null,
+    storagePath: string | null,
+    baseFontSize: number
+  ) {
+    if (storagePath) {
+      const image = await embedSignerImage(storagePath);
+      const scale = Math.min(field.width / image.width, field.height / image.height, 1);
+      page.drawImage(image, { x: field.x, y: field.y, width: image.width * scale, height: image.height * scale });
+    } else if (text) {
+      const size = fitFontSize(dancingScript, text, baseFontSize, field.width);
+      page.drawText(text, { x: field.x, y: field.y, size, font: dancingScript, color: rgb(0, 0, 0.2) });
+    }
+  }
+
+  function findSignedSigner(role: "homeowner" | "co_borrower"): HicSigner | null {
+    return signers.find((s) => s.role === role && s.status === "signed") ?? null;
+  }
 
   for (const field of (fields ?? []) as TemplateField[]) {
     if (field.show_only_if === "has_co_borrower" && !hic.has_co_borrower) continue;
@@ -247,10 +301,27 @@ async function fillSingleTemplate(templateKey: string, hic: Hic): Promise<Uint8A
       continue;
     }
 
-    // Homeowner/co-borrower signature, initials, and date-of-signing
-    // fields stay blank until Phase 3's signing flow fills them in.
-    if (field.field_type === "signature" || field.field_type === "initials") continue;
-    if (field.field_type === "date" && field.signer_role !== "none") continue;
+    if (field.field_type === "signature" && (field.signer_role === "homeowner" || field.signer_role === "co_borrower")) {
+      const signer = findSignedSigner(field.signer_role);
+      if (signer) await drawSignerArtifact(page, field, signer.signature_text, signer.signature_storage_path, 18);
+      continue;
+    }
+
+    if (field.field_type === "initials" && (field.signer_role === "homeowner" || field.signer_role === "co_borrower")) {
+      const signer = findSignedSigner(field.signer_role);
+      if (signer) await drawSignerArtifact(page, field, signer.initials_text, signer.initials_storage_path, 14);
+      continue;
+    }
+
+    if (field.field_type === "date" && (field.signer_role === "homeowner" || field.signer_role === "co_borrower")) {
+      const signer = findSignedSigner(field.signer_role);
+      if (signer?.signed_at) {
+        const text = formatDocumentDate(new Date(signer.signed_at));
+        const size = fitFontSize(helvetica, text, field.font_size, field.width);
+        page.drawText(text, { x: field.x, y: field.y, size, font: helvetica, color: rgb(0, 0, 0) });
+      }
+      continue;
+    }
 
     const raw = resolveFieldValue(field.field_key, hic);
     if (raw == null || raw === "") continue;

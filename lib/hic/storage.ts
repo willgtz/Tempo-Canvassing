@@ -13,11 +13,13 @@ const BUCKET = "hic-documents";
 // lib/supabase/admin.ts's own documented exception list. Never expose
 // this module's functions to a code path that hasn't already done that
 // check.
-export async function uploadHicDocument(path: string, bytes: Uint8Array): Promise<void> {
+export async function uploadHicDocument(
+  path: string,
+  bytes: Uint8Array,
+  contentType = "application/pdf"
+): Promise<void> {
   const admin = createAdminClient();
-  const { error } = await admin.storage
-    .from(BUCKET)
-    .upload(path, bytes, { contentType: "application/pdf", upsert: true });
+  const { error } = await admin.storage.from(BUCKET).upload(path, bytes, { contentType, upsert: true });
   if (error) throw new Error(`Failed to upload ${path}: ${error.message}`);
 }
 

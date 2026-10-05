@@ -68,6 +68,12 @@ export function HicReviewScreen({
         setError(result.error);
         return;
       }
+      // The HIC itself is real and sent either way — a failed invite
+      // email just means the signer didn't get it yet. alert() (not an
+      // inline banner) so this is seen before the modal closes and this
+      // component unmounts, matching this app's existing convention of
+      // using plain browser dialogs for anything that needs to interrupt.
+      if (result.warning) window.alert(result.warning);
       onSent({ ...hic, status: "sent", sent_at: new Date().toISOString() });
     });
   }

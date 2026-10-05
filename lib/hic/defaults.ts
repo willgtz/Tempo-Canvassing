@@ -12,3 +12,6 @@ export const HIC_DEFAULT_AMOUNT_DUE_AT_SIGNING = 0;
 // Non-blocking warning when the rep's entered monthly payment differs
 // from the computed check by more than this amount.
 export const HIC_MONTHLY_PAYMENT_MISMATCH_THRESHOLD = 1;
+export const HIC_LINK_EXPIRATION_DAYS = 14;
+export const HIC_REMINDER_DAYS_BETWEEN = 3;
+export const HIC_REMINDER_MAX_COUNT = 3;

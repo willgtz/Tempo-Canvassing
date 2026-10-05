@@ -66,6 +66,34 @@ export type Hic = {
   monthly_payment_mismatch_acknowledged: boolean;
 };
 
+export type HicSignerStatus = "pending" | "sent" | "viewed" | "signed" | "declined";
+
+// Mirrors the hic_signers table — used by the stamping engine to know
+// which homeowner/co-borrower signature/initials/date fields are
+// already signed (and with what) vs. still blank.
+export type HicSigner = {
+  id: string;
+  hic_id: string;
+  role: "homeowner" | "co_borrower";
+  full_name: string;
+  email: string;
+  phone: string | null;
+  status: HicSignerStatus;
+  sent_at: string | null;
+  viewed_at: string | null;
+  signed_at: string | null;
+  declined_at: string | null;
+  decline_reason: string | null;
+  signature_type: "typed" | "drawn" | null;
+  signature_text: string | null;
+  signature_storage_path: string | null;
+  initials_text: string | null;
+  initials_storage_path: string | null;
+  ip_address: string | null;
+  user_agent: string | null;
+  consent_at: string | null;
+};
+
 // Client-side form state — camelCase, converted to/from the snake_case
 // `hics` row shape only inside actions.ts.
 export type HicFormInput = {

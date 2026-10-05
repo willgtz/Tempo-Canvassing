@@ -7,6 +7,9 @@ import { createClient } from "@/lib/supabase/server";
 import { calculateContractPrice, calculateMonthlyPaymentCheck } from "@/lib/hic/contract-price";
 import { generateDraftPreview } from "@/lib/hic/pdf/generate-draft-preview";
 import { isValidEmail, isValidPhoneInput } from "@/lib/hic/format";
+import { generateSigningToken } from "@/lib/hic/signing-token";
+import { sendHicEmail } from "@/lib/hic/send-email";
+import { getSiteUrl } from "@/lib/hic/site-url";
 import {
   HIC_DEFAULT_AMOUNT_DUE_AT_SIGNING,
   HIC_DEFAULT_CONTRACTOR_NAME,
@@ -14,6 +17,7 @@ import {
   HIC_DEGRADATION_RATE,
   HIC_ESCALATOR_OPTIONS,
   HIC_KWH_RATE_OPTIONS,
+  HIC_LINK_EXPIRATION_DAYS,
   HIC_MONTHLY_PAYMENT_MISMATCH_THRESHOLD,
   HIC_TERM_YEARS,
 } from "@/lib/hic/defaults";
@@ -23,7 +27,7 @@ export type HicActionResult =
   | { ok: true; hic: Hic; monthlyPaymentMismatch: boolean }
   | { ok: false; error: string };
 
-export type SendHicResult = { ok: true } | { ok: false; error: string };
+export type SendHicResult = { ok: true; warning?: string } | { ok: false; error: string };
 
 // Mirrors app/appointments/actions.ts exactly: requireSession() for a
 // real session, then let RLS (hics_insert/hics_update: created_by =
@@ -247,9 +251,15 @@ export async function updateHicDraft(hicId: string, input: HicFormInput): Promis
   return { ok: true, hic: hic as Hic, monthlyPaymentMismatch: mismatchCheck(input) };
 }
 
-// Phase 1 stub: flips the HIC to "sent" and creates signer rows, but
-// generates no PDF and sends no email — Phase 2/3 extend this function's
-// body (not its signature or call sites) to do the real work.
+// Flips the HIC to "sent", creates signer rows with their own hashed
+// signing token, generates the real document package, and emails each
+// signer their unique link. PDF generation is a hard dependency here
+// (unlike Phase 2's best-effort draft-preview calls) — the email about
+// to go out links straight to a signing page that renders this same
+// package, so there's no point emailing a link that can't actually work.
+// Per-signer email failures are reported back as a warning rather than
+// failing the whole send — the HIC and its links are real either way;
+// Phase 4's Resend action covers retrying a failed send.
 export async function sendHic(hicId: string): Promise<SendHicResult> {
   const session = await requireSession();
   const supabase = await createClient();
@@ -270,9 +280,21 @@ export async function sendHic(hicId: string): Promise<SendHicResult> {
     return { ok: false, error: updateError?.message ?? "This HIC has already been sent." };
   }
 
+  const tokenExpiresAt = new Date(Date.now() + HIC_LINK_EXPIRATION_DAYS * 24 * 60 * 60 * 1000).toISOString();
+  const homeowner = generateSigningToken();
+  const coBorrower = hic.has_co_borrower ? generateSigningToken() : null;
+
   const signerRows = [
-    { hic_id: hicId, role: "homeowner" as const, full_name: hic.customer_name, email: hic.customer_email, phone: hic.customer_phone },
-    ...(hic.has_co_borrower
+    {
+      hic_id: hicId,
+      role: "homeowner" as const,
+      full_name: hic.customer_name,
+      email: hic.customer_email,
+      phone: hic.customer_phone,
+      token_hash: homeowner.tokenHash,
+      token_expires_at: tokenExpiresAt,
+    },
+    ...(hic.has_co_borrower && coBorrower
       ? [
           {
             hic_id: hicId,
@@ -280,35 +302,69 @@ export async function sendHic(hicId: string): Promise<SendHicResult> {
             full_name: hic.co_borrower_name as string,
             email: hic.co_borrower_email as string,
             phone: hic.co_borrower_phone,
+            token_hash: coBorrower.tokenHash,
+            token_expires_at: tokenExpiresAt,
           },
         ]
       : []),
   ];
-  const { error: signersError } = await supabase.from("hic_signers").insert(signerRows);
-  if (signersError) return { ok: false, error: signersError.message };
+  const { data: insertedSigners, error: signersError } = await supabase
+    .from("hic_signers")
+    .insert(signerRows)
+    .select("id, role, full_name, email");
+  if (signersError || !insertedSigners) return { ok: false, error: signersError?.message ?? "Failed to create signers." };
 
-  await supabase.from("hic_events").insert({
-    hic_id: hicId,
-    user_id: session.userId,
-    event_type: "sent",
-  });
+  await supabase.from("hic_events").insert({ hic_id: hicId, user_id: session.userId, event_type: "sent" });
 
-  // Best-effort for now — Phase 3 regenerates (and actually emails) the
-  // real package at send/sign time anyway, so a generation hiccup here
-  // shouldn't block the rep's send. Logged either way so it's visible on
-  // the Phase 4 admin timeline.
   try {
     await generateDraftPreview(hic as Hic);
-    await supabase.from("hic_events").insert({ hic_id: hicId, event_type: "draft_pdf_generated" });
   } catch (err) {
+    // Content-breaking — nothing downstream (the signing page, the
+    // emails about to go out) can work without this, so this is a hard
+    // failure, unlike Phase 2's best-effort generation on its own.
     await supabase.from("hic_events").insert({
       hic_id: hicId,
       event_type: "draft_pdf_generation_failed",
       new_value: err instanceof Error ? err.message : "Unknown error",
     });
+    return { ok: false, error: "Failed to generate the document package. The HIC was not sent." };
+  }
+
+  const siteUrl = await getSiteUrl();
+  const tokenByRole = { homeowner: homeowner.token, co_borrower: coBorrower?.token };
+
+  const emailFailures: string[] = [];
+  for (const signer of insertedSigners) {
+    const token = tokenByRole[signer.role as "homeowner" | "co_borrower"];
+    if (!token) continue;
+    const signLink = `${siteUrl}/sign/${signer.id}?t=${token}`;
+
+    const result = await sendHicEmail({
+      emailType: "signer_invite",
+      language: hic.language,
+      to: signer.email,
+      mergeFields: {
+        signer_name: signer.full_name,
+        rep_name: hic.sales_rep_name,
+        sign_link: signLink,
+        expires_in_days: String(HIC_LINK_EXPIRATION_DAYS),
+      },
+    });
+
+    if (result.ok) {
+      await supabase.from("hic_signers").update({ sent_at: new Date().toISOString() }).eq("id", signer.id);
+    } else {
+      emailFailures.push(`${signer.email}: ${result.error}`);
+      await supabase
+        .from("hic_events")
+        .insert({ hic_id: hicId, signer_id: signer.id, event_type: "signer_invite_email_failed", new_value: result.error });
+    }
   }
 
   revalidatePath("/appointments");
+  if (emailFailures.length > 0) {
+    return { ok: true, warning: `Sent, but the invite email failed for: ${emailFailures.join("; ")}` };
+  }
   return { ok: true };
 }
 
