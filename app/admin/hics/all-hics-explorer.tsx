@@ -71,7 +71,10 @@ export function AllHicsExplorer({
       if (mode === "archived" && !isArchived) return false;
 
       if (statusFilter !== "all" && hic.status !== statusFilter) return false;
-      if (repFilter !== "all" && hic.created_by !== repFilter) return false;
+      // sales_rep_id (who countersigns/the deal is attributed to), not
+      // created_by (who literally clicked Send) — these diverge once an
+      // admin sends a HIC on behalf of a different rep.
+      if (repFilter !== "all" && hic.sales_rep_id !== repFilter) return false;
 
       const createdDate = hic.created_at.slice(0, 10);
       if (dateFrom && createdDate < dateFrom) return false;
@@ -229,7 +232,7 @@ export function AllHicsExplorer({
                     {STATUS_LABEL[hic.status]}
                   </span>
                 </td>
-                <td className="px-3 py-2">{repNameById.get(hic.created_by) ?? hic.sales_rep_name}</td>
+                <td className="px-3 py-2">{repNameById.get(hic.sales_rep_id) ?? hic.sales_rep_name}</td>
                 <td className="px-3 py-2">{hic.language === "en" ? "English" : "Spanish"}</td>
                 <td className="px-3 py-2">{new Date(hic.created_at).toLocaleDateString()}</td>
                 <td className="px-3 py-2">{hic.sent_at ? new Date(hic.sent_at).toLocaleDateString() : "—"}</td>
@@ -272,6 +275,7 @@ export function AllHicsExplorer({
           initialHic={null}
           financingTypes={financingTypes}
           title="Send HIC"
+          isAdmin
           onClose={() => setShowSendModal(false)}
           onSent={(sentHic) => {
             setShowSendModal(false);

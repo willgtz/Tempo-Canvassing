@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { Input, Select } from "@/components/ui/input";
 import { formatCurrency, formatPhoneInput } from "@/lib/hic/format";
 import { HIC_APR_OPTIONS, HIC_ESCALATOR_OPTIONS, HIC_KWH_RATE_OPTIONS, HIC_LOAN_TERM_OPTIONS } from "@/lib/hic/defaults";
-import { getHicOptionLists } from "./actions";
+import { getHicOptionLists, getSalesRepOptions } from "./actions";
 import type { AppointmentLead } from "@/app/admin/appointments/types";
 import type { Hic, HicFinancingType, HicFormInput } from "./types";
 
@@ -47,6 +47,11 @@ export function blankFormInput(lead: AppointmentLead | null, financingTypeId: st
     estimatedTaxCredit: "",
     amountDueAtSigning: "",
     notes: "",
+    // Always starts blank, even for an admin sending from inside a
+    // specific appointment — the appointment's own assigned rep isn't
+    // assumed to be the countersigning rep, since that's exactly the
+    // "admin sending for someone else" case this field exists for.
+    salesRepId: "",
     monthlyPaymentMismatchAcknowledged: false,
   };
 }
@@ -78,6 +83,7 @@ export function hicToFormInput(hic: Hic): HicFormInput {
     estimatedTaxCredit: String(hic.estimated_tax_credit),
     amountDueAtSigning: String(hic.amount_due_at_signing),
     notes: hic.notes ?? "",
+    salesRepId: hic.sales_rep_id,
     monthlyPaymentMismatchAcknowledged: hic.monthly_payment_mismatch_acknowledged,
   };
 }
@@ -90,11 +96,16 @@ export function HicFormFields({
   update,
   financingTypes,
   mismatchWarning,
+  isAdmin,
 }: {
   form: HicFormInput;
   update: <K extends keyof HicFormInput>(key: K, value: HicFormInput[K]) => void;
   financingTypes: HicFinancingType[];
   mismatchWarning: boolean;
+  // Only admins get the countersigning-rep dropdown below — a rep
+  // sending their own HIC never sees or controls this at all, the
+  // server always resolves it to their own identity regardless.
+  isAdmin: boolean;
 }) {
   const numberOfPanelsPreview =
     Number(form.systemSizeKw) > 0 ? Math.round((Number(form.systemSizeKw) * 1000) / 450) : null;
@@ -112,6 +123,7 @@ export function HicFormFields({
   const [kwhRateOptions, setKwhRateOptions] = useState<number[]>(HIC_KWH_RATE_OPTIONS);
   const [aprOptions, setAprOptions] = useState<number[]>(HIC_APR_OPTIONS);
   const [loanTermOptions, setLoanTermOptions] = useState<number[]>(HIC_LOAN_TERM_OPTIONS);
+  const [repOptions, setRepOptions] = useState<{ id: string; fullName: string }[]>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -126,6 +138,19 @@ export function HicFormFields({
       cancelled = true;
     };
   }, []);
+
+  // Only fetched for admins — reps never see the dropdown this feeds,
+  // so there's no reason to make them pay for the query.
+  useEffect(() => {
+    if (!isAdmin) return;
+    let cancelled = false;
+    getSalesRepOptions().then((options) => {
+      if (!cancelled) setRepOptions(options);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [isAdmin]);
 
   return (
     <>
@@ -156,6 +181,28 @@ export function HicFormFields({
           </div>
         </div>
       </div>
+
+      {isAdmin && (
+        <div className="space-y-2">
+          <SectionLabel>Countersigning rep</SectionLabel>
+          <Select
+            value={form.salesRepId}
+            onChange={(e) => update("salesRepId", e.target.value)}
+            className="block w-full"
+          >
+            <option value="">Select a rep…</option>
+            {repOptions.map((r) => (
+              <option key={r.id} value={r.id}>
+                {r.fullName}
+              </option>
+            ))}
+          </Select>
+          <p className="text-[11px] text-black/50 dark:text-white/50">
+            This person&apos;s name appears as the countersigning rep on the contract — pick whoever this HIC is
+            actually for, not necessarily yourself.
+          </p>
+        </div>
+      )}
 
       <div className="space-y-2">
         <SectionLabel>Customer</SectionLabel>

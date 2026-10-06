@@ -710,6 +710,7 @@ export function AppointmentDetailPanel({
           financingTypes={hicFinancingTypes}
           existingHics={hics}
           onHicChanged={onHicChanged}
+          isAdmin={true}
         />
 
         <div className="mt-6 border-t border-black/10 pt-4 dark:border-white/10">

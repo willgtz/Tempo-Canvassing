@@ -344,6 +344,7 @@ export function HicDetailClient({
           initialHic={correctingHic}
           financingTypes={financingTypes}
           title="Correct HIC"
+          isAdmin
           onClose={() => setCorrectingHic(null)}
           onSent={() => {
             setCorrectingHic(null);

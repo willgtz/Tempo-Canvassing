@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import Decimal from "decimal.js";
-import { requireSession } from "@/lib/auth/session";
+import { requireSession, type UserSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { calculateContractPrice, calculateMonthlyPaymentCheck } from "@/lib/hic/contract-price";
 import { generateDraftPreview } from "@/lib/hic/pdf/generate-draft-preview";
@@ -79,6 +79,54 @@ async function resolveFinancingType(
   if (error || !data) return { ok: false, error: "Invalid financing type." };
   if (!data.is_enabled) return { ok: false, error: "This financing type isn't available yet." };
   return { ok: true, key: data.key };
+}
+
+// Who countersigns / appears on the contract. A rep can only ever be
+// themselves here — requestedSalesRepId is ignored entirely for them,
+// not just validated away, since trusting a client-supplied override
+// for a non-admin would let a tampered request attribute a legal
+// document to someone else. Admins must explicitly pick someone (no
+// default), since the whole point is covering the "sending on behalf
+// of a different rep" case.
+async function resolveSalesRep(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  session: UserSession,
+  requestedSalesRepId: string
+): Promise<{ ok: true; salesRepId: string; salesRepName: string } | { ok: false; error: string }> {
+  const isAdmin = session.role === "admin" || session.role === "super_admin";
+  if (!isAdmin) {
+    return { ok: true, salesRepId: session.userId, salesRepName: session.fullName };
+  }
+  if (!requestedSalesRepId) {
+    return { ok: false, error: "Select which rep should countersign this contract." };
+  }
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("id, full_name, active")
+    .eq("id", requestedSalesRepId)
+    .single();
+  if (error || !data || !data.active) return { ok: false, error: "Invalid sales rep selection." };
+  return { ok: true, salesRepId: data.id, salesRepName: data.full_name };
+}
+
+// Feeds the admin-only countersigning-rep dropdown in HicFormFields —
+// reps never see that control, so a non-admin caller just gets back
+// their own single option (harmless, cheaper than an error, and keeps
+// this action usable without a role branch at every call site).
+export async function getSalesRepOptions(): Promise<{ id: string; fullName: string }[]> {
+  const session = await requireSession();
+  const supabase = await createClient();
+  const isAdmin = session.role === "admin" || session.role === "super_admin";
+  if (!isAdmin) return [{ id: session.userId, fullName: session.fullName }];
+
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("id, full_name")
+    .in("role", ["rep", "team_lead", "admin", "super_admin"])
+    .eq("active", true)
+    .order("full_name");
+  if (error || !data) return [];
+  return data.map((p) => ({ id: p.id, fullName: p.full_name }));
 }
 
 // Number of panels must divide evenly (systemSize in W / panel wattage) —
@@ -211,6 +259,9 @@ export async function createHicDraft(appointmentId: string, input: HicFormInput)
   const resolved = await resolvePanelAndPrice(supabase, input, settings, financingType.key);
   if (!resolved.ok) return resolved;
 
+  const salesRep = await resolveSalesRep(supabase, session, input.salesRepId);
+  if (!salesRep.ok) return salesRep;
+
   const { data: hic, error } = await supabase
     .from("hics")
     .insert({
@@ -219,7 +270,8 @@ export async function createHicDraft(appointmentId: string, input: HicFormInput)
       financing_type_id: input.financingTypeId,
       status: "draft",
       created_by: session.userId,
-      sales_rep_name: session.fullName,
+      sales_rep_id: salesRep.salesRepId,
+      sales_rep_name: salesRep.salesRepName,
       contractor_name: settings.defaultContractorName,
       panel_brand: resolved.panelBrand,
       panel_wattage_w: resolved.panelWattageW,
@@ -261,6 +313,9 @@ export async function createStandaloneHicDraft(input: HicFormInput): Promise<Hic
   const resolved = await resolvePanelAndPrice(supabase, input, settings, financingType.key);
   if (!resolved.ok) return resolved;
 
+  const salesRep = await resolveSalesRep(supabase, session, input.salesRepId);
+  if (!salesRep.ok) return salesRep;
+
   const { data: hic, error } = await supabase
     .from("hics")
     .insert({
@@ -269,7 +324,8 @@ export async function createStandaloneHicDraft(input: HicFormInput): Promise<Hic
       financing_type_id: input.financingTypeId,
       status: "draft",
       created_by: session.userId,
-      sales_rep_name: session.fullName,
+      sales_rep_id: salesRep.salesRepId,
+      sales_rep_name: salesRep.salesRepName,
       contractor_name: settings.defaultContractorName,
       panel_brand: resolved.panelBrand,
       panel_wattage_w: resolved.panelWattageW,
@@ -306,6 +362,9 @@ export async function updateHicDraft(hicId: string, input: HicFormInput): Promis
   const resolved = await resolvePanelAndPrice(supabase, input, settings, financingType.key);
   if (!resolved.ok) return resolved;
 
+  const salesRep = await resolveSalesRep(supabase, session, input.salesRepId);
+  if (!salesRep.ok) return salesRep;
+
   const { data: hic, error, count } = await supabase
     .from("hics")
     .update(
@@ -315,6 +374,8 @@ export async function updateHicDraft(hicId: string, input: HicFormInput): Promis
         panel_wattage_w: resolved.panelWattageW,
         number_of_panels: resolved.numberOfPanels,
         contract_price: resolved.contractPrice,
+        sales_rep_id: salesRep.salesRepId,
+        sales_rep_name: salesRep.salesRepName,
         updated_at: new Date().toISOString(),
         ...toRow(input, settings, financingType.key),
       },
@@ -718,6 +779,7 @@ export async function correctHic(hicId: string): Promise<CorrectHicResult> {
       estimated_tax_credit: original.estimated_tax_credit,
       amount_due_at_signing: original.amount_due_at_signing,
       notes: original.notes,
+      sales_rep_id: original.sales_rep_id,
       sales_rep_name: original.sales_rep_name,
       contractor_name: original.contractor_name,
       monthly_payment_mismatch_acknowledged: true,

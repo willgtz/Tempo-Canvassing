@@ -367,6 +367,7 @@ export function RepAppointmentDetail({
           financingTypes={hicFinancingTypes}
           existingHics={hics}
           onHicChanged={onHicChanged}
+          isAdmin={false}
         />
 
         <div className="mt-5 space-y-2 border-t border-black/10 pt-4 dark:border-white/10">

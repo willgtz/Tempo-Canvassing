@@ -21,12 +21,14 @@ export function HicFormModal({
   title,
   onClose,
   onSent,
+  isAdmin,
 }: {
   initialHic: Hic | null;
   financingTypes: HicFinancingType[];
   title: string;
   onClose: () => void;
   onSent: (hic: Hic) => void;
+  isAdmin: boolean;
 }) {
   const enabledFinancingType = financingTypes.find((f) => f.is_enabled);
 
@@ -79,7 +81,7 @@ export function HicFormModal({
   return (
     <SendHicModal title={title} onClose={onClose}>
       <div className="space-y-4">
-        <HicFormFields form={form} update={update} financingTypes={financingTypes} mismatchWarning={mismatchWarning} />
+        <HicFormFields form={form} update={update} financingTypes={financingTypes} mismatchWarning={mismatchWarning} isAdmin={isAdmin} />
 
         {formError && <p className="text-xs text-red-600 dark:text-red-400">{formError}</p>}
         {savedNotice && !formError && <p className="text-xs text-green-600 dark:text-green-400">Saved as draft.</p>}

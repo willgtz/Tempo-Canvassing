@@ -51,12 +51,17 @@ export function SendHicSection({
   financingTypes,
   existingHics,
   onHicChanged,
+  isAdmin,
 }: {
   appointment: Appointment;
   lead: AppointmentLead | null;
   financingTypes: HicFinancingType[];
   existingHics: Hic[];
   onHicChanged: (hic: Hic) => void;
+  // Gates the countersigning-rep dropdown in the form (admin-only —
+  // reps always countersign as themselves) and gets threaded straight
+  // through to the Correct flow's HicFormModal below.
+  isAdmin: boolean;
 }) {
   const enabledFinancingType = financingTypes.find((f) => f.is_enabled);
 
@@ -253,7 +258,7 @@ export function SendHicSection({
     return (
       <SendHicModal title="Send HIC" onClose={handleCloseModal}>
         <div className="space-y-4">
-          <HicFormFields form={form} update={update} financingTypes={financingTypes} mismatchWarning={mismatchWarning} />
+          <HicFormFields form={form} update={update} financingTypes={financingTypes} mismatchWarning={mismatchWarning} isAdmin={isAdmin} />
 
           {formError && <p className="text-xs text-red-600 dark:text-red-400">{formError}</p>}
           {savedNotice && !formError && <p className="text-xs text-green-600 dark:text-green-400">Saved as draft.</p>}
@@ -423,6 +428,7 @@ export function SendHicSection({
           title="Correct HIC"
           onClose={() => setCorrectingHic(null)}
           onSent={handleCorrectionSent}
+          isAdmin={isAdmin}
         />
       )}
     </div>

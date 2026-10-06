@@ -3,7 +3,13 @@
 // settings (app_settings rows), read through this same module so no
 // call site needs to change when that happens.
 export const HIC_ESCALATOR_OPTIONS = [0, 0.0199, 0.0299];
-export const HIC_KWH_RATE_OPTIONS = [0, 0.1, 0.105, 0.11, 0.115, 0.12, 0.125, 0.13, 0.135];
+// No leading 0 here (unlike HIC_ESCALATOR_OPTIONS, where 0% is a real,
+// intentional first choice) — a $0.00/kWh rate was never a real option;
+// it was defaulting blankFormInput's kwhRate to 0 for a brand-new HIC,
+// which then failed server-side validation the instant Settings had its
+// own hic_kwh_rate_options configured (every live environment, in
+// practice) because 0 was never actually in that list.
+export const HIC_KWH_RATE_OPTIONS = [0.1, 0.105, 0.11, 0.115, 0.12, 0.125, 0.13, 0.135];
 export const HIC_DEGRADATION_RATE = 0.005;
 export const HIC_TERM_YEARS = 25;
 export const HIC_DEFAULT_CONTRACTOR_NAME = "Tempo Solar World";

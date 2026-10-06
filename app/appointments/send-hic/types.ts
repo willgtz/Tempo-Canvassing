@@ -114,6 +114,11 @@ export type Hic = {
   // Free-text, stamped into the "Notes:" area on page 3 of every real
   // template — purely optional, no validation.
   notes: string | null;
+  // Who countersigns / appears on the contract — distinct from
+  // created_by (who actually clicked Send). Normally the same person;
+  // diverges when an admin sends on behalf of another rep via the
+  // dropdown in HicFormFields.
+  sales_rep_id: string;
   sales_rep_name: string;
   contractor_name: string;
   monthly_payment_mismatch_acknowledged: boolean;
@@ -196,6 +201,11 @@ export type HicFormInput = {
   estimatedTaxCredit: string;
   amountDueAtSigning: string;
   notes: string;
+  // Only ever editable by an admin (HicFormFields hides the control
+  // entirely for reps) — "" means "not yet chosen," which blocks saving
+  // for an admin but is simply ignored for a rep (the server always
+  // resolves it to the rep's own identity regardless of this value).
+  salesRepId: string;
   monthlyPaymentMismatchAcknowledged: boolean;
 };
 

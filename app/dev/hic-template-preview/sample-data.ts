@@ -15,6 +15,7 @@ const BASE: Omit<Hic, "id" | "language" | "has_co_borrower" | "co_borrower_name"
   lead_id: null,
   financing_type_id: LIGHTREACH_FINANCING_TYPE_ID,
   created_by: "00000000-0000-0000-0000-000000000000",
+  sales_rep_id: "00000000-0000-0000-0000-000000000000",
   customer_name: "John Doe",
   customer_phone: "999-999-9999",
   customer_email: "none@gmail.com",
