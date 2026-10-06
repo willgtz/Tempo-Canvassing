@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useState, useTransition } from "react";
 import { cn } from "@/components/ui/cn";
 import { archiveHic, correctHic, getHicDownloadUrl, resendHic, unarchiveHic, voidHic } from "@/app/appointments/send-hic/actions";
-import { HicFormModal } from "../hic-form-modal";
+import { HicFormModal } from "@/app/appointments/send-hic/hic-form-modal";
 import { formatCurrency, formatKw, formatKwh, formatPercent } from "@/lib/hic/format";
 import type { Hic, HicFinancingType, HicStatus, HicSigner } from "@/app/appointments/send-hic/types";
 import type { ContractPriceYear } from "@/lib/hic/contract-price";

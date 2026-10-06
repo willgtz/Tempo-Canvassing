@@ -8,12 +8,13 @@ import { HicFormFields, blankFormInput, hicToFormInput } from "@/app/appointment
 import { createStandaloneHicDraft, updateHicDraft } from "@/app/appointments/send-hic/actions";
 import type { Hic, HicFinancingType, HicFormInput } from "@/app/appointments/send-hic/types";
 
-// Shared form->review->send modal for the two admin contexts with no
-// appointment in scope: the Correct flow (initialHic is the new draft
-// correctHic() already created, pre-filled) and manually creating a
-// standalone HIC from the admin list (initialHic is null, blank form).
-// Mirrors SendHicSection's own state machine but starts at "form"
-// instead of "idle" since the caller already decided to open this.
+// Shared form->review->send modal for every "no fresh idle state needed"
+// context: the Correct flow from either the admin HICs list/detail page
+// or the rep appointment panel (initialHic is the new draft correctHic()
+// already created, pre-filled), and manually creating a standalone HIC
+// from the admin list (initialHic is null, blank form). Mirrors
+// SendHicSection's own state machine but starts at "form" instead of
+// "idle" since the caller already decided to open this.
 export function HicFormModal({
   initialHic,
   financingTypes,

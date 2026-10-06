@@ -533,6 +533,12 @@ export async function getHicOptionLists(): Promise<{
 
 export type HicMutationResult = { ok: true } | { ok: false; error: string };
 
+// Same shape, but for mutations that change the hics row itself — callers
+// that keep their own local copy of a HIC (the appointment panel's list,
+// which updates via onHicChanged rather than router.refresh) need the
+// fresh row back to stay in sync without a full page reload.
+export type HicRowMutationResult = { ok: true; hic: Hic } | { ok: false; error: string };
+
 // Re-emails the CURRENT signing link(s) to anyone who hasn't signed yet
 // — a fresh token each time (the old one stops working the moment the
 // new hash overwrites it), expiration reset per the live
@@ -592,7 +598,7 @@ export async function resendHic(hicId: string): Promise<HicMutationResult> {
 // public GET/sign/decline routes all check hics.status directly, not
 // just the token, so this takes effect immediately without needing to
 // touch the signer rows themselves.
-export async function voidHic(hicId: string, reason?: string): Promise<HicMutationResult> {
+export async function voidHic(hicId: string, reason?: string): Promise<HicRowMutationResult> {
   const session = await requireSession();
   const supabase = await createClient();
 
@@ -600,23 +606,25 @@ export async function voidHic(hicId: string, reason?: string): Promise<HicMutati
   if (hicError || !hic) return { ok: false, error: "HIC not found." };
   if (hic.status === "voided") return { ok: false, error: "This HIC is already voided." };
 
-  const { error: updateError, count } = await supabase
+  const { data: updated, error: updateError } = await supabase
     .from("hics")
-    .update({ status: "voided", voided_at: new Date().toISOString(), voided_by: session.userId, void_reason: reason ?? null }, { count: "exact" })
-    .eq("id", hicId);
-  if (updateError || !count) return { ok: false, error: updateError?.message ?? "Failed to void." };
+    .update({ status: "voided", voided_at: new Date().toISOString(), voided_by: session.userId, void_reason: reason ?? null })
+    .eq("id", hicId)
+    .select("*")
+    .single();
+  if (updateError || !updated) return { ok: false, error: updateError?.message ?? "Failed to void." };
 
   await supabase.from("hic_events").insert({ hic_id: hicId, user_id: session.userId, event_type: "voided", new_value: reason ?? null });
   revalidatePath("/appointments");
   revalidatePath("/admin/hics");
-  return { ok: true };
+  return { ok: true, hic: updated as Hic };
 }
 
 // Pure visibility declutter for the admin HICs list — never touches
 // status, never affects signer tokens or anything a signer sees.
 // RLS (hics_update: is_admin or created_by) is the real boundary here,
 // same as every other mutation in this file.
-export async function archiveHic(hicId: string): Promise<HicMutationResult> {
+export async function archiveHic(hicId: string): Promise<HicRowMutationResult> {
   const session = await requireSession();
   const supabase = await createClient();
 
@@ -624,33 +632,37 @@ export async function archiveHic(hicId: string): Promise<HicMutationResult> {
   if (hicError || !hic) return { ok: false, error: "HIC not found." };
   if (hic.archived_at) return { ok: false, error: "This HIC is already archived." };
 
-  const { error: updateError, count } = await supabase
+  const { data: updated, error: updateError } = await supabase
     .from("hics")
-    .update({ archived_at: new Date().toISOString(), archived_by: session.userId }, { count: "exact" })
-    .eq("id", hicId);
-  if (updateError || !count) return { ok: false, error: updateError?.message ?? "Failed to archive." };
+    .update({ archived_at: new Date().toISOString(), archived_by: session.userId })
+    .eq("id", hicId)
+    .select("*")
+    .single();
+  if (updateError || !updated) return { ok: false, error: updateError?.message ?? "Failed to archive." };
 
   await supabase.from("hic_events").insert({ hic_id: hicId, user_id: session.userId, event_type: "archived" });
   revalidatePath("/appointments");
   revalidatePath("/admin/hics");
-  return { ok: true };
+  return { ok: true, hic: updated as Hic };
 }
 
-export async function unarchiveHic(hicId: string): Promise<HicMutationResult> {
+export async function unarchiveHic(hicId: string): Promise<HicRowMutationResult> {
   const session = await requireSession();
   const supabase = await createClient();
 
-  const { error: updateError, count } = await supabase
+  const { data: updated, error: updateError } = await supabase
     .from("hics")
-    .update({ archived_at: null, archived_by: null }, { count: "exact" })
+    .update({ archived_at: null, archived_by: null })
     .eq("id", hicId)
-    .not("archived_at", "is", null);
-  if (updateError || !count) return { ok: false, error: updateError?.message ?? "This HIC isn't archived." };
+    .not("archived_at", "is", null)
+    .select("*")
+    .single();
+  if (updateError || !updated) return { ok: false, error: updateError?.message ?? "This HIC isn't archived." };
 
   await supabase.from("hic_events").insert({ hic_id: hicId, user_id: session.userId, event_type: "unarchived" });
   revalidatePath("/appointments");
   revalidatePath("/admin/hics");
-  return { ok: true };
+  return { ok: true, hic: updated as Hic };
 }
 
 export type CorrectHicResult = { ok: true; hic: Hic } | { ok: false; error: string };

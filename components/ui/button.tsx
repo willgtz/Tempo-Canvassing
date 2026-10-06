@@ -2,7 +2,7 @@ import { forwardRef, type ButtonHTMLAttributes } from "react";
 import { cn } from "./cn";
 
 type Variant = "primary" | "secondary" | "destructive" | "ghost";
-type Size = "sm" | "md";
+type Size = "sm" | "md" | "lg";
 
 // Capsule shape, solid-fill primary/destructive — matches the iOS app's
 // own glass-capsule buttons (LoginScreen's Sign In, LeadsScreen's Route
@@ -25,6 +25,10 @@ const VARIANT_CLASSES: Record<Variant, string> = {
 const SIZE_CLASSES: Record<Size, string> = {
   sm: "px-3 py-1 text-xs",
   md: "px-4 py-2 text-sm",
+  // Meets Apple's 44pt minimum tap-target guidance — for controls meant
+  // to be thumb-tapped on an iPhone/iPad rather than clicked with a
+  // mouse (e.g. the appointment panel's Resend/Correct/Void/Archive row).
+  lg: "px-5 py-3 text-sm",
 };
 
 export const Button = forwardRef<

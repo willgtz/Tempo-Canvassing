@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/components/ui/cn";
-import { HicFormModal } from "./hic-form-modal";
+import { HicFormModal } from "@/app/appointments/send-hic/hic-form-modal";
 import { archiveHic, unarchiveHic } from "@/app/appointments/send-hic/actions";
 import type { Hic, HicFinancingType, HicStatus } from "@/app/appointments/send-hic/types";
 
