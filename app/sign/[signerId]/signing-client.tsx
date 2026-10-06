@@ -32,7 +32,7 @@ type SigningData = {
   fields: SignerField[];
 };
 
-type Phase = "loading" | "error" | "already-signed" | "consent" | "adopt" | "sign" | "complete" | "declined";
+type Phase = "loading" | "error" | "already-signed" | "consent" | "adopt" | "sign" | "complete";
 
 function deriveInitials(fullName: string): string {
   return fullName
@@ -63,6 +63,33 @@ export function SigningClient({ signerId, token }: { signerId: string; token: st
   const [confirmedKeys, setConfirmedKeys] = useState<Set<string>>(new Set());
   const [pageSizes, setPageSizes] = useState<Record<number, { width: number; height: number }>>({});
 
+  // One stable onLoaded callback per page, built once per document (not
+  // per render) via useMemo. PdfPageCanvas has onLoaded in its own
+  // render effect's dependency array, so a fresh function identity on
+  // every SigningClient render (which an inline arrow function always
+  // is) tore down and re-ran that effect for every page on screen on
+  // every render — which re-renders the canvas, calls onLoaded again,
+  // updates state, and re-renders SigningClient again. That self-
+  // sustaining loop was the actual cause of the reported flickering/
+  // shaking, independent of (and on top of) the resize-triggered
+  // redraws fixed earlier. The size-unchanged check below closes the
+  // loop at its source — once a page's measured size stabilizes, its
+  // own setPageSizes call stops producing a new object, so no further
+  // re-render (and no further onLoaded churn) happens.
+  const pageLoadedCallbacks = useMemo(() => {
+    const map = new Map<number, (size: { width: number; height: number }) => void>();
+    for (let page = 1; page <= (data?.pageCount ?? 0); page++) {
+      map.set(page, (size) => {
+        setPageSizes((prev) => {
+          const existing = prev[page];
+          if (existing && existing.width === size.width && existing.height === size.height) return prev;
+          return { ...prev, [page]: size };
+        });
+      });
+    }
+    return map;
+  }, [data?.pageCount]);
+
   // Drives the auto-advance-after-confirming behavior below — set the
   // instant a field is confirmed, cleared once the resulting scroll has
   // fired. Kept separate from confirmedKeys itself so the scroll only
@@ -71,10 +98,6 @@ export function SigningClient({ signerId, token }: { signerId: string; token: st
   const [justConfirmedKey, setJustConfirmedKey] = useState<string | null>(null);
   const fieldRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
   const hasAutoScrolledToFirst = useRef(false);
-
-  const [showDeclineForm, setShowDeclineForm] = useState(false);
-  const [declineReason, setDeclineReason] = useState("");
-  const [isDeclining, setIsDeclining] = useState(false);
 
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -248,25 +271,6 @@ export function SigningClient({ signerId, token }: { signerId: string; token: st
     }
   }
 
-  async function handleDecline() {
-    if (!token) return;
-    setIsDeclining(true);
-    try {
-      const res = await fetch(`/api/public/hic/${signerId}/decline`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token, reason: declineReason.trim() || undefined }),
-      });
-      const body = await res.json();
-      if (!res.ok) throw new Error(body.error ?? "Failed to decline.");
-      setPhase("declined");
-    } catch (err) {
-      setSubmitError(err instanceof Error ? err.message : "Failed to decline.");
-    } finally {
-      setIsDeclining(false);
-    }
-  }
-
   if (phase === "loading") {
     return (
       <div className="flex min-h-screen items-center justify-center p-6">
@@ -302,17 +306,6 @@ export function SigningClient({ signerId, token }: { signerId: string; token: st
     );
   }
 
-  if (phase === "declined") {
-    return (
-      <div className="flex min-h-screen items-center justify-center p-6">
-        <div className="max-w-sm text-center">
-          <p className="text-lg font-semibold">{t(language, "declinedTitle")}</p>
-          <p className="mt-2 text-sm text-black/60 dark:text-white/60">{t(language, "declinedBody")}</p>
-        </div>
-      </div>
-    );
-  }
-
   if (!data) return null;
 
   return (
@@ -343,7 +336,7 @@ export function SigningClient({ signerId, token }: { signerId: string; token: st
                 <PdfPageCanvas
                   fileUrl={data.documentUrl}
                   page={page}
-                  onLoaded={(renderedSize) => setPageSizes((prev) => ({ ...prev, [page]: renderedSize }))}
+                  onLoaded={pageLoadedCallbacks.get(page)}
                 />
                 {phase === "sign" &&
                   scale &&
@@ -396,7 +389,7 @@ export function SigningClient({ signerId, token }: { signerId: string; token: st
       <div className="shrink-0 border-t border-black/10 p-4 dark:border-white/10">
         {submitError && <p className="mb-2 text-xs text-red-600 dark:text-red-400">{submitError}</p>}
 
-        {phase === "consent" && !showDeclineForm && (
+        {phase === "consent" && (
           <div className="space-y-3">
             <label className="flex items-start gap-2 text-sm">
               <input
@@ -407,53 +400,14 @@ export function SigningClient({ signerId, token }: { signerId: string; token: st
               />
               {t(language, "consentLabel")}
             </label>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => setShowDeclineForm(true)}
-                className="flex-1 rounded-full border border-black/15 px-4 py-2 text-sm font-medium hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
-              >
-                {t(language, "declineLink")}
-              </button>
-              <button
-                type="button"
-                disabled={!consentChecked}
-                onClick={() => setPhase("adopt")}
-                className="flex-1 rounded-full bg-blue-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50 dark:bg-blue-500"
-              >
-                {t(language, "continueButton")}
-              </button>
-            </div>
-          </div>
-        )}
-
-        {phase === "consent" && showDeclineForm && (
-          <div className="space-y-3">
-            <p className="text-sm font-medium">{t(language, "declineTitle")}</p>
-            <textarea
-              value={declineReason}
-              onChange={(e) => setDeclineReason(e.target.value)}
-              placeholder={t(language, "declineReasonLabel")}
-              rows={3}
-              className="w-full rounded border border-black/15 px-2 py-1 text-sm dark:border-white/20 dark:bg-transparent"
-            />
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => setShowDeclineForm(false)}
-                className="flex-1 rounded-full border border-black/15 px-4 py-2 text-sm font-medium hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
-              >
-                {t(language, "declineCancel")}
-              </button>
-              <button
-                type="button"
-                disabled={isDeclining}
-                onClick={handleDecline}
-                className="flex-1 rounded-full bg-red-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
-              >
-                {t(language, "declineConfirm")}
-              </button>
-            </div>
+            <button
+              type="button"
+              disabled={!consentChecked}
+              onClick={() => setPhase("adopt")}
+              className="w-full rounded-full bg-blue-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50 dark:bg-blue-500"
+            >
+              {t(language, "continueButton")}
+            </button>
           </div>
         )}
 
