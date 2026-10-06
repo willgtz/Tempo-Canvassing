@@ -295,9 +295,17 @@ export function SendHicSection({
       {rowError && <p className="text-xs text-red-600 dark:text-red-400">{rowError}</p>}
       {rowNotice && !rowError && <p className="text-xs text-green-600 dark:text-green-400">{rowNotice}</p>}
 
-      {existingHics.length > 0 && (
+      {/* Archived HICs disappear from this panel for everyone (rep and
+          admin alike) the instant Archive succeeds — archiveHic/
+          unarchiveHic return the updated row, so this filter alone makes
+          onHicChanged's patch take effect immediately with no separate
+          "just archived" state to track. The admin HICs > Archived page
+          is the one dedicated place to review/unarchive them afterward. */}
+      {existingHics.filter((h) => !h.archived_at).length > 0 && (
         <ul className="space-y-2">
-          {existingHics.map((hic) => {
+          {existingHics
+            .filter((h) => !h.archived_at)
+            .map((hic) => {
             const awaitingSignature = AWAITING_SIGNATURE.includes(hic.status);
             const canCorrect = awaitingSignature && !hic.corrected_into_hic_id;
             const busy = isRowPending && pendingHicId === hic.id;

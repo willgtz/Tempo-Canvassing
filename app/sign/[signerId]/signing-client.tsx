@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PdfPageCanvas } from "@/components/slideshow/pdf-page-canvas";
 import { SignaturePad, type SignaturePadHandle } from "./signature-pad";
 import { t } from "@/lib/hic/i18n";
@@ -63,6 +63,15 @@ export function SigningClient({ signerId, token }: { signerId: string; token: st
   const [confirmedKeys, setConfirmedKeys] = useState<Set<string>>(new Set());
   const [pageSizes, setPageSizes] = useState<Record<number, { width: number; height: number }>>({});
 
+  // Drives the auto-advance-after-confirming behavior below — set the
+  // instant a field is confirmed, cleared once the resulting scroll has
+  // fired. Kept separate from confirmedKeys itself so the scroll only
+  // triggers on a fresh confirmation, never as a side effect of anything
+  // else touching confirmedKeys.
+  const [justConfirmedKey, setJustConfirmedKey] = useState<string | null>(null);
+  const fieldRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
+  const hasAutoScrolledToFirst = useRef(false);
+
   const [showDeclineForm, setShowDeclineForm] = useState(false);
   const [declineReason, setDeclineReason] = useState("");
   const [isDeclining, setIsDeclining] = useState(false);
@@ -118,10 +127,86 @@ export function SigningClient({ signerId, token }: { signerId: string; token: st
   // clickable in the first place, see the .filter below).
   const allRequiredConfirmed = requiredFields.every((f) => f.fieldType === "date" || confirmedKeys.has(f.fieldKey));
 
-  function handleFieldClick(field: SignerField) {
-    if (field.fieldType === "date") return;
-    setConfirmedKeys((prev) => new Set(prev).add(field.fieldKey));
+  // Document reading order: page ascending, then top-to-bottom within a
+  // page — PDF y increases upward from the bottom, so "higher on the
+  // page" is DESCENDING y, not ascending. Drives both the Next button and
+  // the auto-advance-after-confirming behavior below, so a signer who
+  // only taps fields as they're highlighted still lands on every one of
+  // them in a sane order, never skipping around the document.
+  const clickableFieldsInOrder = useMemo(
+    () =>
+      (data?.fields ?? [])
+        .filter((f) => f.fieldType !== "date")
+        .slice()
+        .sort((a, b) => a.page - b.page || b.y - a.y),
+    [data]
+  );
+  const hasRemainingFields = clickableFieldsInOrder.some((f) => !confirmedKeys.has(f.fieldKey));
+
+  const findNextUnfilled = useCallback(
+    (afterKey: string | null): SignerField | null => {
+      const list = clickableFieldsInOrder;
+      const afterIndex = afterKey ? list.findIndex((f) => f.fieldKey === afterKey) : -1;
+      for (let i = afterIndex + 1; i < list.length; i++) {
+        if (!confirmedKeys.has(list[i].fieldKey)) return list[i];
+      }
+      // Wrap around in case something earlier in the doc is still
+      // unconfirmed (shouldn't normally happen given the linear flow,
+      // but Next/auto-advance should never dead-end if it does).
+      for (let i = 0; i <= afterIndex && i < list.length; i++) {
+        if (!confirmedKeys.has(list[i].fieldKey)) return list[i];
+      }
+      return null;
+    },
+    [clickableFieldsInOrder, confirmedKeys]
+  );
+
+  const scrollToField = useCallback((key: string) => {
+    fieldRefs.current.get(key)?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, []);
+
+  function handleNextField() {
+    const next = findNextUnfilled(null);
+    if (next) scrollToField(next.fieldKey);
   }
+
+  function handleFieldClick(field: SignerField) {
+    if (field.fieldType === "date" || confirmedKeys.has(field.fieldKey)) return;
+    setConfirmedKeys((prev) => new Set(prev).add(field.fieldKey));
+    setJustConfirmedKey(field.fieldKey);
+  }
+
+  // Auto-advance: a beat after confirming a field, jump to the next
+  // unfilled one so a signer who just taps each highlighted box as it
+  // appears is carried straight through the document. The short delay
+  // lets the "confirmed" state actually paint first, so the jump doesn't
+  // happen before they've seen their own signature/initials land.
+  useEffect(() => {
+    if (!justConfirmedKey) return;
+    const timer = setTimeout(() => {
+      const next = findNextUnfilled(justConfirmedKey);
+      if (next) scrollToField(next.fieldKey);
+      setJustConfirmedKey(null);
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [justConfirmedKey, findNextUnfilled, scrollToField]);
+
+  // Jump to the very first field the moment the sign phase begins, once
+  // per entry into that phase (the ref guard, not a dependency check,
+  // is what prevents this from re-firing on every later confirm).
+  useEffect(() => {
+    if (phase !== "sign") {
+      hasAutoScrolledToFirst.current = false;
+      return;
+    }
+    if (hasAutoScrolledToFirst.current) return;
+    hasAutoScrolledToFirst.current = true;
+    const timer = setTimeout(() => {
+      const first = findNextUnfilled(null);
+      if (first) scrollToField(first.fieldKey);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [phase, findNextUnfilled, scrollToField]);
 
   function handleAdoptContinue() {
     if (signatureMethod === "typed") {
@@ -231,8 +316,15 @@ export function SigningClient({ signerId, token }: { signerId: string; token: st
   if (!data) return null;
 
   return (
-    <div className="flex min-h-screen flex-col">
-      <div className="border-b border-black/10 p-4 dark:border-white/10">
+    // h-full (this fills the page-level h-dvh/overflow-hidden wrapper) +
+    // overflow-hidden here too — without both, the stacked PDF pages
+    // below can grow taller than the viewport and the WHOLE PAGE scrolls
+    // instead of just the document pane, which is exactly what was
+    // carrying the header and the action bar below off-screen as you
+    // scrolled. Only the middle pane (flex-1 + min-h-0 + overflow-y-auto)
+    // is meant to scroll — header and footer now stay genuinely pinned.
+    <div className="flex h-full flex-col overflow-hidden">
+      <div className="shrink-0 border-b border-black/10 p-4 dark:border-white/10">
         <p className="text-sm font-semibold">
           {phase === "consent" && t(language, "reviewDocument")}
           {phase === "adopt" && t(language, "adoptTitle")}
@@ -242,7 +334,7 @@ export function SigningClient({ signerId, token }: { signerId: string; token: st
       </div>
 
       {(phase === "consent" || phase === "sign") && (
-        <div className="flex-1 space-y-4 overflow-y-auto p-4">
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain p-4">
           {Array.from({ length: data.pageCount }, (_, i) => i + 1).map((page) => {
             const size = pageSizes[page];
             const scale = size ? size.width / PAGE_WIDTH_PT : null;
@@ -266,6 +358,10 @@ export function SigningClient({ signerId, token }: { signerId: string; token: st
                       return (
                         <button
                           key={field.fieldKey}
+                          ref={(el) => {
+                            if (el) fieldRefs.current.set(field.fieldKey, el);
+                            else fieldRefs.current.delete(field.fieldKey);
+                          }}
                           type="button"
                           onClick={() => handleFieldClick(field)}
                           disabled={confirmed}
@@ -297,7 +393,7 @@ export function SigningClient({ signerId, token }: { signerId: string; token: st
         </div>
       )}
 
-      <div className="border-t border-black/10 p-4 dark:border-white/10">
+      <div className="shrink-0 border-t border-black/10 p-4 dark:border-white/10">
         {submitError && <p className="mb-2 text-xs text-red-600 dark:text-red-400">{submitError}</p>}
 
         {phase === "consent" && !showDeclineForm && (
@@ -426,14 +522,24 @@ export function SigningClient({ signerId, token }: { signerId: string; token: st
         )}
 
         {phase === "sign" && (
-          <button
-            type="button"
-            disabled={!allRequiredConfirmed || isSubmitting}
-            onClick={handleFinishSign}
-            className="w-full rounded-full bg-blue-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50 dark:bg-blue-500"
-          >
-            {isSubmitting ? t(language, "signing") : t(language, "finishAndSign")}
-          </button>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              disabled={!hasRemainingFields}
+              onClick={handleNextField}
+              className="flex-1 rounded-full border border-black/15 px-4 py-2 text-sm font-medium hover:bg-black/5 disabled:opacity-50 dark:border-white/20 dark:hover:bg-white/10"
+            >
+              {hasRemainingFields ? t(language, "nextField") : t(language, "allFieldsDone")}
+            </button>
+            <button
+              type="button"
+              disabled={!allRequiredConfirmed || isSubmitting}
+              onClick={handleFinishSign}
+              className="flex-1 rounded-full bg-blue-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50 dark:bg-blue-500"
+            >
+              {isSubmitting ? t(language, "signing") : t(language, "finishAndSign")}
+            </button>
+          </div>
         )}
       </div>
     </div>

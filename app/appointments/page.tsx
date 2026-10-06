@@ -104,8 +104,16 @@ export default async function AppointmentsPage() {
     // hics_select RLS (created_by = auth.uid() or is_admin) already
     // scopes this to just this rep's own HICs — no manual filtering
     // needed, same reasoning as appointments_select above.
+    // Archived HICs are deliberately excluded here — reps declutter via
+    // Archive in the appointment panel, and from then on only the admin
+    // HICs > Archived list (admin-only) shows them again.
     appointmentIds.length
-      ? supabase.from("hics").select("*").in("appointment_id", appointmentIds).order("created_at", { ascending: false })
+      ? supabase
+          .from("hics")
+          .select("*")
+          .in("appointment_id", appointmentIds)
+          .is("archived_at", null)
+          .order("created_at", { ascending: false })
       : Promise.resolve({ data: [] as Hic[] }),
   ]);
 

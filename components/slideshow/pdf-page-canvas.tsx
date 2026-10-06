@@ -34,6 +34,11 @@ export function PdfPageCanvas({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const pdfRef = useRef<PDFDocumentProxy | null>(null);
+  // Width the canvas was last actually rendered at — lets the resize
+  // handler below skip re-rendering when a ResizeObserver firing hasn't
+  // actually changed the width this render depends on (see the comment
+  // there for why that happens a lot more than you'd expect).
+  const lastRenderedWidthRef = useRef<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   // Bumped once a document finishes loading — the render effect below
   // keys off this (not the document object itself, which lives in a
@@ -108,6 +113,7 @@ export function PdfPageCanvas({
         if (cancelled) return;
 
         const containerWidth = container.clientWidth || 800;
+        lastRenderedWidthRef.current = containerWidth;
         const unscaledViewport = pdfPage.getViewport({ scale: 1 });
         const dpr = window.devicePixelRatio || 1;
         const scale = (containerWidth / unscaledViewport.width) * dpr;
@@ -134,6 +140,23 @@ export function PdfPageCanvas({
     }
 
     function scheduleRender() {
+      // Setting canvas.width/height (inside renderAtCurrentSize) clears
+      // the canvas immediately per the HTML spec, so re-rendering when
+      // nothing actually needs to change is a visible blank-then-redraw
+      // flash, not just wasted work. On mobile Safari specifically, the
+      // address bar collapsing/expanding as the page scrolls fires
+      // ResizeObserver repeatedly — and since every page on the signing
+      // screen mounts its own PdfPageCanvas, that was flashing every
+      // page on screen at once, repeatedly, throughout a single scroll
+      // gesture. Those events change viewport HEIGHT, not the container
+      // WIDTH this render basis actually depends on, so skipping when
+      // the width hasn't moved removes the redraw entirely rather than
+      // just doing it off-thread.
+      const container = containerRef.current;
+      if (container && lastRenderedWidthRef.current !== null) {
+        const currentWidth = container.clientWidth || 800;
+        if (Math.abs(currentWidth - lastRenderedWidthRef.current) < 1) return;
+      }
       if (renderScheduled) return;
       renderScheduled = true;
       requestAnimationFrame(() => {
