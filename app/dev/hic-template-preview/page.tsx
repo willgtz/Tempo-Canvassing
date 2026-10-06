@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import Link from "next/link";
 import { requireAdmin } from "@/lib/auth/admin";
 import { generateDraftPreview } from "@/lib/hic/pdf/generate-draft-preview";
 import { SAMPLE_SCENARIOS } from "./sample-data";
@@ -35,6 +36,12 @@ export default async function HicTemplatePreviewPage({
 
   return (
     <div className="mx-auto w-full max-w-3xl space-y-4 p-6">
+      {/* This page lives outside /admin entirely (a standalone dev-only
+          route), so it gets none of the admin layout's own nav/subnav —
+          without an explicit link back, landing here is a dead end. */}
+      <Link href="/admin/hics/templates" className="text-xs text-black/50 hover:text-black dark:text-white/50 dark:hover:text-white">
+        ← Back to Templates
+      </Link>
       <div>
         <h1 className="text-lg font-semibold">HIC Template Preview (dev only)</h1>
         <p className="text-sm text-black/60 dark:text-white/60">

@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Rnd } from "react-rnd";
 import { Button } from "@/components/ui/button";
@@ -237,7 +238,10 @@ export function EditorClient({
     <div className="mx-auto w-full max-w-6xl space-y-4 p-6">
       <div className="flex items-center justify-between gap-4">
         <div>
-          <h1 className="text-lg font-semibold">
+          <Link href="/admin/hics/templates" className="text-xs text-black/50 hover:text-black dark:text-white/50 dark:hover:text-white">
+            ← All Templates
+          </Link>
+          <h1 className="mt-1 text-lg font-semibold">
             {template.label} — v{version.version}
           </h1>
           <p className="text-sm text-black/60 dark:text-white/60">
