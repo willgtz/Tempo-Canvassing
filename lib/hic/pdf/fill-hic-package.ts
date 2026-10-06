@@ -1,5 +1,5 @@
 import "server-only";
-import { PDFDocument, PDFFont, PDFImage, StandardFonts, rgb } from "pdf-lib";
+import { PDFDocument, PDFFont, PDFImage, PDFPage, StandardFonts, rgb } from "pdf-lib";
 import fontkit from "@pdf-lib/fontkit";
 import { readFileSync } from "fs";
 import path from "path";
@@ -138,6 +138,8 @@ function resolveFieldValue(fieldKey: string, hic: Hic, equipmentDefaults: Record
     case "rep_name_p5":
     case "rep_name_p7":
       return hic.sales_rep_name;
+    case "notes":
+      return hic.notes;
     default:
       return equipmentDefaults[fieldKey] ?? null;
   }
@@ -174,6 +176,57 @@ function fitFontSize(font: PDFFont, text: string, startSize: number, maxWidth: n
     size -= 0.5;
   }
   return size;
+}
+
+function wrapText(font: PDFFont, text: string, fontSize: number, maxWidth: number): string[] {
+  const lines: string[] = [];
+  for (const paragraph of text.split("\n")) {
+    const words = paragraph.split(/\s+/).filter(Boolean);
+    let current = "";
+    for (const word of words) {
+      const candidate = current ? `${current} ${word}` : word;
+      if (current && font.widthOfTextAtSize(candidate, fontSize) > maxWidth) {
+        lines.push(current);
+        current = word;
+      } else {
+        current = candidate;
+      }
+    }
+    lines.push(current);
+  }
+  return lines;
+}
+
+// The only multi-line field in the system (everything else is a
+// single line that just shrinks to fit, via fitFontSize above) — the
+// "Notes:" area on page 3 of every real template is a real paragraph
+// box, not a one-line cell, so it needs actual word-wrapping instead.
+// Shrinks font size (same floor as fitFontSize) until the wrapped text
+// fits the box's height; if it still doesn't fit at the floor size,
+// the remaining lines are dropped rather than drawn off the bottom of
+// the box.
+function drawWrappedText(
+  page: PDFPage,
+  text: string,
+  field: Pick<TemplateField, "x" | "y" | "width" | "height" | "font_size">,
+  font: PDFFont
+) {
+  const MIN_SIZE = 6;
+  let fontSize = field.font_size;
+  let lines = wrapText(font, text, fontSize, field.width);
+  let lineHeight = fontSize * 1.25;
+  while (fontSize > MIN_SIZE && lines.length * lineHeight > field.height) {
+    fontSize -= 0.5;
+    lineHeight = fontSize * 1.25;
+    lines = wrapText(font, text, fontSize, field.width);
+  }
+
+  const maxLines = Math.max(1, Math.floor(field.height / lineHeight));
+  let y = field.y + field.height - fontSize;
+  for (const line of lines.slice(0, maxLines)) {
+    page.drawText(line, { x: field.x, y, size: fontSize, font, color: rgb(0, 0, 0) });
+    y -= lineHeight;
+  }
 }
 
 export type PackageDocument = { templateKey: string; bytes: Uint8Array };
@@ -387,6 +440,12 @@ async function fillSingleTemplate(templateKey: string, hic: Hic, signers: HicSig
 
     const raw = resolveFieldValue(field.field_key, hic, equipmentDefaults);
     if (raw == null || raw === "") continue;
+
+    if (field.field_key === "notes") {
+      drawWrappedText(page, raw, field, helvetica);
+      continue;
+    }
+
     const text = applyFormat(raw, field.format);
     const size = fitFontSize(helvetica, text, field.font_size, field.width);
     page.drawText(text, { x: field.x, y: field.y, size, font: helvetica, color: rgb(0, 0, 0) });

@@ -171,6 +171,7 @@ function toRow(input: HicFormInput, settings: HicSettings, financingTypeKey: str
     amount_due_at_signing: input.amountDueAtSigning
       ? Number(input.amountDueAtSigning)
       : settings.defaultAmountDueAtSigning,
+    notes: input.notes.trim() || null,
     monthly_payment_mismatch_acknowledged: input.monthlyPaymentMismatchAcknowledged,
   };
 }
@@ -704,6 +705,7 @@ export async function correctHic(hicId: string): Promise<CorrectHicResult> {
       payment_after_36_months: original.payment_after_36_months,
       estimated_tax_credit: original.estimated_tax_credit,
       amount_due_at_signing: original.amount_due_at_signing,
+      notes: original.notes,
       sales_rep_name: original.sales_rep_name,
       contractor_name: original.contractor_name,
       monthly_payment_mismatch_acknowledged: true,

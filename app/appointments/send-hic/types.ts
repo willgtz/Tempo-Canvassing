@@ -111,6 +111,9 @@ export type Hic = {
   payment_after_36_months: number | null;
   estimated_tax_credit: number;
   amount_due_at_signing: number;
+  // Free-text, stamped into the "Notes:" area on page 3 of every real
+  // template — purely optional, no validation.
+  notes: string | null;
   sales_rep_name: string;
   contractor_name: string;
   monthly_payment_mismatch_acknowledged: boolean;
@@ -192,6 +195,7 @@ export type HicFormInput = {
   paymentAfter36Months: string;
   estimatedTaxCredit: string;
   amountDueAtSigning: string;
+  notes: string;
   monthlyPaymentMismatchAcknowledged: boolean;
 };
 

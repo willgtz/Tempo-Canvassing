@@ -78,6 +78,7 @@ const HIC_EN_FIELDS = [
   f(3, 274, 660.8, "number_of_panels", "text", "none"),
   f(3, 274, 639.8, "system_size_dc", "text", "none", { format: "kw" }),
   f(3, 274, 618.8, "est_first_year_production_p3", "text", "none", { format: "kwh" }),
+  f(3, 54, 423, "notes", "text", "none", { width: 500, height: 82, font_size: 9, required: false }),
   // Page 4
   f(4, 371, 292.1, "contract_price", "text", "none", { format: "currency_no_symbol", font_size: 11 }),
   // Page 5
@@ -130,6 +131,7 @@ const HIC_ES_FIELDS = [
   f(3, 274, 660.8, "number_of_panels", "text", "none"),
   f(3, 274, 639.8, "system_size_dc", "text", "none", { format: "kw" }),
   f(3, 274, 618.8, "est_first_year_production_p3", "text", "none", { format: "kwh" }),
+  f(3, 54, 423, "notes", "text", "none", { width: 500, height: 82, font_size: 9, required: false }),
   // Page 4 — no pre-printed "$" in the Spanish template, unlike English
   f(4, 368, 278.7, "contract_price", "text", "none", { format: "currency", font_size: 11 }),
   // Page 5

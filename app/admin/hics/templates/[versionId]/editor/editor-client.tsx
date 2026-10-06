@@ -43,6 +43,7 @@ const KNOWN_FIELD_KEYS = [
   "customer_date_p1", "customer_date_p7", "buyer_date_p5", "co_buyer_date_p5", "rep_date_p5", "rep_date_p7",
   "supplement_homeowner_date", "henderson_date",
   "language_checkbox",
+  "notes",
 ];
 
 const FIELD_TYPES: HicTemplateFieldType[] = ["text", "signature", "initials", "date", "checkbox", "static_text"];

@@ -88,6 +88,7 @@ const LOAN_HIC_EN_FIELDS = [
   f(3, 269.3, 637.3, "number_of_panels", "text", "none"),
   f(3, 269.3, 616.3, "system_size_dc", "text", "none", { format: "kw" }),
   f(3, 269.3, 595.3, "est_first_year_production_p3", "text", "none", { format: "kwh" }),
+  f(3, 54, 399.6, "notes", "text", "none", { width: 500, height: 82, font_size: 9, required: false }),
   // Page 4 — Pricing + Breakdown ("$" is pre-printed before Contract price)
   f(4, 370, 292.1, "contract_price", "text", "none", { format: "currency_no_symbol", font_size: 11 }),
   f(4, 363.0, 188.5, "fixed_apr", "text", "none", { format: "percent" }),
@@ -151,6 +152,7 @@ const LOAN_HIC_ES_FIELDS = [
   f(3, 269.3, 637.3, "number_of_panels", "text", "none"),
   f(3, 269.3, 616.3, "system_size_dc", "text", "none", { format: "kw" }),
   f(3, 269.3, 595.3, "est_first_year_production_p3", "text", "none", { format: "kwh" }),
+  f(3, 54, 399.6, "notes", "text", "none", { width: 500, height: 82, font_size: 9, required: false }),
   // Page 4 — "$" is pre-printed before Precio del contrato too
   f(4, 370, 278.7, "contract_price", "text", "none", { format: "currency_no_symbol", font_size: 11 }),
   f(4, 363.0, 175.0, "fixed_apr", "text", "none", { format: "percent" }),

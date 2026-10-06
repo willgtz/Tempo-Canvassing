@@ -46,6 +46,7 @@ export function blankFormInput(lead: AppointmentLead | null, financingTypeId: st
     paymentAfter36Months: "",
     estimatedTaxCredit: "",
     amountDueAtSigning: "",
+    notes: "",
     monthlyPaymentMismatchAcknowledged: false,
   };
 }
@@ -76,6 +77,7 @@ export function hicToFormInput(hic: Hic): HicFormInput {
     paymentAfter36Months: hic.payment_after_36_months != null ? String(hic.payment_after_36_months) : "",
     estimatedTaxCredit: String(hic.estimated_tax_credit),
     amountDueAtSigning: String(hic.amount_due_at_signing),
+    notes: hic.notes ?? "",
     monthlyPaymentMismatchAcknowledged: hic.monthly_payment_mismatch_acknowledged,
   };
 }
@@ -376,6 +378,17 @@ export function HicFormFields({
           </button>
         </div>
       )}
+
+      <div className="space-y-2">
+        <SectionLabel>Notes</SectionLabel>
+        <textarea
+          value={form.notes}
+          onChange={(e) => update("notes", e.target.value)}
+          placeholder="Optional — anything worth noting about this install (e.g. equipment placement, HOA status, access instructions)."
+          rows={4}
+          className="block w-full rounded-md border border-black/15 bg-transparent p-2 text-sm dark:border-white/20"
+        />
+      </div>
     </>
   );
 }

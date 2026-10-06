@@ -319,6 +319,13 @@ export function HicDetailClient({
         )}
       </div>
 
+      {hic.notes && (
+        <div className="space-y-1.5 rounded-md border border-black/10 p-3 dark:border-white/10">
+          <SectionLabel>Notes</SectionLabel>
+          <p className="whitespace-pre-wrap text-sm">{hic.notes}</p>
+        </div>
+      )}
+
       <div className="space-y-2 rounded-md border border-black/10 p-3 dark:border-white/10">
         <SectionLabel>Timeline</SectionLabel>
         <ul className="space-y-1.5">
