@@ -70,6 +70,11 @@ export function HicDetailClient({
   const [pendingAction, setPendingAction] = useState<"download" | "resend" | "correct" | "void" | "archive" | null>(null);
   const [showSchedule, setShowSchedule] = useState(false);
   const [correctingHic, setCorrectingHic] = useState<Hic | null>(null);
+  // Drafts (a standalone one started from the HICs list, or a Correct
+  // that was closed before sending) otherwise had no way back into the
+  // form from here — the appointment panel's Resume button only covers
+  // drafts tied to an appointment.
+  const [continuingDraft, setContinuingDraft] = useState(false);
 
   const canResend = ["sent", "viewed", "partially_signed"].includes(hic.status);
   const canVoid = hic.status !== "voided";
@@ -196,6 +201,16 @@ export function HicDetailClient({
       {actionNotice && !actionError && <p className="text-sm text-green-600 dark:text-green-400">{actionNotice}</p>}
 
       <div className="flex flex-wrap gap-2">
+        {hic.status === "draft" && (
+          <button
+            type="button"
+            onClick={() => setContinuingDraft(true)}
+            disabled={isPending}
+            className="rounded-full bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+          >
+            Continue draft
+          </button>
+        )}
         <button
           type="button"
           onClick={handleDownload}
@@ -338,6 +353,26 @@ export function HicDetailClient({
           {events.length === 0 && <p className="text-sm italic text-black/40 dark:text-white/40">No events yet.</p>}
         </ul>
       </div>
+
+      {continuingDraft && (
+        <HicFormModal
+          initialHic={hic}
+          financingTypes={financingTypes}
+          title="Continue draft"
+          isAdmin
+          onClose={() => {
+            setContinuingDraft(false);
+            // "Save as draft" inside the modal persists without closing
+            // it, so pick up any saved edits once it's dismissed.
+            router.refresh();
+          }}
+          onSent={() => {
+            setContinuingDraft(false);
+            setActionNotice("Sent.");
+            router.refresh();
+          }}
+        />
+      )}
 
       {correctingHic && (
         <HicFormModal
