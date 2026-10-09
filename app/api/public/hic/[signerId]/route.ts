@@ -7,6 +7,8 @@ import { checkSigningRateLimit } from "@/lib/hic/rate-limit";
 import { getClientIp } from "@/lib/hic/request-info";
 import type { Hic } from "@/app/appointments/send-hic/types";
 
+const SIGNING_DOCUMENT_URL_EXPIRES_SECONDS = 60 * 60 * 24; // 24 hours
+
 // Genuinely public, unauthenticated — no requireSession anywhere in this
 // route. Uses the service-role client throughout (case 2 in
 // lib/supabase/admin.ts's exception list: no auth.uid() exists here at
@@ -69,7 +71,12 @@ export async function GET(request: Request, { params }: { params: Promise<{ sign
 
   let documentUrl: string;
   try {
-    documentUrl = await getHicSignedUrl(`generated/${hic.id}/draft.pdf`);
+    // Long-lived on purpose: the signing page remounts every page canvas
+    // (re-fetching this URL) when the customer moves from "review" past
+    // "adopt signature" into "sign", and pdf.js also fetches byte ranges
+    // lazily. With the old 5-minute default, anyone who spent more than
+    // five minutes reading got a 400 from Storage on every page.
+    documentUrl = await getHicSignedUrl(`generated/${hic.id}/draft.pdf`, SIGNING_DOCUMENT_URL_EXPIRES_SECONDS);
   } catch {
     return NextResponse.json({ error: "The document package isn't ready yet. Try again shortly." }, { status: 503 });
   }

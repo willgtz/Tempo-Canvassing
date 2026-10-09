@@ -3,9 +3,9 @@
 // at upload time to decide how many slide rows a PDF expands into (one
 // per page, per William's choice).
 export async function countPdfPages(file: File): Promise<number> {
-  const pdfjsLib = await import("pdfjs-dist");
+  const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs");
   pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
-    "pdfjs-dist/build/pdf.worker.min.mjs",
+    "pdfjs-dist/legacy/build/pdf.worker.min.mjs",
     import.meta.url
   ).toString();
 

@@ -63,9 +63,14 @@ export function PdfPageCanvas({
 
     async function load() {
       try {
-        const pdfjsLib = await import("pdfjs-dist");
+        // Legacy build, not the default one: pdfjs v6's default build
+        // calls Map.prototype.getOrInsertComputed, which iOS Safari
+        // doesn't ship yet — customers on iPhones got a blank page and
+        // "getOrInsertComputed is not a function" on the signing screen.
+        // The legacy build (main + worker) polyfills it.
+        const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs");
         pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
-          "pdfjs-dist/build/pdf.worker.min.mjs",
+          "pdfjs-dist/legacy/build/pdf.worker.min.mjs",
           import.meta.url
         ).toString();
 
