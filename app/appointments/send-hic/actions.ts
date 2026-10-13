@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import Decimal from "decimal.js";
+import { CASH_DEFAULT_AMOUNT_DUE_AT_SIGNING, calculateCashPayments } from "@/lib/hic/cash-payments";
 import { requireSession, type UserSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { calculateContractPrice, calculateMonthlyPaymentCheck } from "@/lib/hic/contract-price";
@@ -40,13 +41,13 @@ function validateInput(input: HicFormInput, settings: HicSettings, financingType
   const systemSizeKw = Number(input.systemSizeKw);
   if (!(systemSizeKw > 0)) return "System size must be greater than 0.";
 
-  // Est. production + monthly payment are collected for both LightReach
-  // and Sungage Loan — the loan document stamps these too (from
-  // Sungage's own quote), just without the escalator/kWh-rate math
-  // that's unique to LightReach's PPA formula.
+  // Est. production is stamped on every financing type's document. The
+  // monthly payment is LightReach/Sungage Loan only (from Sungage's own
+  // quote for the loan, just without the escalator/kWh-rate math that's
+  // unique to LightReach's PPA formula) — cash has no monthly payment.
+  const estProductionKwh = Number(input.estProductionKwh);
+  if (!(estProductionKwh > 0)) return "Estimated first-year production must be greater than 0.";
   if (financingTypeKey === "lightreach" || financingTypeKey === "sungage_loan") {
-    const estProductionKwh = Number(input.estProductionKwh);
-    if (!(estProductionKwh > 0)) return "Estimated first-year production must be greater than 0.";
     const firstYearMonthlyPayment = Number(input.firstYearMonthlyPayment);
     if (!(firstYearMonthlyPayment >= 0)) return "Monthly payment is required.";
   }
@@ -63,8 +64,21 @@ function validateInput(input: HicFormInput, settings: HicSettings, financingType
       if (!settings.loanTermOptions.includes(input.loanTermYears)) return "Invalid loan term option.";
       if (!(Number(input.paymentAfter36Months) >= 0)) return "Payment after 36 months is required.";
     }
+    if (financingTypeKey === "cash") {
+      const signing = cashAmountDueAtSigning(input);
+      if (!(signing >= 0)) return "Amount due at signing can't be negative.";
+      if (!calculateCashPayments(Number(input.contractPriceManual), signing)) {
+        return "Amount due at signing can't be more than the contract price.";
+      }
+    }
   }
   return null;
+}
+
+// Blank means "use the default" — the form prefills it, but a draft saved
+// before switching to Cash (or an API caller) may still send it empty.
+function cashAmountDueAtSigning(input: HicFormInput): number {
+  return input.amountDueAtSigning.trim() === "" ? CASH_DEFAULT_AMOUNT_DUE_AT_SIGNING : Number(input.amountDueAtSigning);
 }
 
 async function resolveFinancingType(
@@ -194,6 +208,7 @@ async function resolvePanelAndPrice(
 
 function toRow(input: HicFormInput, settings: HicSettings, financingTypeKey: string) {
   const isSungageLoan = financingTypeKey === "sungage_loan";
+  const isCash = financingTypeKey === "cash";
   return {
     language: input.language,
     customer_name: input.customerName.trim(),
@@ -209,16 +224,18 @@ function toRow(input: HicFormInput, settings: HicSettings, financingTypeKey: str
     install_zip: input.installZip.trim(),
     system_size_kw: Number(input.systemSizeKw),
     est_production_kwh: Number(input.estProductionKwh) || 0,
-    first_year_monthly_payment: Number(input.firstYearMonthlyPayment) || 0,
+    first_year_monthly_payment: isCash ? 0 : Number(input.firstYearMonthlyPayment) || 0,
     escalator: input.escalator,
     kwh_rate: input.kwhRate,
     fixed_apr: isSungageLoan ? input.fixedApr : null,
     loan_term_years: isSungageLoan ? input.loanTermYears : null,
     payment_after_36_months: isSungageLoan ? Number(input.paymentAfter36Months) || 0 : null,
     estimated_tax_credit: input.estimatedTaxCredit ? Number(input.estimatedTaxCredit) : settings.defaultTaxCredit,
-    amount_due_at_signing: input.amountDueAtSigning
-      ? Number(input.amountDueAtSigning)
-      : settings.defaultAmountDueAtSigning,
+    amount_due_at_signing: isCash
+      ? cashAmountDueAtSigning(input)
+      : input.amountDueAtSigning
+        ? Number(input.amountDueAtSigning)
+        : settings.defaultAmountDueAtSigning,
     notes: input.notes.trim() || null,
     monthly_payment_mismatch_acknowledged: input.monthlyPaymentMismatchAcknowledged,
   };

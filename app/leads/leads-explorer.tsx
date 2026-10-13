@@ -258,6 +258,7 @@ export function LeadsExplorer({
     repId: string;
     zips: Set<string>;
     teammates: Set<string>;
+    manualPinZips: Set<string>;
   } | null>(null);
   const [repPreviewError, setRepPreviewError] = useState<string | null>(null);
 
@@ -267,7 +268,7 @@ export function LeadsExplorer({
     fetch(`/api/reps/${repFilter}/effective-zips`)
       .then(async (res) => {
         if (!res.ok) throw new Error((await res.json()).error ?? "Failed to load rep's visibility.");
-        return res.json() as Promise<{ zipcodes: string[]; teammateIds: string[] }>;
+        return res.json() as Promise<{ zipcodes: string[]; teammateIds: string[]; manualPinZipcodes: string[] }>;
       })
       .then((data) => {
         if (cancelled) return;
@@ -275,6 +276,7 @@ export function LeadsExplorer({
           repId: repFilter,
           zips: new Set(data.zipcodes),
           teammates: new Set(data.teammateIds),
+          manualPinZips: new Set(data.manualPinZipcodes),
         });
         setRepPreviewError(null);
       })
@@ -290,6 +292,8 @@ export function LeadsExplorer({
     repFilter !== "all" && effectiveRepData?.repId === repFilter ? effectiveRepData.zips : null;
   const effectiveRepTeammates =
     repFilter !== "all" && effectiveRepData?.repId === repFilter ? effectiveRepData.teammates : null;
+  const effectiveRepManualPinZips =
+    repFilter !== "all" && effectiveRepData?.repId === repFilter ? effectiveRepData.manualPinZips : null;
   const loadingRepPreview = repFilter !== "all" && effectiveRepZips === null && !repPreviewError;
 
   // Zip dropdown options narrow to the selected rep's effective zips.
@@ -306,8 +310,9 @@ export function LeadsExplorer({
       if (dispositionFilter.size > 0 && !dispositionFilter.has(lead.disposition_id ?? "")) return false;
       if (zipSet && !zipSet.has(lead.zipcode)) return false;
 
-      // Mirrors leads_select's real logic (zip visibility OR own/teammate
-      // manual entry) minus its appointment-assignment clause — a lead
+      // Mirrors leads_select's real logic (zip visibility for regular
+      // leads; own/teammate entry or a team lead's own zip for manual
+      // ones) minus its appointment-assignment clause — a lead
       // visible to this rep ONLY because they're assigned to an
       // appointment on it won't show up here. Accepted simplification
       // for a "what can they broadly see" preview.
@@ -315,8 +320,9 @@ export function LeadsExplorer({
         const isManualCarveOut =
           lead.is_manual &&
           (lead.entered_by === repFilter ||
-            (lead.entered_by != null && effectiveRepTeammates?.has(lead.entered_by)) === true);
-        if (!effectiveRepZips.has(lead.zipcode) && !isManualCarveOut) return false;
+            (lead.entered_by != null && effectiveRepTeammates?.has(lead.entered_by)) === true ||
+            effectiveRepManualPinZips?.has(lead.zipcode) === true);
+        if (lead.is_manual ? !isManualCarveOut : !effectiveRepZips.has(lead.zipcode)) return false;
       }
 
       const leadDate = lead.created_at.slice(0, 10);
@@ -341,6 +347,7 @@ export function LeadsExplorer({
     repFilter,
     effectiveRepZips,
     effectiveRepTeammates,
+    effectiveRepManualPinZips,
     dateFrom,
     dateTo,
     updatedFrom,

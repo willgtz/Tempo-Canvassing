@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Input, Select } from "@/components/ui/input";
 import { formatCurrency, formatPhoneInput } from "@/lib/hic/format";
+import { CASH_DEFAULT_AMOUNT_DUE_AT_SIGNING, calculateCashPayments } from "@/lib/hic/cash-payments";
 import { HIC_APR_OPTIONS, HIC_ESCALATOR_OPTIONS, HIC_KWH_RATE_OPTIONS, HIC_LOAN_TERM_OPTIONS } from "@/lib/hic/defaults";
 import { getHicOptionLists, getSalesRepOptions } from "./actions";
 import type { AppointmentLead } from "@/app/admin/appointments/types";
@@ -114,6 +115,24 @@ export function HicFormFields({
   const isLightreach = selectedFinancingKey === "lightreach";
   const isSungageLoan = selectedFinancingKey === "sungage_loan";
   const isCash = selectedFinancingKey === "cash";
+  const cashPayments = isCash
+    ? calculateCashPayments(
+        Number(form.contractPriceManual),
+        // Blank falls back to the default, same as the server does on save.
+        form.amountDueAtSigning.trim() === "" ? CASH_DEFAULT_AMOUNT_DUE_AT_SIGNING : Number(form.amountDueAtSigning)
+      )
+    : null;
+
+  // Cash prefills the signing amount the moment it's picked (still
+  // editable) — only when it's blank/0, so switching away and back never
+  // clobbers a value the rep already typed.
+  function handleFinancingChange(financingTypeId: string) {
+    update("financingTypeId", financingTypeId);
+    const nextKey = financingTypes.find((f) => f.id === financingTypeId)?.key;
+    if (nextKey === "cash" && (form.amountDueAtSigning.trim() === "" || Number(form.amountDueAtSigning) === 0)) {
+      update("amountDueAtSigning", String(CASH_DEFAULT_AMOUNT_DUE_AT_SIGNING));
+    }
+  }
 
   // Starts with the hardcoded fallback lists so the form is usable
   // immediately, then swaps in the admin-editable live lists (Phase 5
@@ -169,7 +188,7 @@ export function HicFormFields({
             <Select
               value={form.financingTypeId}
               disabled={financingTypes.filter((f) => f.is_enabled).length <= 1}
-              onChange={(e) => update("financingTypeId", e.target.value)}
+              onChange={(e) => handleFinancingChange(e.target.value)}
               className="block w-full"
             >
               {financingTypes.map((f) => (
@@ -291,7 +310,7 @@ export function HicFormFields({
               </p>
             )}
           </div>
-          {(isLightreach || isSungageLoan) && (
+          {(isLightreach || isSungageLoan || isCash) && (
             <div className="space-y-1">
               <label className="text-xs font-medium">Est. production, first year (kWh)</label>
               <Input
@@ -367,6 +386,45 @@ export function HicFormFields({
             <p className="text-[11px] text-black/50 dark:text-white/50">
               Total contract price for this {isCash ? "cash" : "loan"} deal — entered manually, not calculated.
             </p>
+          </div>
+        )}
+
+        {isCash && (
+          <div className="space-y-2 rounded-md border border-black/10 p-2 dark:border-white/10">
+            <SectionLabel>Payment schedule</SectionLabel>
+            <div className="space-y-1">
+              <label className="text-xs font-medium">Amount due at signing</label>
+              <Input
+                type="number"
+                step="0.01"
+                value={form.amountDueAtSigning}
+                placeholder={String(CASH_DEFAULT_AMOUNT_DUE_AT_SIGNING)}
+                onChange={(e) => update("amountDueAtSigning", e.target.value)}
+                className="block w-full"
+              />
+            </div>
+            {cashPayments ? (
+              <div className="space-y-0.5 text-xs">
+                <div className="flex justify-between">
+                  <span className="text-black/60 dark:text-white/60">Due at signing</span>
+                  <span>{formatCurrency(cashPayments.atSigning)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-black/60 dark:text-white/60">Due at install</span>
+                  <span>{formatCurrency(cashPayments.atInstall)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-black/60 dark:text-white/60">Due at PTO</span>
+                  <span>{formatCurrency(cashPayments.atPto)}</span>
+                </div>
+              </div>
+            ) : (
+              <p className="text-[11px] text-black/50 dark:text-white/50">
+                {Number(form.contractPriceManual) > 0
+                  ? "Amount due at signing can't be more than the contract price."
+                  : "Enter the contract price to see the payment schedule."}
+              </p>
+            )}
           </div>
         )}
 

@@ -34,7 +34,7 @@ const KNOWN_FIELD_KEYS = [
   "system_size_kw", "system_size_dc", "est_production_first_year", "est_first_year_production_p3",
   "first_year_monthly_payment", "escalator", "kwh_rate", "contract_price", "total_loan_amount",
   "fixed_apr", "loan_term_years", "payment_after_36_months",
-  "estimated_tax_credit", "amount_due_at_signing",
+  "estimated_tax_credit", "amount_due_at_signing", "amount_due_at_install", "amount_due_at_pto",
   "panel_brand", "number_of_panels",
   "inverter_make_model", "inverter_quantity", "racking_manufacturer", "racking_model",
   "rep_name_p5", "rep_name_p7", "henderson_contractor_name",

@@ -12,6 +12,10 @@ const TEMPLATE_LABELS: Record<string, string> = {
   hic_es: "Home Improvement Contract (Spanish)",
   lightreach_equipment_supplement: "LightReach Equipment Supplement",
   henderson_form: "City of Henderson PV Permit Authorization",
+  loan_hic: "Loan Home Improvement Contract (English)",
+  loan_hic_es: "Loan Home Improvement Contract (Spanish)",
+  cash_hic: "Cash Home Improvement Contract (English)",
+  cash_hic_es: "Cash Home Improvement Contract (Spanish)",
 };
 
 export type CompletionResult = { storagePath: string; sha256: string };

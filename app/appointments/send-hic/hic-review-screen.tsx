@@ -5,7 +5,8 @@ import { Button } from "@/components/ui/button";
 import { generateHicPreview, sendHic } from "./actions";
 import { PackagePreview } from "./package-preview";
 import { formatCurrency, formatKw, formatKwh, formatPercent } from "@/lib/hic/format";
-import type { Hic } from "./types";
+import { calculateCashPayments } from "@/lib/hic/cash-payments";
+import type { Hic, HicFinancingType } from "./types";
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
@@ -31,15 +32,20 @@ function Row({ label, value }: { label: string; value: string }) {
 // undifferentiated list.
 export function HicReviewScreen({
   hic,
+  financingTypes,
   onBack,
   onSent,
 }: {
   hic: Hic;
+  financingTypes: HicFinancingType[];
   onBack: () => void;
   onSent: (hic: Hic) => void;
 }) {
   const [error, setError] = useState<string | null>(null);
   const [isSending, startSending] = useTransition();
+
+  const isCash = financingTypes.find((f) => f.id === hic.financing_type_id)?.key === "cash";
+  const cashPayments = isCash ? calculateCashPayments(hic.contract_price ?? 0, hic.amount_due_at_signing) : null;
 
   const [preview, setPreview] = useState<{ url: string; pageCount: number } | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
@@ -135,17 +141,31 @@ export function HicReviewScreen({
         <Row label="System size" value={formatKw(hic.system_size_kw)} />
         <Row label="Panels" value={`${hic.number_of_panels} × ${hic.panel_brand}`} />
         <Row label="Est. first-year production" value={formatKwh(hic.est_production_kwh)} />
-        <Row label="kWh rate" value={`$${hic.kwh_rate.toFixed(3)}`} />
-        <Row label="Escalator" value={formatPercent(hic.escalator)} />
+        {!isCash && (
+          <>
+            <Row label="kWh rate" value={`$${hic.kwh_rate.toFixed(3)}`} />
+            <Row label="Escalator" value={formatPercent(hic.escalator)} />
+          </>
+        )}
       </div>
 
       <div className="space-y-1.5 rounded-md border border-black/10 p-3 dark:border-white/10">
         <SectionLabel>Pricing</SectionLabel>
-        <Row label="1st-year monthly payment" value={formatCurrency(hic.first_year_monthly_payment)} />
-        <Row label="Estimated tax credit" value={formatCurrency(hic.estimated_tax_credit)} />
-        <Row label="Amount due at signing" value={formatCurrency(hic.amount_due_at_signing)} />
+        {isCash ? (
+          <>
+            <Row label="Due at signing" value={cashPayments ? formatCurrency(cashPayments.atSigning) : "—"} />
+            <Row label="Due at install" value={cashPayments ? formatCurrency(cashPayments.atInstall) : "—"} />
+            <Row label="Due at PTO" value={cashPayments ? formatCurrency(cashPayments.atPto) : "—"} />
+          </>
+        ) : (
+          <>
+            <Row label="1st-year monthly payment" value={formatCurrency(hic.first_year_monthly_payment)} />
+            <Row label="Estimated tax credit" value={formatCurrency(hic.estimated_tax_credit)} />
+            <Row label="Amount due at signing" value={formatCurrency(hic.amount_due_at_signing)} />
+          </>
+        )}
         <div className="mt-2 flex items-baseline justify-between border-t border-black/10 pt-2 dark:border-white/10">
-          <span className="text-sm font-medium">Contract price (25-year total)</span>
+          <span className="text-sm font-medium">{isCash ? "Contract price" : "Contract price (25-year total)"}</span>
           <span className="text-xl font-semibold">
             {hic.contract_price != null ? formatCurrency(hic.contract_price) : "—"}
           </span>

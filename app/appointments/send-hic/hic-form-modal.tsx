@@ -73,7 +73,7 @@ export function HicFormModal({
   if (mode === "review" && activeHic) {
     return (
       <SendHicModal title="Review & Send" onClose={onClose}>
-        <HicReviewScreen hic={activeHic} onBack={() => setMode("form")} onSent={onSent} />
+        <HicReviewScreen hic={activeHic} financingTypes={financingTypes} onBack={() => setMode("form")} onSent={onSent} />
       </SendHicModal>
     );
   }

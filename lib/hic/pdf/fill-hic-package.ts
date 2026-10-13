@@ -14,6 +14,7 @@ import {
   formatKwhRate,
   formatPercent,
 } from "../format";
+import { calculateCashPayments } from "../cash-payments";
 import type { Hic, HicSigner } from "@/app/appointments/send-hic/types";
 
 type TemplateField = {
@@ -78,6 +79,14 @@ function resolveFieldValue(fieldKey: string, hic: Hic, equipmentDefaults: Record
       return String(hic.estimated_tax_credit);
     case "amount_due_at_signing":
       return String(hic.amount_due_at_signing);
+    // Cash-only — derived from contract price + signing amount rather
+    // than stored, so it can never drift from the two values it's built on.
+    case "amount_due_at_install":
+    case "amount_due_at_pto": {
+      const payments = calculateCashPayments(hic.contract_price ?? 0, hic.amount_due_at_signing);
+      if (!payments) return null;
+      return String(fieldKey === "amount_due_at_install" ? payments.atInstall : payments.atPto);
+    }
     case "est_production_first_year":
     case "est_first_year_production_p3":
       return String(hic.est_production_kwh);
@@ -262,6 +271,7 @@ export async function resolveApplicableTemplateKeys(hic: Hic): Promise<string[]>
       // hic_es naming (loan_hic / loan_hic_es instead), so this needs
       // its own sentinel the same way "hic" does above.
       if (r.template_key === "loan_hic") return hic.language === "es" ? "loan_hic_es" : "loan_hic";
+      if (r.template_key === "cash_hic") return hic.language === "es" ? "cash_hic_es" : "cash_hic";
       return r.template_key;
     });
 }

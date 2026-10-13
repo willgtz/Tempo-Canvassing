@@ -7,6 +7,7 @@ import { cn } from "@/components/ui/cn";
 import { archiveHic, correctHic, getHicDownloadUrl, resendHic, unarchiveHic, voidHic } from "@/app/appointments/send-hic/actions";
 import { HicFormModal } from "@/app/appointments/send-hic/hic-form-modal";
 import { formatCurrency, formatKw, formatKwh, formatPercent } from "@/lib/hic/format";
+import { calculateCashPayments } from "@/lib/hic/cash-payments";
 import type { Hic, HicFinancingType, HicStatus, HicSigner } from "@/app/appointments/send-hic/types";
 import type { ContractPriceYear } from "@/lib/hic/contract-price";
 import type { HicEvent } from "./page";
@@ -83,6 +84,8 @@ export function HicDetailClient({
   const selectedFinancingKey = financingTypes.find((f) => f.id === hic.financing_type_id)?.key ?? null;
   const isLightreach = selectedFinancingKey === "lightreach";
   const isSungageLoan = selectedFinancingKey === "sungage_loan";
+  const isCash = selectedFinancingKey === "cash";
+  const cashPayments = isCash ? calculateCashPayments(hic.contract_price ?? 0, hic.amount_due_at_signing) : null;
 
   const lastResentAt = events.find((e) => e.event_type === "resent")?.occurred_at ?? null;
 
@@ -293,6 +296,14 @@ export function HicDetailClient({
             <Row label="Fixed APR" value={hic.fixed_apr != null ? formatPercent(hic.fixed_apr) : "—"} />
             <Row label="Loan term" value={hic.loan_term_years != null ? `${hic.loan_term_years} yr` : "—"} />
             <Row label="Payment after 36 months" value={hic.payment_after_36_months != null ? formatCurrency(hic.payment_after_36_months) : "—"} />
+          </>
+        )}
+        {isCash && (
+          <>
+            <Row label="Est. first-year production" value={formatKwh(hic.est_production_kwh)} />
+            <Row label="Due at signing" value={cashPayments ? formatCurrency(cashPayments.atSigning) : "—"} />
+            <Row label="Due at install" value={cashPayments ? formatCurrency(cashPayments.atInstall) : "—"} />
+            <Row label="Due at PTO" value={cashPayments ? formatCurrency(cashPayments.atPto) : "—"} />
           </>
         )}
         <div className="mt-2 flex items-baseline justify-between border-t border-black/10 pt-2 dark:border-white/10">

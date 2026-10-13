@@ -33,15 +33,21 @@ export async function GET(
     }
   }
 
-  const [{ data: zips, error: zipsError }, { data: teammates, error: teammatesError }] =
-    await Promise.all([
-      supabase.rpc("visible_zipcodes", { root_user_id: repId }),
-      supabase.rpc("teammate_ids", { uid: repId }),
-    ]);
+  const [
+    { data: zips, error: zipsError },
+    { data: teammates, error: teammatesError },
+    { data: manualPinZips, error: manualPinZipsError },
+  ] = await Promise.all([
+    supabase.rpc("visible_zipcodes", { root_user_id: repId }),
+    supabase.rpc("teammate_ids", { uid: repId }),
+    // Empty unless repId is a team_lead — their own zips also expose
+    // manual pins anyone enters there (leads_select, 2026-10-13).
+    supabase.rpc("team_lead_own_zipcodes", { uid: repId }),
+  ]);
 
-  if (zipsError || teammatesError) {
+  if (zipsError || teammatesError || manualPinZipsError) {
     return NextResponse.json(
-      { error: zipsError?.message ?? teammatesError?.message },
+      { error: zipsError?.message ?? teammatesError?.message ?? manualPinZipsError?.message },
       { status: 500 }
     );
   }
@@ -49,5 +55,6 @@ export async function GET(
   return NextResponse.json({
     zipcodes: (zips ?? []).map((r: { zipcode: string }) => r.zipcode),
     teammateIds: (teammates ?? []) as string[],
+    manualPinZipcodes: (manualPinZips ?? []).map((r: { zipcode: string }) => r.zipcode),
   });
 }

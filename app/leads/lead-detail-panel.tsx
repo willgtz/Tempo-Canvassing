@@ -23,6 +23,7 @@ const VISIBILITY_REASON_LABELS: Record<string, string> = {
   zip: "Zip coverage",
   manual_entry: "Entered this lead",
   teammate_manual_entry: "Teammate of who entered it",
+  team_lead_zip: "Team lead for this zip",
   appointment_assignment: "Assigned to an appointment",
 };
 
