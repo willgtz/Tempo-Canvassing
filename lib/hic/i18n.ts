@@ -31,6 +31,8 @@ const STRINGS = {
     completeTitlePartial: "Thanks for signing!",
     completeBodyPartial: "We're waiting on the other signer to finish before the document is complete.",
     errorTitle: "Something went wrong",
+    documentLoadError: "We couldn't load your document. Check your connection and try again.",
+    tryAgain: "Try again",
   },
   es: {
     loading: "Cargando…",
@@ -57,6 +59,8 @@ const STRINGS = {
     completeTitlePartial: "¡Gracias por firmar!",
     completeBodyPartial: "Estamos esperando a que el otro firmante termine para completar el documento.",
     errorTitle: "Algo salió mal",
+    documentLoadError: "No pudimos cargar su documento. Revise su conexión e intente de nuevo.",
+    tryAgain: "Intentar de nuevo",
   },
 } as const;
 

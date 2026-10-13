@@ -9,7 +9,7 @@ import { calculateContractPrice, calculateMonthlyPaymentCheck } from "@/lib/hic/
 import { generateDraftPreview } from "@/lib/hic/pdf/generate-draft-preview";
 import { resolveTemplateVersionSnapshot } from "@/lib/hic/pdf/fill-hic-package";
 import { isValidEmail, isValidPhoneInput } from "@/lib/hic/format";
-import { generateSigningToken } from "@/lib/hic/signing-token";
+import { generateSigningToken, rotatedTokenColumns } from "@/lib/hic/signing-token";
 import { sendHicEmail } from "@/lib/hic/send-email";
 import { getSiteUrl } from "@/lib/hic/site-url";
 import { getHicSignedUrl } from "@/lib/hic/storage";
@@ -636,7 +636,7 @@ export async function resendHic(hicId: string): Promise<HicMutationResult> {
 
   const { data: signers, error: signersError } = await supabase
     .from("hic_signers")
-    .select("id, full_name, email, status")
+    .select("id, full_name, email, status, token_hash, previous_token_hashes")
     .eq("hic_id", hicId)
     .neq("status", "signed");
   if (signersError) return { ok: false, error: signersError.message };
@@ -648,7 +648,17 @@ export async function resendHic(hicId: string): Promise<HicMutationResult> {
 
   for (const signer of signers) {
     const { token, tokenHash } = generateSigningToken();
-    await supabase.from("hic_signers").update({ token_hash: tokenHash, token_expires_at: tokenExpiresAt }).eq("id", signer.id);
+    // Checked (and rows counted) because emailing a link whose token
+    // never got stored is exactly how a customer ends up on "Invalid
+    // signing link." — better to tell the rep the resend failed.
+    const { error: rotateError, count: rotated } = await supabase
+      .from("hic_signers")
+      .update(rotatedTokenColumns(signer, tokenHash, tokenExpiresAt), { count: "exact" })
+      .eq("id", signer.id);
+    if (rotateError || !rotated) {
+      emailFailures.push(`${signer.email}: ${rotateError?.message ?? "couldn't refresh the signing link"}`);
+      continue;
+    }
 
     const result = await sendHicEmail({
       emailType: "signer_invite",

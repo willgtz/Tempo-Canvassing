@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { hashSigningToken } from "@/lib/hic/signing-token";
+import { signingTokenMatches } from "@/lib/hic/signing-token";
 import { generateDraftPreview } from "@/lib/hic/pdf/generate-draft-preview";
 import { completeHic } from "@/lib/hic/pdf/complete-hic";
 import { resolveSignerFields } from "@/lib/hic/pdf/resolve-signer-fields";
@@ -64,7 +64,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ sig
     .single();
   if (signerError || !signer) return NextResponse.json({ error: "Signing link not found." }, { status: 404 });
 
-  if (hashSigningToken(body.token) !== signer.token_hash) {
+  if (!signingTokenMatches(body.token, signer)) {
     return NextResponse.json({ error: "Invalid signing link." }, { status: 403 });
   }
   if (signer.token_expires_at && new Date(signer.token_expires_at) < new Date()) {

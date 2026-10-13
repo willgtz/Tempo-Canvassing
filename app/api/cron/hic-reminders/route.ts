@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendHicEmail } from "@/lib/hic/send-email";
 import { getSiteUrl } from "@/lib/hic/site-url";
-import { generateSigningToken } from "@/lib/hic/signing-token";
+import { generateSigningToken, rotatedTokenColumns } from "@/lib/hic/signing-token";
 import { getHicSettings } from "@/lib/hic/settings";
 
 const AWAITING_SIGNATURE_STATUSES = ["sent", "viewed", "partially_signed"];
@@ -31,7 +31,7 @@ export async function GET(request: Request) {
 
     const { data: candidates } = await admin
       .from("hic_signers")
-      .select("id, hic_id, full_name, email, sent_at, token_expires_at, reminder_count, last_reminder_at")
+      .select("id, hic_id, full_name, email, sent_at, token_hash, previous_token_hashes, token_expires_at, reminder_count, last_reminder_at")
       .in("status", ["sent", "viewed"])
       .not("sent_at", "is", null)
       .lt("reminder_count", settings.reminderMaxCount)
@@ -53,7 +53,11 @@ export async function GET(request: Request) {
       // reminder link to be weaker than a manual resend's.
       const { token, tokenHash } = generateSigningToken();
       const tokenExpiresAt = new Date(Date.now() + settings.linkExpirationDays * 24 * 60 * 60 * 1000).toISOString();
-      await admin.from("hic_signers").update({ token_hash: tokenHash, token_expires_at: tokenExpiresAt }).eq("id", signer.id);
+      const { error: rotateError } = await admin
+        .from("hic_signers")
+        .update(rotatedTokenColumns(signer, tokenHash, tokenExpiresAt))
+        .eq("id", signer.id);
+      if (rotateError) continue;
 
       const result = await sendHicEmail({
         emailType: "reminder",

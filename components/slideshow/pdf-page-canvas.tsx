@@ -14,50 +14,22 @@ import type { PDFDocumentLoadingTask, PDFDocumentProxy } from "pdfjs-dist";
 // changes (window resize, fullscreen toggle, thumbnail rail
 // collapsing), so a page already on screen sharpens up instead of
 // staying rasterized at whatever size it first rendered at.
-export function PdfPageCanvas({
-  fileUrl,
-  page,
-  className,
-  onLoaded,
-}: {
-  fileUrl: string;
-  page: number;
-  className?: string;
-  // Reports the rendered page's actual CSS size (not the raster buffer
-  // size, which is DPR-scaled) — added for the HIC signing page's
-  // click-to-sign overlay, which needs to position itself in the same
-  // CSS pixel space the canvas actually occupies on screen. Optional and
-  // additive: existing callers (the slideshow admin tool) that only care
-  // about "has it loaded" can keep ignoring the argument.
-  onLoaded?: (size: { width: number; height: number }) => void;
-}) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const pdfRef = useRef<PDFDocumentProxy | null>(null);
-  // Width the canvas was last actually rendered at — lets the resize
-  // handler below skip re-rendering when a ResizeObserver firing hasn't
-  // actually changed the width this render depends on (see the comment
-  // there for why that happens a lot more than you'd expect).
-  const lastRenderedWidthRef = useRef<number | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  // Bumped once a document finishes loading — the render effect below
-  // keys off this (not the document object itself, which lives in a
-  // ref) so it knows to run once pdfRef.current is actually populated.
-  const [docVersion, setDocVersion] = useState(0);
+// Loads a PDF once so several PdfPageCanvas instances can share it via
+// their `pdf` prop. Multi-page views (the signing page, the rep's package
+// preview) used to give every page its own getDocument() — each one a
+// separate download, parse and pdf.js worker — so an 8-page HIC held 8
+// copies of the document in memory. Low-memory Android phones ran out
+// and Chrome killed the tab ("Can't open this page") right after the
+// customer tapped Continue. Pass null to skip loading.
+export function usePdfDocument(fileUrl: string | null): { pdf: PDFDocumentProxy | null; error: string | null } {
+  const [state, setState] = useState<{ url: string | null; pdf: PDFDocumentProxy | null; error: string | null }>({
+    url: null,
+    pdf: null,
+    error: null,
+  });
 
-  // Loads the PDF document itself — only re-runs when fileUrl changes,
-  // NOT on every page switch. Previously this whole block (a full
-  // re-fetch + re-parse of the document, via pdfjsLib.getDocument) ran
-  // on every single page click, since page was in this effect's own
-  // dependency array — wasteful, and worse: switching pages nulled out
-  // the shared pdfRef in this same effect's cleanup every time. In a
-  // tool like the template editor, where an admin clicks through many
-  // pages quickly while positioning fields, overlapping load cycles
-  // from rapid clicks could leave a stale/wrong page's content (or
-  // fields) rendered. Decoupling "load the document" (here, once per
-  // fileUrl) from "render a page" (below, on every page/resize change)
-  // removes that race entirely, not just works around a symptom.
   useEffect(() => {
+    if (!fileUrl) return;
     let cancelled = false;
     let loadingTask: PDFDocumentLoadingTask | null = null;
 
@@ -74,16 +46,12 @@ export function PdfPageCanvas({
           import.meta.url
         ).toString();
 
-        loadingTask = pdfjsLib.getDocument({ url: fileUrl });
+        loadingTask = pdfjsLib.getDocument({ url: fileUrl as string });
         const pdf = await loadingTask.promise;
-        if (cancelled) {
-          loadingTask.destroy();
-          return;
-        }
-        pdfRef.current = pdf;
-        setDocVersion((v) => v + 1);
+        if (cancelled) return;
+        setState({ url: fileUrl, pdf, error: null });
       } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : "Failed to load PDF.");
+        if (!cancelled) setState({ url: fileUrl, pdf: null, error: err instanceof Error ? err.message : "Failed to load PDF." });
       }
     }
 
@@ -92,15 +60,61 @@ export function PdfPageCanvas({
     return () => {
       cancelled = true;
       loadingTask?.destroy();
-      pdfRef.current = null;
     };
   }, [fileUrl]);
+
+  // Never hand back a document (or error) belonging to a previous URL.
+  if (!fileUrl || state.url !== fileUrl) return { pdf: null, error: null };
+  return { pdf: state.pdf, error: state.error };
+}
+
+export function PdfPageCanvas({
+  fileUrl,
+  pdf: sharedPdf,
+  page,
+  className,
+  maxPixelRatio,
+  onLoaded,
+}: {
+  // Either a URL this canvas loads on its own (single-page callers like
+  // the slideshow), or an already-loaded document from usePdfDocument
+  // shared across every page on screen.
+  fileUrl?: string;
+  pdf?: PDFDocumentProxy | null;
+  page: number;
+  className?: string;
+  // Caps the raster resolution. Phones report a devicePixelRatio of 3+,
+  // which makes every page canvas ~9x the pixels of a 1x render; past 2x
+  // there's no visible gain at phone width, just memory.
+  maxPixelRatio?: number;
+  // Reports the rendered page's actual CSS size (not the raster buffer
+  // size, which is DPR-scaled) — added for the HIC signing page's
+  // click-to-sign overlay, which needs to position itself in the same
+  // CSS pixel space the canvas actually occupies on screen. Optional and
+  // additive: existing callers (the slideshow admin tool) that only care
+  // about "has it loaded" can keep ignoring the argument.
+  onLoaded?: (size: { width: number; height: number }) => void;
+}) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  // Width the canvas was last actually rendered at — lets the resize
+  // handler below skip re-rendering when a ResizeObserver firing hasn't
+  // actually changed the width this render depends on (see the comment
+  // there for why that happens a lot more than you'd expect).
+  const lastRenderedWidthRef = useRef<number | null>(null);
+  const [renderError, setRenderError] = useState<string | null>(null);
+
+  // Only loads its own copy when no shared document was passed in.
+  const ownDocument = usePdfDocument(sharedPdf === undefined ? (fileUrl ?? null) : null);
+  const pdf = sharedPdf === undefined ? ownDocument.pdf : sharedPdf;
+  const error = (sharedPdf === undefined ? ownDocument.error : null) ?? renderError;
 
   // Renders the requested page, and re-renders on container resize.
   // Runs whenever a (new) document finishes loading, the requested
   // page changes, or the container's on-screen size changes.
   useEffect(() => {
-    if (!pdfRef.current) return;
+    if (!pdf) return;
+    const doc = pdf;
 
     let cancelled = false;
     let renderTask: { promise: Promise<void>; cancel: () => void } | null = null;
@@ -110,17 +124,16 @@ export function PdfPageCanvas({
     async function renderAtCurrentSize() {
       const canvas = canvasRef.current;
       const container = containerRef.current;
-      const pdf = pdfRef.current;
-      if (!canvas || !container || !pdf || cancelled) return;
+      if (!canvas || !container || cancelled) return;
 
       try {
-        const pdfPage = await pdf.getPage(page);
+        const pdfPage = await doc.getPage(page);
         if (cancelled) return;
 
         const containerWidth = container.clientWidth || 800;
         lastRenderedWidthRef.current = containerWidth;
         const unscaledViewport = pdfPage.getViewport({ scale: 1 });
-        const dpr = window.devicePixelRatio || 1;
+        const dpr = Math.min(window.devicePixelRatio || 1, maxPixelRatio ?? Infinity);
         const scale = (containerWidth / unscaledViewport.width) * dpr;
         const viewport = pdfPage.getViewport({ scale });
 
@@ -139,7 +152,7 @@ export function PdfPageCanvas({
       } catch (err) {
         // Cancelled renders reject too — not a real error, don't surface it.
         if (!cancelled && !(err instanceof Error && err.name === "RenderingCancelledException")) {
-          setError(err instanceof Error ? err.message : "Failed to render PDF page.");
+          setRenderError(err instanceof Error ? err.message : "Failed to render PDF page.");
         }
       }
     }
@@ -181,7 +194,7 @@ export function PdfPageCanvas({
       resizeObserver?.disconnect();
       renderTask?.cancel();
     };
-  }, [docVersion, page, onLoaded]);
+  }, [pdf, page, maxPixelRatio, onLoaded]);
 
   return (
     <div ref={containerRef} className={className}>

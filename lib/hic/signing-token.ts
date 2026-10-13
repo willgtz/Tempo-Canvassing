@@ -14,3 +14,24 @@ export function generateSigningToken(): { token: string; tokenHash: string } {
 export function hashSigningToken(token: string): string {
   return createHash("sha256").update(token).digest("hex");
 }
+
+type SignerTokenHashes = { token_hash: string; previous_token_hashes?: string[] | null };
+
+// Resends and reminders mint a new token but keep the old hashes, so a
+// link from ANY email this signer received keeps working (customers tap
+// the first email in the thread, or still have the page open when the
+// rep resends). Expiry and void/signed checks are the routes' job.
+export function signingTokenMatches(token: string, signer: SignerTokenHashes): boolean {
+  const hash = hashSigningToken(token);
+  return hash === signer.token_hash || (signer.previous_token_hashes ?? []).includes(hash);
+}
+
+// The update payload for giving a signer a new token without
+// invalidating the links already sent to them.
+export function rotatedTokenColumns(signer: SignerTokenHashes, newTokenHash: string, tokenExpiresAt: string) {
+  return {
+    token_hash: newTokenHash,
+    previous_token_hashes: [...(signer.previous_token_hashes ?? []), signer.token_hash],
+    token_expires_at: tokenExpiresAt,
+  };
+}

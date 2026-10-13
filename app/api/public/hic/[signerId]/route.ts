@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { hashSigningToken } from "@/lib/hic/signing-token";
+import { signingTokenMatches } from "@/lib/hic/signing-token";
 import { getHicSignedUrl } from "@/lib/hic/storage";
 import { resolveSignerFields } from "@/lib/hic/pdf/resolve-signer-fields";
 import { checkSigningRateLimit } from "@/lib/hic/rate-limit";
@@ -28,12 +28,12 @@ export async function GET(request: Request, { params }: { params: Promise<{ sign
 
   const { data: signer, error: signerError } = await admin
     .from("hic_signers")
-    .select("id, hic_id, role, full_name, email, status, token_hash, token_expires_at")
+    .select("id, hic_id, role, full_name, email, status, token_hash, previous_token_hashes, token_expires_at")
     .eq("id", signerId)
     .single();
   if (signerError || !signer) return NextResponse.json({ error: "Signing link not found." }, { status: 404 });
 
-  if (hashSigningToken(token) !== signer.token_hash) {
+  if (!signingTokenMatches(token, signer)) {
     return NextResponse.json({ error: "Invalid signing link." }, { status: 403 });
   }
   if (signer.token_expires_at && new Date(signer.token_expires_at) < new Date()) {

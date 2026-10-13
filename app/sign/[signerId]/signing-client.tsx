@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { PdfPageCanvas } from "@/components/slideshow/pdf-page-canvas";
+import { PdfPageCanvas, usePdfDocument } from "@/components/slideshow/pdf-page-canvas";
 import { SignaturePad, type SignaturePadHandle } from "./signature-pad";
 import { t } from "@/lib/hic/i18n";
 import { cn } from "@/components/ui/cn";
@@ -12,6 +12,10 @@ import { cn } from "@/components/ui/cn";
 // actually rendered that page at.
 const PAGE_WIDTH_PT = 612;
 const PAGE_HEIGHT_PT = 792;
+
+// 2x is already sharp at phone width; uncapped, a 3x+ phone rasterizes
+// every page at ~2.25x the pixels for no visible gain.
+const MAX_PAGE_PIXEL_RATIO = 2;
 
 type SignerField = {
   page: number;
@@ -129,6 +133,12 @@ export function SigningClient({ signerId, token }: { signerId: string; token: st
       cancelled = true;
     };
   }, [signerId, token]);
+
+  // Loaded ONCE here and shared by every page, and kept alive across the
+  // consent → adopt → sign phases (the page canvases unmount during
+  // adopt; the document doesn't). See usePdfDocument for the Android
+  // crash this replaced.
+  const { pdf, error: documentError } = usePdfDocument(data?.documentUrl ?? null);
 
   const language = data?.hic.language ?? "en";
   const needsInitials = useMemo(() => data?.fields.some((f) => f.fieldType === "initials") ?? false, [data]);
@@ -328,14 +338,24 @@ export function SigningClient({ signerId, token }: { signerId: string; token: st
 
       {(phase === "consent" || phase === "sign") && (
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain p-4">
+          {documentError && (
+            <div className="rounded border border-red-200 bg-red-50 p-3 text-center text-sm text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">
+              <p>{t(language, "documentLoadError")}</p>
+              <button type="button" onClick={() => window.location.reload()} className="mt-2 font-medium underline">
+                {t(language, "tryAgain")}
+              </button>
+            </div>
+          )}
+          {!pdf && !documentError && <p className="text-center text-sm text-black/50 dark:text-white/50">{t(language, "loading")}</p>}
           {Array.from({ length: data.pageCount }, (_, i) => i + 1).map((page) => {
             const size = pageSizes[page];
             const scale = size ? size.width / PAGE_WIDTH_PT : null;
             return (
               <div key={page} className="relative rounded border border-black/10 dark:border-white/10">
                 <PdfPageCanvas
-                  fileUrl={data.documentUrl}
+                  pdf={pdf}
                   page={page}
+                  maxPixelRatio={MAX_PAGE_PIXEL_RATIO}
                   onLoaded={pageLoadedCallbacks.get(page)}
                 />
                 {phase === "sign" &&
