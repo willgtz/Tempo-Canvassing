@@ -105,6 +105,9 @@ export type Hic = {
   // Server-computed from the escalator formula for LightReach; manually
   // entered by the rep for Sungage Loan / Cash (see HicFormInput below).
   contract_price: number | null;
+  // LightReach only — what the escalator formula produced. Differs from
+  // contract_price when the rep typed LightReach's exact price instead.
+  calculated_contract_price: number | null;
   // Sungage Loan only — null for LightReach/Cash.
   fixed_apr: number | null;
   loan_term_years: number | null;
@@ -193,7 +196,14 @@ export type HicFormInput = {
   kwhRate: number;
   // Sungage Loan / Cash only — manual contract price instead of the
   // LightReach escalator-formula calculation.
+  // LightReach: prefilled with the calculated price, editable.
   contractPriceManual: string;
+  // Client-only (never saved): the rep confirmed a LightReach price more
+  // than LIGHTREACH_PRICE_EDIT_WARNING_DOLLARS off the calculated one.
+  contractPriceEditAcknowledged?: boolean;
+  // Client-only: the formula's price for the current inputs, kept in step
+  // by the form so the over-$10 check can run anywhere the form is used.
+  lightreachCalculatedPrice?: number | null;
   // Sungage Loan only.
   fixedApr: number;
   loanTermYears: number;

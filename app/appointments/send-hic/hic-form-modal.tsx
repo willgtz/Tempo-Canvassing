@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { SendHicModal } from "@/app/appointments/send-hic/send-hic-modal";
 import { HicReviewScreen } from "@/app/appointments/send-hic/hic-review-screen";
-import { HicFormFields, blankFormInput, hicToFormInput } from "@/app/appointments/send-hic/hic-form-fields";
+import { HicFormFields, blankFormInput, hicToFormInput, lightreachPriceNeedsConfirm } from "@/app/appointments/send-hic/hic-form-fields";
 import { createStandaloneHicDraft, updateHicDraft } from "@/app/appointments/send-hic/actions";
 import type { Hic, HicFinancingType, HicFormInput } from "@/app/appointments/send-hic/types";
 
@@ -101,7 +101,7 @@ export function HicFormModal({
           <Button
             type="button"
             size="sm"
-            disabled={isSaving || (mismatchWarning && !form.monthlyPaymentMismatchAcknowledged)}
+            disabled={isSaving || (mismatchWarning && !form.monthlyPaymentMismatchAcknowledged) || lightreachPriceNeedsConfirm(form, financingTypes)}
             onClick={() => handleSave(true)}
             className="flex-1"
           >

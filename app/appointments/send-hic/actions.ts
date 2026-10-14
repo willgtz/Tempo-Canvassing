@@ -55,6 +55,10 @@ function validateInput(input: HicFormInput, settings: HicSettings, financingType
   if (financingTypeKey === "lightreach") {
     if (!settings.escalatorOptions.includes(input.escalator)) return "Invalid escalator option.";
     if (!settings.kwhRateOptions.includes(input.kwhRate)) return "Invalid kWh rate option.";
+    // Blank falls back to the calculated price; anything typed must be real.
+    if (input.contractPriceManual.trim() !== "" && !(Number(input.contractPriceManual) > 0)) {
+      return "Contract price must be greater than 0.";
+    }
   } else {
     // Sungage Loan / Cash — no escalator formula; the rep enters the
     // contract price directly.
@@ -160,7 +164,14 @@ async function resolvePanelAndPrice(
   settings: HicSettings,
   financingTypeKey: string
 ): Promise<
-  | { ok: true; panelBrand: string; panelWattageW: number; numberOfPanels: number; contractPrice: number }
+  | {
+      ok: true;
+      panelBrand: string;
+      panelWattageW: number;
+      numberOfPanels: number;
+      contractPrice: number;
+      calculatedContractPrice: number | null;
+    }
   | { ok: false; error: string }
 > {
   const { data: panelOption, error: panelError } = await supabase
@@ -186,8 +197,11 @@ async function resolvePanelAndPrice(
 
   // Only LightReach uses the escalator-formula calculation — Sungage
   // Loan / Cash take the rep's manually entered contract price as-is
-  // (validateInput already confirmed it's a positive number).
-  const contractPrice =
+  // (validateInput already confirmed it's a positive number). LightReach
+  // also takes a typed price when there is one: the form prefills the
+  // calculated amount, but reps only see OpenSolar's rounded production,
+  // so LightReach's exact price can differ by cents to a few dollars.
+  const calculatedContractPrice =
     financingTypeKey === "lightreach"
       ? calculateContractPrice(
           Number(input.estProductionKwh),
@@ -195,6 +209,10 @@ async function resolvePanelAndPrice(
           input.escalator,
           { degradation: settings.degradationRate, termYears: settings.termYears }
         )
+      : null;
+  const contractPrice =
+    calculatedContractPrice !== null && input.contractPriceManual.trim() === ""
+      ? calculatedContractPrice
       : Number(input.contractPriceManual);
 
   return {
@@ -203,6 +221,7 @@ async function resolvePanelAndPrice(
     panelWattageW: panelOption.wattage_w,
     numberOfPanels,
     contractPrice,
+    calculatedContractPrice,
   };
 }
 
@@ -294,6 +313,7 @@ export async function createHicDraft(appointmentId: string, input: HicFormInput)
       panel_wattage_w: resolved.panelWattageW,
       number_of_panels: resolved.numberOfPanels,
       contract_price: resolved.contractPrice,
+      calculated_contract_price: resolved.calculatedContractPrice,
       ...toRow(input, settings, financingType.key),
     })
     .select("*")
@@ -348,6 +368,7 @@ export async function createStandaloneHicDraft(input: HicFormInput): Promise<Hic
       panel_wattage_w: resolved.panelWattageW,
       number_of_panels: resolved.numberOfPanels,
       contract_price: resolved.contractPrice,
+      calculated_contract_price: resolved.calculatedContractPrice,
       ...toRow(input, settings, financingType.key),
     })
     .select("*")
@@ -391,6 +412,7 @@ export async function updateHicDraft(hicId: string, input: HicFormInput): Promis
         panel_wattage_w: resolved.panelWattageW,
         number_of_panels: resolved.numberOfPanels,
         contract_price: resolved.contractPrice,
+        calculated_contract_price: resolved.calculatedContractPrice,
         sales_rep_id: salesRep.salesRepId,
         sales_rep_name: salesRep.salesRepName,
         updated_at: new Date().toISOString(),
@@ -597,6 +619,8 @@ export async function getHicOptionLists(): Promise<{
   kwhRateOptions: number[];
   aprOptions: number[];
   loanTermOptions: number[];
+  degradationRate: number;
+  termYears: number;
 }> {
   await requireSession();
   const supabase = await createClient();
@@ -606,6 +630,8 @@ export async function getHicOptionLists(): Promise<{
     kwhRateOptions: settings.kwhRateOptions,
     aprOptions: settings.aprOptions,
     loanTermOptions: settings.loanTermOptions,
+    degradationRate: settings.degradationRate,
+    termYears: settings.termYears,
   };
 }
 
@@ -800,6 +826,7 @@ export async function correctHic(hicId: string): Promise<CorrectHicResult> {
       panel_wattage_w: original.panel_wattage_w,
       number_of_panels: original.number_of_panels,
       contract_price: original.contract_price,
+      calculated_contract_price: original.calculated_contract_price,
       fixed_apr: original.fixed_apr,
       loan_term_years: original.loan_term_years,
       payment_after_36_months: original.payment_after_36_months,

@@ -7,7 +7,7 @@ import { createHicDraft, updateHicDraft, resendHic, voidHic, correctHic, archive
 import { HicReviewScreen } from "./hic-review-screen";
 import { HicFormModal } from "./hic-form-modal";
 import { SendHicModal } from "./send-hic-modal";
-import { HicFormFields, blankFormInput, hicToFormInput } from "./hic-form-fields";
+import { HicFormFields, blankFormInput, hicToFormInput, lightreachPriceNeedsConfirm } from "./hic-form-fields";
 import type { Appointment, AppointmentLead } from "@/app/admin/appointments/types";
 import type { Hic, HicFinancingType, HicFormInput, HicStatus } from "./types";
 
@@ -281,7 +281,7 @@ export function SendHicSection({
             <Button
               type="button"
               size="sm"
-              disabled={isSaving || (mismatchWarning && !form.monthlyPaymentMismatchAcknowledged)}
+              disabled={isSaving || (mismatchWarning && !form.monthlyPaymentMismatchAcknowledged) || lightreachPriceNeedsConfirm(form, financingTypes)}
               onClick={() => handleSave(true)}
               className="flex-1"
             >

@@ -310,6 +310,13 @@ export function HicDetailClient({
           <span className="text-sm font-medium">{isLightreach ? "Contract price (25-year total)" : "Contract price"}</span>
           <span className="text-xl font-semibold">{hic.contract_price != null ? formatCurrency(hic.contract_price) : "—"}</span>
         </div>
+        {hic.calculated_contract_price != null &&
+          hic.contract_price != null &&
+          hic.contract_price !== hic.calculated_contract_price && (
+            <p className="mt-0.5 text-right text-[11px] text-black/50 dark:text-white/50">
+              Edited — calculated {formatCurrency(hic.calculated_contract_price)}
+            </p>
+          )}
         {isLightreach && (
           <button
             type="button"
@@ -317,6 +324,7 @@ export function HicDetailClient({
             className="mt-2 text-xs underline text-black/60 hover:text-black dark:text-white/60 dark:hover:text-white"
           >
             {showSchedule ? "Hide" : "Show"} 25-year schedule
+            {hic.calculated_contract_price != null && hic.contract_price !== hic.calculated_contract_price && " (calculated)"}
           </button>
         )}
         {isLightreach && showSchedule && (

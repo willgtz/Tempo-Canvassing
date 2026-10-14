@@ -170,6 +170,13 @@ export function HicReviewScreen({
             {hic.contract_price != null ? formatCurrency(hic.contract_price) : "—"}
           </span>
         </div>
+        {hic.calculated_contract_price != null &&
+          hic.contract_price != null &&
+          hic.contract_price !== hic.calculated_contract_price && (
+            <p className="mt-0.5 text-right text-[11px] text-black/50 dark:text-white/50">
+              Edited — calculated {formatCurrency(hic.calculated_contract_price)}
+            </p>
+          )}
       </div>
 
       <div className="space-y-1.5">

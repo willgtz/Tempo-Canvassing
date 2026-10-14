@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Input, Select } from "@/components/ui/input";
 import { formatCurrency, formatPhoneInput } from "@/lib/hic/format";
 import { CASH_DEFAULT_AMOUNT_DUE_AT_SIGNING, calculateCashPayments } from "@/lib/hic/cash-payments";
+import { calculateContractPrice } from "@/lib/hic/contract-price";
 import { HIC_APR_OPTIONS, HIC_ESCALATOR_OPTIONS, HIC_KWH_RATE_OPTIONS, HIC_LOAN_TERM_OPTIONS } from "@/lib/hic/defaults";
 import { getHicOptionLists, getSalesRepOptions } from "./actions";
 import type { AppointmentLead } from "@/app/admin/appointments/types";
@@ -86,7 +87,26 @@ export function hicToFormInput(hic: Hic): HicFormInput {
     notes: hic.notes ?? "",
     salesRepId: hic.sales_rep_id,
     monthlyPaymentMismatchAcknowledged: hic.monthly_payment_mismatch_acknowledged,
+    lightreachCalculatedPrice: hic.calculated_contract_price,
   };
+}
+
+// A real LightReach correction is cents to a couple of dollars (reps only
+// see OpenSolar's rounded production); anything past this is far more
+// likely a typo, so it has to be confirmed before the HIC goes to review.
+export const LIGHTREACH_PRICE_EDIT_WARNING_DOLLARS = 10;
+
+export function lightreachPriceNeedsConfirm(form: HicFormInput, financingTypes: HicFinancingType[]): boolean {
+  const key = financingTypes.find((f) => f.id === form.financingTypeId)?.key;
+  const calculated = form.lightreachCalculatedPrice;
+  const entered = Number(form.contractPriceManual);
+  return (
+    key === "lightreach" &&
+    calculated != null &&
+    form.contractPriceManual.trim() !== "" &&
+    Math.abs(entered - calculated) > LIGHTREACH_PRICE_EDIT_WARNING_DOLLARS &&
+    !form.contractPriceEditAcknowledged
+  );
 }
 
 // The actual field-editing body of the Send HIC form — shared by
@@ -132,6 +152,44 @@ export function HicFormFields({
     if (nextKey === "cash" && (form.amountDueAtSigning.trim() === "" || Number(form.amountDueAtSigning) === 0)) {
       update("amountDueAtSigning", String(CASH_DEFAULT_AMOUNT_DUE_AT_SIGNING));
     }
+    if (nextKey === "lightreach") {
+      refillLightreachPrice(form.estProductionKwh, form.kwhRate, form.escalator);
+    } else if (isLightreach) {
+      // The formula's price means nothing for a cash/loan deal — start
+      // that price blank instead of carrying it over.
+      update("contractPriceManual", "");
+      update("lightreachCalculatedPrice", null);
+    }
+  }
+
+  // LightReach's contract price is prefilled from the formula and
+  // refilled whenever an input it depends on changes — deliberately in
+  // these change handlers rather than an effect, so opening a saved
+  // draft never overwrites the exact price someone typed into it.
+  function refillLightreachPrice(estProductionKwh: string, kwhRate: number, escalator: number) {
+    const production = Number(estProductionKwh);
+    const calculated =
+      production > 0
+        ? calculateContractPrice(production, kwhRate, escalator, { degradation: degradationRate, termYears })
+        : null;
+    update("lightreachCalculatedPrice", calculated);
+    update("contractPriceManual", calculated != null ? calculated.toFixed(2) : "");
+    update("contractPriceEditAcknowledged", false);
+  }
+
+  function handleProductionChange(value: string) {
+    update("estProductionKwh", value);
+    if (isLightreach) refillLightreachPrice(value, form.kwhRate, form.escalator);
+  }
+
+  function handleEscalatorChange(value: number) {
+    update("escalator", value);
+    if (isLightreach) refillLightreachPrice(form.estProductionKwh, form.kwhRate, value);
+  }
+
+  function handleKwhRateChange(value: number) {
+    update("kwhRate", value);
+    if (isLightreach) refillLightreachPrice(form.estProductionKwh, value, form.escalator);
   }
 
   // Starts with the hardcoded fallback lists so the form is usable
@@ -143,6 +201,8 @@ export function HicFormFields({
   const [aprOptions, setAprOptions] = useState<number[]>(HIC_APR_OPTIONS);
   const [loanTermOptions, setLoanTermOptions] = useState<number[]>(HIC_LOAN_TERM_OPTIONS);
   const [repOptions, setRepOptions] = useState<{ id: string; fullName: string }[]>([]);
+  const [degradationRate, setDegradationRate] = useState(0.005);
+  const [termYears, setTermYears] = useState(25);
 
   useEffect(() => {
     let cancelled = false;
@@ -152,6 +212,8 @@ export function HicFormFields({
       setKwhRateOptions(result.kwhRateOptions);
       setAprOptions(result.aprOptions);
       setLoanTermOptions(result.loanTermOptions);
+      setDegradationRate(result.degradationRate);
+      setTermYears(result.termYears);
     });
     return () => {
       cancelled = true;
@@ -317,7 +379,7 @@ export function HicFormFields({
                 type="number"
                 step="0.01"
                 value={form.estProductionKwh}
-                onChange={(e) => update("estProductionKwh", e.target.value)}
+                onChange={(e) => handleProductionChange(e.target.value)}
                 className="block w-full"
               />
               <p className="text-[11px] text-black/50 dark:text-white/50">
@@ -348,7 +410,7 @@ export function HicFormFields({
                   <label className="text-xs font-medium">Escalator</label>
                   <Select
                     value={form.escalator}
-                    onChange={(e) => update("escalator", Number(e.target.value))}
+                    onChange={(e) => handleEscalatorChange(Number(e.target.value))}
                     className="block w-full"
                   >
                     {escalatorOptions.map((e) => (
@@ -360,7 +422,7 @@ export function HicFormFields({
                 </div>
                 <div className="space-y-1">
                   <label className="text-xs font-medium">kWh rate</label>
-                  <Select value={form.kwhRate} onChange={(e) => update("kwhRate", Number(e.target.value))} className="block w-full">
+                  <Select value={form.kwhRate} onChange={(e) => handleKwhRateChange(Number(e.target.value))} className="block w-full">
                     {kwhRateOptions.map((r) => (
                       <option key={r} value={r}>
                         ${r.toFixed(3)}
@@ -369,6 +431,41 @@ export function HicFormFields({
                   </Select>
                 </div>
               </>
+            )}
+          </div>
+        )}
+
+        {isLightreach && (
+          <div className="space-y-1">
+            <label className="text-xs font-medium">Contract price (25-year total)</label>
+            <Input
+              type="number"
+              step="0.01"
+              value={form.contractPriceManual}
+              onChange={(e) => {
+                update("contractPriceManual", e.target.value);
+                update("contractPriceEditAcknowledged", false);
+              }}
+              className="block w-full"
+            />
+            <p className="text-[11px] text-black/50 dark:text-white/50">
+              {form.lightreachCalculatedPrice != null &&
+              form.contractPriceManual.trim() !== "" &&
+              Number(form.contractPriceManual) !== form.lightreachCalculatedPrice
+                ? `Edited — calculated ${formatCurrency(form.lightreachCalculatedPrice)}. Changing production, rate, or escalator recalculates it.`
+                : "Calculated from production, rate, and escalator. Edit it if LightReach's exact price is different."}
+            </p>
+            {lightreachPriceNeedsConfirm(form, financingTypes) && (
+              <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-2 text-xs text-amber-700 dark:text-amber-300">
+                This is more than ${LIGHTREACH_PRICE_EDIT_WARNING_DOLLARS} off the calculated price — double-check it.
+                <button
+                  type="button"
+                  onClick={() => update("contractPriceEditAcknowledged", true)}
+                  className="ml-2 underline"
+                >
+                  Price is correct
+                </button>
+              </div>
             )}
           </div>
         )}

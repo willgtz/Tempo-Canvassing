@@ -31,6 +31,7 @@ const BASE: Omit<Hic, "id" | "language" | "has_co_borrower" | "co_borrower_name"
   panel_wattage_w: 450,
   number_of_panels: 19,
   contract_price: 47694.12,
+  calculated_contract_price: 47694.12,
   fixed_apr: null,
   loan_term_years: null,
   payment_after_36_months: null,
