@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/input";
 import { createClient } from "@/lib/supabase/client";
 import { exportAppointmentsCsv } from "./actions";
+import { downloadCsv } from "@/lib/csv";
 import {
   countInLastDays,
   countByDisposition,
@@ -674,13 +675,7 @@ export function AdminDashboardClient({
           setExportError(result.error);
           return;
         }
-        const blob = new Blob([result.csv], { type: "text/csv;charset=utf-8;" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = `appointments-${apptFrom}-to-${apptTo}.csv`;
-        a.click();
-        URL.revokeObjectURL(url);
+        downloadCsv(result.csv, `appointments-${apptFrom}-to-${apptTo}.csv`);
       })
       .finally(() => setIsExporting(false));
   }

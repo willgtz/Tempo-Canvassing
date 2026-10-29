@@ -4,6 +4,7 @@ import { getAdminSession } from "@/lib/auth/admin";
 import { createClient } from "@/lib/supabase/server";
 import { fetchAllRows } from "@/lib/supabase/fetch-all-rows";
 import { filterAppointmentsByDate } from "@/lib/dashboard/stats";
+import { csvRow } from "@/lib/csv";
 
 export type ExportAppointmentsCsvResult = { ok: true; csv: string } | { ok: false; error: string };
 
@@ -17,18 +18,6 @@ type ExportAppointmentRow = {
   created_at: string;
   deal_submitted_at: string | null;
 };
-
-function csvCell(value: unknown): string {
-  const s = value == null ? "" : String(value);
-  if (/[",\n]/.test(s)) {
-    return `"${s.replace(/"/g, '""')}"`;
-  }
-  return s;
-}
-
-function csvRow(values: unknown[]): string {
-  return values.map(csvCell).join(",");
-}
 
 // Admin-only, full-detail appointment export — the dashboard's own
 // queries deliberately fetch a leaner column set for the stats above,

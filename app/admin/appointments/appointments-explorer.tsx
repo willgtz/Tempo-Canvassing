@@ -8,6 +8,7 @@ import { AddManualAppointmentModal } from "./add-manual-appointment-modal";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
 import { cn } from "@/components/ui/cn";
+import { csvRow, downloadCsv } from "@/lib/csv";
 import type {
   ActiveProfile,
   Appointment,
@@ -151,6 +152,53 @@ export function AppointmentsExplorer({
     }))
     .filter((g) => g.appointments.length > 0);
 
+  // Exports exactly what List view shows — the filtered set (or everything
+  // when no search/filter is active), in the same status-grouped order.
+  // Collapsed groups are still included; collapsing is just display.
+  // Built client-side from already-loaded state, so it also reflects any
+  // edits made in the detail panel since the page loaded.
+  function exportVisibleCsv() {
+    const headers = [
+      "Lead Name",
+      "Phone",
+      "Address",
+      "City",
+      "State",
+      "Zip",
+      "Scheduled At",
+      "Status",
+      "Opener(s)",
+      "Closer(s)",
+    ];
+    const namesFor = (appointmentId: string, role: "opener" | "closer") =>
+      assignments
+        .filter((x) => x.appointment_id === appointmentId && x.role === role)
+        .map((x) => x.full_name)
+        .join("; ");
+    const rows = groupedByStatus.flatMap((group) =>
+      group.appointments.map((a) => {
+        const lead = leadById.get(a.lead_id);
+        return csvRow([
+          [lead?.first_name, lead?.last_name].filter(Boolean).join(" "),
+          lead?.phone ?? "",
+          lead?.address_line ?? "",
+          lead?.city ?? "",
+          lead?.state ?? "",
+          lead?.zipcode ?? "",
+          new Date(a.scheduled_at).toLocaleString(),
+          group.status.name,
+          namesFor(a.id, "opener"),
+          namesFor(a.id, "closer"),
+        ]);
+      })
+    );
+    const today = new Date().toLocaleDateString("en-CA");
+    downloadCsv(
+      [csvRow(headers), ...rows].join("\n") + "\n",
+      `appointments-${hasAnyFilter ? "filtered-" : ""}${today}.csv`
+    );
+  }
+
   function toggleStatus(statusId: string) {
     setSelectedStatusIds((prev) => {
       const next = new Set(prev);
@@ -262,6 +310,18 @@ export function AppointmentsExplorer({
                 </span>
               )}
             </button>
+            {viewMode === "list" && visibleAppointments.length > 0 && (
+              <button
+                onClick={exportVisibleCsv}
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-black/15 active:bg-black/10 dark:border-white/20 dark:active:bg-white/20"
+                aria-label={`Export ${visibleAppointments.length} appointments to CSV`}
+                title={`Export CSV (${visibleAppointments.length})`}
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="h-4.5 w-4.5">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v11m0 0-4-4m4 4 4-4M5 19h14" />
+                </svg>
+              </button>
+            )}
             <button
               onClick={() => setShowAddAppointment(true)}
               className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-black/15 active:bg-black/10 dark:border-white/20 dark:active:bg-white/20"
