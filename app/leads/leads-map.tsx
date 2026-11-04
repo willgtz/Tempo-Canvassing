@@ -7,6 +7,7 @@ import "mapbox-gl/dist/mapbox-gl.css";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/components/ui/cn";
 import { watchLocation } from "@/lib/geo";
+import { useDuoScreen } from "@/lib/use-duo-screen";
 import type { Disposition, Lead } from "./types";
 
 const STREETS_STYLE = "mapbox://styles/mapbox/streets-v12";
@@ -196,6 +197,7 @@ export function LeadsMap({
   // and open the Add Lead modal with it.
   onConfirmNewPin?: (lat: number, lng: number) => void;
 }) {
+  const isDuo = useDuoScreen();
   const mapRef = useRef<MapRef>(null);
   // Mapbox failures (bad token, network/adblock-blocked tile requests,
   // WebGL context loss) otherwise fail silently into a blank canvas with
@@ -661,8 +663,9 @@ export function LeadsMap({
       // map's actual rendered area — the map still bleeds full-bleed
       // behind the bar, this just tells Mapbox to treat that strip as
       // obscured for centering/control-placement purposes. Harmless on
-      // desktop too, where there's no tab bar to worry about.
-      padding={{ top: 0, bottom: 80, left: 0, right: 0 }}
+      // desktop too, where there's no tab bar to worry about. The Duo's short
+      // sideways screen has no tab bar and can't spare the strip.
+      padding={{ top: 0, bottom: isDuo ? 0 : 80, left: 0, right: 0 }}
       onLoad={() => setLoaded(true)}
       interactiveLayerIds={selectMode || isStaging ? [] : ["clusters", "unclustered-point"]}
       onClick={selectMode || isStaging ? undefined : handleClick}

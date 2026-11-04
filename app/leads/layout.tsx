@@ -16,7 +16,7 @@ export default async function LeadsLayout({
 
   return (
     <div className="flex flex-1 flex-col">
-      <nav className="hidden flex-wrap items-center justify-between gap-3 border-b border-black/10 px-6 py-3 md:flex dark:border-white/10">
+      <nav className="duo-compact-nav hidden flex-wrap items-center justify-between gap-3 border-b border-black/10 px-6 py-3 md:flex dark:border-white/10">
         <span className="font-medium text-sm">{session.fullName}</span>
         <div className="flex flex-wrap items-center gap-2">
           <Link

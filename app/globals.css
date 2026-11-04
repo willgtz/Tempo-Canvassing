@@ -82,6 +82,52 @@ html[data-duo-screen] {
     text-align: left;
   }
 
+  /* Swaps a page's full desktop controls for its compact phone version. */
+  .duo-hide {
+    display: none !important;
+  }
+
+  .duo-show-block {
+    display: block !important;
+  }
+
+  .duo-show-flex {
+    display: flex !important;
+  }
+
+  .duo-show-inline {
+    display: inline !important;
+  }
+
+  .duo-compact-nav {
+    padding: 0.25rem 1rem !important;
+  }
+
+  /* The short screen can't spare a row above the map, so its controls float on
+     it. The right margin keeps clear of the map's own buttons. */
+  .duo-map-host {
+    position: relative;
+  }
+
+  .duo-map-toolbar {
+    position: absolute;
+    top: 0.5rem;
+    left: 0.5rem;
+    z-index: 15;
+    width: fit-content;
+    max-width: calc(100% - 4rem);
+    justify-content: flex-start;
+    padding: 0.25rem;
+    border-width: 1px;
+    border-radius: 9999px;
+    background: var(--background);
+    box-shadow: 0 2px 8px rgb(0 0 0 / 0.2);
+  }
+
+  .duo-map-toolbar input {
+    width: 16rem;
+  }
+
   /* Detail panels sit beside the content instead of covering it. */
   .duo-side-panel {
     position: fixed !important;

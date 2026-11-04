@@ -531,7 +531,7 @@ export function LeadsExplorer({
   }
 
   return (
-    <div className="flex flex-1 flex-col">
+    <div className="duo-map-host flex flex-1 flex-col">
       {/* Mobile: one slim row (search + filter + add + view toggle, or the
           select-mode controls), a fraction of the desktop filter bar's
           height — the map is the main feature on a phone and needed most
@@ -539,7 +539,12 @@ export function LeadsExplorer({
           search/filter in a small floating capsule rather than a full
           inline form. Full filter set (Disposition/Rep/Zip/dates) moved
           into a bottom sheet opened via the filter icon, not removed. */}
-      <div className="flex items-center justify-end gap-2 border-b border-black/10 px-3 py-2 md:hidden dark:border-white/10">
+      <div
+        className={cn(
+          "duo-show-flex flex items-center justify-end gap-2 border-b border-black/10 px-3 py-2 md:hidden dark:border-white/10",
+          viewMode === "map" && "duo-map-toolbar"
+        )}
+      >
         {selectMode ? (
           <>
             <span className="flex-1 text-sm">
@@ -554,6 +559,9 @@ export function LeadsExplorer({
             <Button type="button" variant="secondary" size="sm" onClick={handleCancelSelect}>
               Cancel
             </Button>
+            {routeError && (
+              <span className="duo-show-inline hidden text-sm text-red-600 dark:text-red-400">{routeError}</span>
+            )}
           </>
         ) : showMobileSearch ? (
           <>
@@ -648,6 +656,9 @@ export function LeadsExplorer({
                 </svg>
               </button>
             )}
+            <span className="duo-show-inline hidden shrink-0 px-1 text-sm text-black/60 dark:text-white/60">
+              {filteredLeads.length} lead{filteredLeads.length === 1 ? "" : "s"}
+            </span>
             <div className="flex shrink-0 overflow-hidden rounded-full border border-black/15 dark:border-white/20">
               <button
                 onClick={() => setViewMode("map")}
@@ -674,8 +685,8 @@ export function LeadsExplorer({
 
       {showMobileFilters && (
         <>
-          <div className="fixed inset-0 z-30 bg-black/30 backdrop-blur-sm md:hidden" onClick={() => setShowMobileFilters(false)} />
-          <div className="fixed inset-x-0 bottom-0 z-40 duo-fit-height max-h-[80vh] space-y-4 overflow-y-auto rounded-t-2xl border-t border-black/10 bg-white/90 p-5 backdrop-blur-xl md:hidden dark:border-white/10 dark:bg-neutral-950/90">
+          <div className="duo-side-backdrop fixed inset-0 z-30 bg-black/30 backdrop-blur-sm md:hidden" onClick={() => setShowMobileFilters(false)} />
+          <div className="fixed inset-x-0 bottom-0 z-40 duo-side-panel duo-show-block max-h-[80vh] space-y-4 overflow-y-auto rounded-t-2xl border-t border-black/10 bg-white/90 p-5 backdrop-blur-xl md:hidden dark:border-white/10 dark:bg-neutral-950/90">
             <div className="flex items-center justify-between">
               <h2 className="text-base font-semibold">Filters</h2>
               <Button variant="ghost" size="sm" onClick={() => setShowMobileFilters(false)}>
@@ -814,7 +825,7 @@ export function LeadsExplorer({
           Search on the same flex-wrap row and push them around
           unpredictably. Isolating it keeps the second row's wrapping
           consistent regardless of how many dispositions exist. */}
-      <div className="hidden border-b border-black/10 px-6 pt-3 md:block dark:border-white/10">
+      <div className="duo-hide hidden border-b border-black/10 px-6 pt-3 md:block dark:border-white/10">
         <div className="space-y-1">
           <label className="text-xs font-medium">Disposition</label>
           <div className="flex flex-wrap items-center gap-2">
@@ -860,7 +871,7 @@ export function LeadsExplorer({
         </div>
       </div>
 
-      <div className="hidden border-b border-black/10 px-6 py-3 md:block dark:border-white/10">
+      <div className="duo-hide hidden border-b border-black/10 px-6 py-3 md:block dark:border-white/10">
         <div className="flex flex-wrap items-end gap-3">
           {canFilterByRep && (
             <div className="space-y-1">
