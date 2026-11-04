@@ -93,14 +93,14 @@ export function RouteResultPanel({
     <>
       <div
         className={cn(
-          "fixed inset-0 z-20 bg-black/30 backdrop-blur-sm transition-opacity duration-200",
+          "duo-side-backdrop fixed inset-0 z-20 bg-black/30 backdrop-blur-sm transition-opacity duration-200",
           visible ? "opacity-100" : "opacity-0"
         )}
         onClick={onMinimize}
       />
       <div
         className={cn(
-          "fixed right-0 top-0 z-30 h-full w-full max-w-md overflow-y-auto border-l border-black/10 bg-white p-6 shadow-xl transition-transform duration-200 ease-out dark:border-white/10 dark:bg-neutral-950",
+          "duo-side-panel fixed right-0 top-0 z-30 h-full w-full max-w-md overflow-y-auto border-l border-black/10 bg-white p-6 shadow-xl transition-transform duration-200 ease-out dark:border-white/10 dark:bg-neutral-950",
           visible ? "translate-x-0" : "translate-x-full"
         )}
       >

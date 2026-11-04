@@ -70,7 +70,7 @@ export function SendHicModal({
           relying on sticky positioning inside a scrolling ancestor. */}
       <div
         className={cn(
-          "fixed inset-x-0 bottom-0 z-[60] flex max-h-[85vh] w-full flex-col overflow-hidden rounded-t-2xl border-t border-black/10 bg-white shadow-xl transition-all duration-200 ease-out dark:border-white/10 dark:bg-neutral-950 sm:inset-x-auto sm:bottom-auto sm:left-1/2 sm:top-1/2 sm:w-full sm:max-w-lg sm:-translate-x-1/2 sm:rounded-lg sm:border",
+          "fixed inset-x-0 bottom-0 z-[60] flex duo-fit-height max-h-[85vh] w-full flex-col overflow-hidden rounded-t-2xl border-t border-black/10 bg-white shadow-xl transition-all duration-200 ease-out dark:border-white/10 dark:bg-neutral-950 sm:inset-x-auto sm:bottom-auto sm:left-1/2 sm:top-1/2 sm:w-full sm:max-w-lg sm:-translate-x-1/2 sm:rounded-lg sm:border",
           visible
             ? "translate-y-0 opacity-100 sm:-translate-y-1/2 sm:scale-100 sm:opacity-100"
             : "translate-y-full opacity-0 sm:-translate-y-1/2 sm:scale-95 sm:opacity-0"

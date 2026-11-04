@@ -1,5 +1,6 @@
 "use client";
 
+import { PickerInput } from "@/components/ui/picker-input";
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -161,7 +162,7 @@ export function AllHicsExplorer({
 
         <div className="space-y-1">
           <label className="text-xs font-medium">Created from</label>
-          <input
+          <PickerInput
             type="date"
             value={dateFrom}
             onChange={(e) => setDateFrom(e.target.value)}
@@ -170,7 +171,7 @@ export function AllHicsExplorer({
         </div>
         <div className="space-y-1">
           <label className="text-xs font-medium">Created to</label>
-          <input
+          <PickerInput
             type="date"
             value={dateTo}
             onChange={(e) => setDateTo(e.target.value)}

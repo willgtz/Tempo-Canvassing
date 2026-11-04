@@ -125,7 +125,7 @@ export function AddLeadModal({
       />
       <div
         className={cn(
-          "fixed left-1/2 top-1/2 z-30 max-h-[85vh] w-full max-w-md overflow-y-auto -translate-x-1/2 -translate-y-1/2 rounded-lg border border-black/10 bg-white p-6 shadow-xl transition-all duration-200 ease-out dark:border-white/10 dark:bg-neutral-950",
+          "fixed left-1/2 top-1/2 z-30 duo-fit-height max-h-[85vh] w-full max-w-md overflow-y-auto -translate-x-1/2 -translate-y-1/2 rounded-lg border border-black/10 bg-white p-6 shadow-xl transition-all duration-200 ease-out dark:border-white/10 dark:bg-neutral-950",
           visible ? "scale-100 opacity-100" : "scale-95 opacity-0"
         )}
       >

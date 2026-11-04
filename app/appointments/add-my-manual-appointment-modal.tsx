@@ -1,5 +1,6 @@
 "use client";
 
+import { PickerInput } from "@/components/ui/picker-input";
 import { useState, useTransition } from "react";
 import { addMyManualAppointment } from "./actions";
 import { useSlideIn } from "@/lib/use-slide-in";
@@ -82,7 +83,7 @@ export function AddMyManualAppointmentModal({
       />
       <div
         className={cn(
-          "fixed left-1/2 top-1/2 z-30 max-h-[85vh] w-full max-w-md overflow-y-auto -translate-x-1/2 -translate-y-1/2 rounded-lg border border-black/10 bg-white p-6 shadow-xl transition-all duration-200 ease-out dark:border-white/10 dark:bg-neutral-950",
+          "fixed left-1/2 top-1/2 z-30 duo-fit-height max-h-[85vh] w-full max-w-md overflow-y-auto -translate-x-1/2 -translate-y-1/2 rounded-lg border border-black/10 bg-white p-6 shadow-xl transition-all duration-200 ease-out dark:border-white/10 dark:bg-neutral-950",
           visible ? "scale-100 opacity-100" : "scale-95 opacity-0"
         )}
       >
@@ -163,7 +164,7 @@ export function AddMyManualAppointmentModal({
             </div>
             <div className="space-y-1">
               <label className="text-xs font-medium">Date &amp; time</label>
-              <input
+              <PickerInput
                 type="datetime-local"
                 value={scheduledAt}
                 onChange={(e) => setScheduledAt(e.target.value)}

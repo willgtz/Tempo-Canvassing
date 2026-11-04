@@ -1,5 +1,6 @@
 "use client";
 
+import { PickerInput } from "@/components/ui/picker-input";
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { formatStatValue } from "@/lib/dashboard/stats";
@@ -65,7 +66,7 @@ export function DoorKnockDayTile({
     <Card className="p-4">
       <div className="flex items-center justify-between gap-2">
         <p className="text-sm text-black/60 dark:text-white/60">Doors knocked</p>
-        <input
+        <PickerInput
           type="date"
           value={date}
           max={today}

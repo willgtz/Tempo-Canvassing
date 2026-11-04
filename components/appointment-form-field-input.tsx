@@ -1,5 +1,6 @@
 "use client";
 
+import { PickerInput } from "@/components/ui/picker-input";
 import type { AppointmentFormField } from "@/app/leads/types";
 
 // Renders one admin-configured appointment_form_fields entry (Additional
@@ -48,7 +49,7 @@ export function AppointmentFormFieldInput({
       return (
         <div className="space-y-1">
           <label className="text-xs font-medium">{label}</label>
-          <input
+          <PickerInput
             type="date"
             value={value}
             onChange={(e) => onChange(e.target.value)}

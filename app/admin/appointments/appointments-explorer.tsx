@@ -241,7 +241,7 @@ export function AppointmentsExplorer({
     // else (mobile bar, desktop filter row/card) is shrink-0 chrome, so
     // it never grows past its own content and the calendar gets whatever
     // space is actually left.
-    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden md:gap-6">
+    <div className={cn("flex min-h-0 flex-1 flex-col gap-4 overflow-hidden md:gap-6", selected && "duo-side-content")}>
       {/* One slim row on every viewport now, not just mobile — search, a
           filter icon (badge = active count) opening a sheet with the
           status/date/closer controls, and an icon view toggle, instead
@@ -372,7 +372,7 @@ export function AppointmentsExplorer({
       {showMobileFilters && (
         <>
           <div className="fixed inset-0 z-30 bg-black/30 backdrop-blur-sm" onClick={() => setShowMobileFilters(false)} />
-          <div className="fixed inset-x-0 bottom-0 z-40 max-h-[80vh] space-y-4 overflow-y-auto rounded-t-2xl border-t border-black/10 bg-white/90 p-5 backdrop-blur-xl sm:inset-x-auto sm:right-6 sm:bottom-6 sm:w-full sm:max-w-md sm:rounded-2xl sm:border dark:border-white/10 dark:bg-neutral-950/90">
+          <div className="fixed inset-x-0 bottom-0 z-40 duo-fit-height max-h-[80vh] space-y-4 overflow-y-auto rounded-t-2xl border-t border-black/10 bg-white/90 p-5 backdrop-blur-xl sm:inset-x-auto sm:right-6 sm:bottom-6 sm:w-full sm:max-w-md sm:rounded-2xl sm:border dark:border-white/10 dark:bg-neutral-950/90">
             <div className="flex items-center justify-between">
               <h2 className="text-base font-semibold">Filters</h2>
               <Button variant="ghost" size="sm" onClick={() => setShowMobileFilters(false)}>
@@ -557,6 +557,7 @@ export function AppointmentsExplorer({
 
       {selected && (
         <AppointmentDetailPanel
+          key={selected.id}
           appointment={selected}
           lead={leadById.get(selected.lead_id) ?? null}
           statuses={statuses}

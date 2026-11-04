@@ -1,5 +1,6 @@
 "use client";
 
+import { PickerInput } from "@/components/ui/picker-input";
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { BarChart, type BarChartItem } from "@/components/dashboard/bar-chart";
@@ -57,7 +58,7 @@ export function DoorKnockDayBreakdown({
     <div>
       <div className="flex items-center justify-between gap-2">
         <span className="text-xs text-black/50 dark:text-white/50">Day</span>
-        <input
+        <PickerInput
           type="date"
           value={date}
           max={today}

@@ -1,5 +1,6 @@
 "use client";
 
+import { PickerInput } from "@/components/ui/picker-input";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { StatTile } from "@/components/dashboard/stat-tile";
@@ -988,7 +989,7 @@ export function AdminDashboardClient({
             <div className="flex flex-wrap items-end gap-3">
               <div className="space-y-1">
                 <label className="text-xs font-medium">From</label>
-                <input
+                <PickerInput
                   type="date"
                   value={apptFrom}
                   max={apptTo}
@@ -998,7 +999,7 @@ export function AdminDashboardClient({
               </div>
               <div className="space-y-1">
                 <label className="text-xs font-medium">To</label>
-                <input
+                <PickerInput
                   type="date"
                   value={apptTo}
                   max={today}

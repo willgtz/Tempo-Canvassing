@@ -1,5 +1,6 @@
 import { forwardRef, type InputHTMLAttributes, type SelectHTMLAttributes } from "react";
 import { cn } from "./cn";
+import { PickerInput } from "./picker-input";
 
 // text-base (16px) below md, text-sm (14px) at md and up — iOS Safari
 // auto-zooms the whole page when focusing any input under 16px, which is
@@ -10,6 +11,9 @@ const FIELD_CLASSES =
 
 export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement>>(
   function Input({ className, ...props }, ref) {
+    if (props.type === "date" || props.type === "datetime-local") {
+      return <PickerInput ref={ref} className={cn(FIELD_CLASSES, className)} {...props} />;
+    }
     return <input ref={ref} className={cn(FIELD_CLASSES, className)} {...props} />;
   }
 );

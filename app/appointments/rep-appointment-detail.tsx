@@ -1,5 +1,6 @@
 "use client";
 
+import { PickerInput } from "@/components/ui/picker-input";
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import {
@@ -182,14 +183,14 @@ export function RepAppointmentDetail({
     <>
       <div
         className={cn(
-          "fixed inset-0 z-30 bg-black/30 backdrop-blur-sm transition-opacity duration-200",
+          "duo-side-backdrop fixed inset-0 z-30 bg-black/30 backdrop-blur-sm transition-opacity duration-200",
           visible ? "opacity-100" : "opacity-0"
         )}
         onClick={onClose}
       />
       <div
         className={cn(
-          "fixed inset-x-0 bottom-0 z-40 max-h-[85vh] overflow-y-auto rounded-t-2xl border-t border-black/10 bg-white/90 p-5 shadow-xl backdrop-blur-xl transition-all duration-200 ease-out sm:inset-x-auto sm:right-6 sm:bottom-6 sm:w-full sm:max-w-md sm:rounded-2xl sm:border dark:border-white/10 dark:bg-neutral-950/90",
+          "duo-side-panel fixed inset-x-0 bottom-0 z-40 max-h-[85vh] overflow-y-auto rounded-t-2xl border-t border-black/10 bg-white/90 p-5 shadow-xl backdrop-blur-xl transition-all duration-200 ease-out sm:inset-x-auto sm:right-6 sm:bottom-6 sm:w-full sm:max-w-md sm:rounded-2xl sm:border dark:border-white/10 dark:bg-neutral-950/90",
           visible ? "translate-y-0 sm:translate-y-0 sm:opacity-100" : "translate-y-full sm:translate-y-4 sm:opacity-0"
         )}
       >
@@ -232,7 +233,7 @@ export function RepAppointmentDetail({
         <div className="mt-4 border-t border-black/10 pt-4 dark:border-white/10">
           {isEditingDate ? (
             <div className="flex flex-wrap items-center gap-2">
-              <input
+              <PickerInput
                 type="datetime-local"
                 value={dateEditDraft}
                 onChange={(e) => setDateEditDraft(e.target.value)}

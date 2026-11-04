@@ -1,5 +1,6 @@
 "use client";
 
+import { PickerInput } from "@/components/ui/picker-input";
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { BarChart, type BarChartItem } from "@/components/dashboard/bar-chart";
@@ -71,7 +72,7 @@ export function DoorKnockRangeBreakdown({
   return (
     <div>
       <div className="flex flex-wrap items-center gap-2">
-        <input
+        <PickerInput
           type="date"
           value={from}
           max={to}
@@ -79,7 +80,7 @@ export function DoorKnockRangeBreakdown({
           className="rounded border border-black/15 px-1.5 py-0.5 text-xs dark:border-white/20 dark:bg-transparent"
         />
         <span className="text-xs text-black/50 dark:text-white/50">to</span>
-        <input
+        <PickerInput
           type="date"
           value={to}
           max={today}

@@ -1,5 +1,6 @@
 "use client";
 
+import { PickerInput } from "@/components/ui/picker-input";
 import { useState, useTransition } from "react";
 import { submitAppointment } from "./actions";
 import { useSlideIn } from "@/lib/use-slide-in";
@@ -104,7 +105,7 @@ export function SetAppointmentModal({
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="mt-4 max-h-[70vh] space-y-3 overflow-y-auto">
+        <form onSubmit={handleSubmit} className="duo-fit-form mt-4 max-h-[70vh] space-y-3 overflow-y-auto">
           <div className="space-y-1">
             <label className="text-xs font-medium">Customer name</label>
             <input
@@ -132,7 +133,7 @@ export function SetAppointmentModal({
 
           <div className="space-y-1">
             <label className="text-xs font-medium">Date &amp; time</label>
-            <input
+            <PickerInput
               type="datetime-local"
               value={scheduledAt}
               onChange={(e) => setScheduledAt(e.target.value)}

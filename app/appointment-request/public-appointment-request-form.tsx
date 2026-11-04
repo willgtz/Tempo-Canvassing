@@ -1,5 +1,6 @@
 "use client";
 
+import { PickerInput } from "@/components/ui/picker-input";
 import { useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -160,7 +161,7 @@ export function PublicAppointmentRequestForm({
             </div>
             <div className="space-y-1">
               <label className="text-xs font-medium">Date &amp; time *</label>
-              <input
+              <PickerInput
                 type="datetime-local"
                 value={scheduledAt}
                 onChange={(e) => setScheduledAt(e.target.value)}

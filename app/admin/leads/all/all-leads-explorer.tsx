@@ -1,5 +1,6 @@
 "use client";
 
+import { PickerInput } from "@/components/ui/picker-input";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { deleteLead, deleteLeads } from "./actions";
 import { LeadEditPanel } from "./lead-edit-panel";
@@ -226,7 +227,7 @@ export function AllLeadsExplorer({
 
         <div className="space-y-1">
           <label className="text-xs font-medium">Created from</label>
-          <input
+          <PickerInput
             type="date"
             value={dateFrom}
             onChange={(e) => setDateFrom(e.target.value)}
@@ -235,7 +236,7 @@ export function AllLeadsExplorer({
         </div>
         <div className="space-y-1">
           <label className="text-xs font-medium">Created to</label>
-          <input
+          <PickerInput
             type="date"
             value={dateTo}
             onChange={(e) => setDateTo(e.target.value)}
@@ -244,7 +245,7 @@ export function AllLeadsExplorer({
         </div>
         <div className="space-y-1">
           <label className="text-xs font-medium">Updated from</label>
-          <input
+          <PickerInput
             type="date"
             value={updatedFrom}
             onChange={(e) => setUpdatedFrom(e.target.value)}
@@ -253,7 +254,7 @@ export function AllLeadsExplorer({
         </div>
         <div className="space-y-1">
           <label className="text-xs font-medium">Updated to</label>
-          <input
+          <PickerInput
             type="date"
             value={updatedTo}
             onChange={(e) => setUpdatedTo(e.target.value)}

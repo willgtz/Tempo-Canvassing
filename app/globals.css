@@ -52,3 +52,48 @@ body {
 .page-fade-in {
   animation: fade-in-content 0.18s ease-out;
 }
+
+/* iPhone Duo inner screen held sideways. Keep this query in sync with
+   lib/use-duo-screen.ts, which explains what each clause rules out. Everything
+   here sits inside the query, so no other device is affected. */
+@media (pointer: coarse) and (orientation: landscape) and (min-width: 800px) and (max-width: 1023px) and (min-height: 480px) and (max-height: 800px) {
+  /* The app's md: styles treat this width as desktop and shrink fields to 14px,
+     but iOS zooms the page when a field under 16px is focused. */
+  input:not([type="checkbox"]):not([type="radio"]),
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+
+  /* Detail panels sit beside the content instead of covering it. */
+  .duo-side-panel {
+    position: fixed !important;
+    inset: 0 0 0 auto !important;
+    width: 50vw !important;
+    max-width: none !important;
+    height: 100dvh !important;
+    max-height: none !important;
+    border-width: 0 0 0 1px !important;
+    border-radius: 0 !important;
+    translate: none !important;
+    opacity: 1 !important;
+  }
+
+  .duo-side-backdrop {
+    display: none !important;
+  }
+
+  .duo-side-content {
+    padding-right: calc(50vw + 1rem) !important;
+  }
+
+  /* vh ignores Safari's toolbars, which leaves less room on this short screen. */
+  .duo-fit-height {
+    max-height: calc(100dvh - 1rem) !important;
+  }
+
+  /* The scrolling form inside a modal, leaving room for its title and padding. */
+  .duo-fit-form {
+    max-height: calc(100dvh - 7rem) !important;
+  }
+}
