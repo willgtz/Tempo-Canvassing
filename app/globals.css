@@ -105,7 +105,7 @@ html[data-duo-screen] {
 
   /* The short screen can't spare a row above the map, so its controls float on
      it. The right margin keeps clear of the map's own buttons. */
-  .duo-map-host {
+  .duo-float-host {
     position: relative;
   }
 
@@ -126,6 +126,56 @@ html[data-duo-screen] {
 
   .duo-map-toolbar input {
     width: 16rem;
+  }
+
+  /* Appointments: less padding, the admin controls in the tabs row, and the
+     calendar's view switcher and date in one row, so the calendar starts higher
+     on this short screen. */
+  .duo-compact-page {
+    gap: 0.5rem !important;
+    padding: 0.5rem 1rem !important;
+  }
+
+  .duo-compact-gap {
+    gap: 0.5rem !important;
+  }
+
+  .duo-appt-toolbar {
+    position: absolute;
+    top: 0;
+    right: 1rem;
+    justify-content: flex-end;
+  }
+
+  .duo-appt-toolbar input {
+    width: 16rem;
+  }
+
+  /* Beside an open panel, the tabs row has no room for the controls. */
+  .duo-side-content .duo-appt-toolbar {
+    position: static;
+  }
+
+  .duo-calendar {
+    display: grid !important;
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .duo-calendar > :nth-child(n + 3) {
+    grid-column: 1 / -1;
+  }
+
+  .duo-calendar-modes button {
+    flex: none;
+    min-width: 3.5rem;
+  }
+
+  .duo-calendar-title {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    min-width: 0;
   }
 
   /* Detail panels sit beside the content instead of covering it. */

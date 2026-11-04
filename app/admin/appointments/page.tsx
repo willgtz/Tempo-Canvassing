@@ -138,7 +138,7 @@ export default async function AppointmentsPage() {
     // into AppointmentsCalendar — same reasoning as the rep Appointments
     // page: the calendar needs a real height to fill instead of the page
     // just growing to fit 24 hour rows.
-    <div className="mx-auto flex min-h-0 w-full max-w-5xl flex-1 flex-col gap-4 overflow-hidden p-4 md:gap-6 md:p-6">
+    <div className="duo-compact-page mx-auto flex min-h-0 w-full max-w-5xl flex-1 flex-col gap-4 overflow-hidden p-4 md:gap-6 md:p-6">
       {/* Title lives inside AppointmentsExplorer's own compact bar now,
           on every viewport (not just mobile) — the separate desktop-only
           title/description block that used to live here was pushing

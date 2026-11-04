@@ -241,15 +241,15 @@ export function AppointmentsExplorer({
     // else (mobile bar, desktop filter row/card) is shrink-0 chrome, so
     // it never grows past its own content and the calendar gets whatever
     // space is actually left.
-    <div className={cn("flex min-h-0 flex-1 flex-col gap-4 overflow-hidden md:gap-6", selected && "duo-side-content")}>
+    <div className={cn("duo-compact-gap flex min-h-0 flex-1 flex-col gap-4 overflow-hidden md:gap-6", selected && "duo-side-content")}>
       {/* One slim row on every viewport now, not just mobile — search, a
           filter icon (badge = active count) opening a sheet with the
           status/date/closer controls, and an icon view toggle, instead
           of the full three-row Card + separate toolbar row that used to
           only collapse below md. The calendar/list gets the space back
           on desktop too now, not just on a phone. */}
-      <div className="flex shrink-0 items-center justify-between gap-2">
-        {!showMobileSearch && <h1 className="shrink-0 text-lg font-semibold">{title}</h1>}
+      <div className="duo-appt-toolbar flex shrink-0 items-center justify-between gap-2">
+        {!showMobileSearch && <h1 className="duo-hide shrink-0 text-lg font-semibold">{title}</h1>}
         {showMobileSearch ? (
           <>
             <Input
@@ -371,8 +371,8 @@ export function AppointmentsExplorer({
 
       {showMobileFilters && (
         <>
-          <div className="fixed inset-0 z-30 bg-black/30 backdrop-blur-sm" onClick={() => setShowMobileFilters(false)} />
-          <div className="fixed inset-x-0 bottom-0 z-40 duo-fit-height max-h-[80vh] space-y-4 overflow-y-auto rounded-t-2xl border-t border-black/10 bg-white/90 p-5 backdrop-blur-xl sm:inset-x-auto sm:right-6 sm:bottom-6 sm:w-full sm:max-w-md sm:rounded-2xl sm:border dark:border-white/10 dark:bg-neutral-950/90">
+          <div className="duo-side-backdrop fixed inset-0 z-30 bg-black/30 backdrop-blur-sm" onClick={() => setShowMobileFilters(false)} />
+          <div className="duo-side-panel fixed inset-x-0 bottom-0 z-40 max-h-[80vh] space-y-4 overflow-y-auto rounded-t-2xl border-t border-black/10 bg-white/90 p-5 backdrop-blur-xl sm:inset-x-auto sm:right-6 sm:bottom-6 sm:w-full sm:max-w-md sm:rounded-2xl sm:border dark:border-white/10 dark:bg-neutral-950/90">
             <div className="flex items-center justify-between">
               <h2 className="text-base font-semibold">Filters</h2>
               <Button variant="ghost" size="sm" onClick={() => setShowMobileFilters(false)}>

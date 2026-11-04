@@ -33,7 +33,7 @@ export default async function AdminLayout({
     // just moves where the scrollbar lives (from body to this div),
     // not whether the page scrolls.
     <div className="flex h-dvh flex-col overflow-hidden">
-      <nav className="hidden flex-wrap items-center justify-between gap-3 border-b border-black/10 px-6 py-3 md:flex dark:border-white/10">
+      <nav className="duo-compact-nav hidden flex-wrap items-center justify-between gap-3 border-b border-black/10 px-6 py-3 md:flex dark:border-white/10">
         <div className="flex flex-wrap gap-2">
           {NAV_LINKS.map((link) => (
             <Link

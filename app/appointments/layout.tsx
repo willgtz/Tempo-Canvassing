@@ -20,7 +20,7 @@ export default async function AppointmentsLayout({
     // h-screen) tracks mobile Safari's dynamic toolbar so this doesn't
     // over/under-shoot when the address bar shows or hides.
     <div className="flex h-dvh flex-col overflow-hidden">
-      <nav className="hidden flex-wrap items-center justify-between gap-3 border-b border-black/10 px-6 py-3 md:flex dark:border-white/10">
+      <nav className="duo-compact-nav hidden flex-wrap items-center justify-between gap-3 border-b border-black/10 px-6 py-3 md:flex dark:border-white/10">
         <span className="text-sm font-medium">{session.fullName}</span>
         <div className="flex flex-wrap items-center gap-2">
           <Link

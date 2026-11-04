@@ -86,8 +86,8 @@ export function AppointmentsCalendar({
     // participate in a flex-grow height chain from callers that need the
     // calendar to fill available space with its own internal scroll —
     // see the className usage on the rep Appointments page.
-    <div className={cn("flex min-h-0 flex-col rounded-lg border border-black/10 dark:border-white/10", className)}>
-      <div className="flex shrink-0 gap-1 border-b border-black/10 p-2 dark:border-white/10">
+    <div className={cn("duo-calendar flex min-h-0 flex-col rounded-lg border border-black/10 dark:border-white/10", className)}>
+      <div className="duo-calendar-modes flex shrink-0 gap-1 border-b border-black/10 p-2 dark:border-white/10">
         {(["day", "week", "month"] as const).map((mode) => (
           <button
             key={mode}
@@ -103,11 +103,11 @@ export function AppointmentsCalendar({
         ))}
       </div>
 
-      <div className="flex shrink-0 items-center justify-between border-b border-black/10 px-3 py-2 dark:border-white/10">
+      <div className="duo-calendar-period flex shrink-0 items-center justify-between border-b border-black/10 px-3 py-2 dark:border-white/10">
         <button onClick={() => step(-1)} className="p-1 text-black/50 hover:text-black dark:text-white/50 dark:hover:text-white" aria-label="Previous">
           ‹
         </button>
-        <div className="text-center">
+        <div className="duo-calendar-title text-center">
           <p className="text-sm font-semibold">{periodTitle}</p>
           <button
             onClick={() => setReferenceDate(new Date())}

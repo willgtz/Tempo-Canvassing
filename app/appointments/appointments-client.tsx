@@ -53,7 +53,7 @@ export function AppointmentsClient({
   const selected = appointmentsState.find((a) => a.id === selectedId) ?? null;
 
   return (
-    <div className={cn("mx-auto flex min-h-0 w-full max-w-5xl flex-1 flex-col gap-4 overflow-hidden p-4 md:gap-6 md:p-6", selected && "duo-side-content")}>
+    <div className={cn("duo-compact-page mx-auto flex min-h-0 w-full max-w-5xl flex-1 flex-col gap-4 overflow-hidden p-4 md:gap-6 md:p-6", selected && "duo-side-content")}>
       <div className="flex shrink-0 items-center justify-between gap-4">
         <h1 className="text-xl font-semibold">Appointments</h1>
         <div className="flex shrink-0 items-center gap-2">

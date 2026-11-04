@@ -531,7 +531,7 @@ export function LeadsExplorer({
   }
 
   return (
-    <div className="duo-map-host flex flex-1 flex-col">
+    <div className="duo-float-host flex flex-1 flex-col">
       {/* Mobile: one slim row (search + filter + add + view toggle, or the
           select-mode controls), a fraction of the desktop filter bar's
           height — the map is the main feature on a phone and needed most
