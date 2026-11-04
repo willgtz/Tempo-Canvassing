@@ -2,12 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Map, { Source, Layer, Marker, type MapRef, type MapMouseEvent } from "react-map-gl/mapbox";
-import type { CircleLayerSpecification, SymbolLayerSpecification, GeoJSONSource } from "mapbox-gl";
+import type { CircleLayerSpecification, SymbolLayerSpecification, GeoJSONSource, Map as MapboxMap } from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/components/ui/cn";
 import { watchLocation } from "@/lib/geo";
 import { useDuoScreen } from "@/lib/use-duo-screen";
+import { findClosestTapTarget, TOUCH_TAP_REACH_PX } from "@/lib/map-tap-target";
 import type { Disposition, Lead } from "./types";
 
 const STREETS_STYLE = "mapbox://styles/mapbox/streets-v12";
@@ -79,6 +80,50 @@ function readSavedClusterMaxZoom(): number {
 
 type LocatedLead = Lead & { lat: number; lng: number };
 
+// Visible circle sizes in pixels, shared by the map layers below and the
+// touch tap handling, which measures from each circle's visible edge.
+const PIN_RADIUS = 11;
+const CLUSTER_RADIUS_SMALL = 16;
+const CLUSTER_RADIUS_MEDIUM = 20;
+const CLUSTER_RADIUS_LARGE = 26;
+const CIRCLE_STROKE_WIDTH = 2.5;
+const TOUCH_TAP_SEARCH_PX = CLUSTER_RADIUS_LARGE + CIRCLE_STROKE_WIDTH + TOUCH_TAP_REACH_PX;
+
+function visibleRadius(properties: Record<string, unknown> | null): number {
+  if (!properties?.cluster) return PIN_RADIUS + CIRCLE_STROKE_WIDTH;
+  const count = properties.point_count as number;
+  const radius = count >= 50 ? CLUSTER_RADIUS_LARGE : count >= 10 ? CLUSTER_RADIUS_MEDIUM : CLUSTER_RADIUS_SMALL;
+  return radius + CIRCLE_STROKE_WIDTH;
+}
+
+// mapbox-gl's own GeoJSONFeature type and the ambient GeoJSON.Feature type it
+// extends don't resolve cleanly together here (a known friction point with this
+// library's types), so this is a minimal local shape for what's read below.
+type TappedFeature = {
+  properties: Record<string, unknown> | null;
+  geometry: { type: string; coordinates: [number, number] };
+};
+
+// On touch screens, finds the closest pin or cluster around a tap. A mouse
+// click keeps Mapbox's exact hit on the circle.
+function findTouchTarget(map: MapboxMap, point: { x: number; y: number }): TappedFeature | null {
+  const nearby = map.queryRenderedFeatures(
+    [
+      [point.x - TOUCH_TAP_SEARCH_PX, point.y - TOUCH_TAP_SEARCH_PX],
+      [point.x + TOUCH_TAP_SEARCH_PX, point.y + TOUCH_TAP_SEARCH_PX],
+    ],
+    { layers: ["clusters", "unclustered-point"] }
+  ) as unknown as TappedFeature[];
+  return findClosestTapTarget(
+    point.x,
+    point.y,
+    nearby.map((feature) => {
+      const { x, y } = map.project(feature.geometry.coordinates);
+      return { target: feature, x, y, radius: visibleRadius(feature.properties) };
+    })
+  );
+}
+
 // Mapbox's own GeoJSON clustering (GPU-rendered circle/symbol layers) is
 // what actually gives the smooth, native-feeling pan/zoom/cluster-expand
 // behavior — chosen specifically over hand-rolled clustering (like the
@@ -96,8 +141,8 @@ const CLUSTER_LAYER: CircleLayerSpecification = {
   filter: ["has", "point_count"],
   paint: {
     "circle-color": "#2563eb",
-    "circle-radius": ["step", ["get", "point_count"], 16, 10, 20, 50, 26],
-    "circle-stroke-width": 2.5,
+    "circle-radius": ["step", ["get", "point_count"], CLUSTER_RADIUS_SMALL, 10, CLUSTER_RADIUS_MEDIUM, 50, CLUSTER_RADIUS_LARGE],
+    "circle-stroke-width": CIRCLE_STROKE_WIDTH,
     "circle-stroke-color": "#ffffff",
   },
 };
@@ -124,8 +169,8 @@ const UNCLUSTERED_LAYER: CircleLayerSpecification = {
   filter: ["!", ["has", "point_count"]],
   paint: {
     "circle-color": ["get", "color"],
-    "circle-radius": 11,
-    "circle-stroke-width": 2.5,
+    "circle-radius": PIN_RADIUS,
+    "circle-stroke-width": CIRCLE_STROKE_WIDTH,
     // Manual leads get a dark stroke instead of white — a true dashed
     // stroke isn't supported on Mapbox circle layers (only line layers),
     // so this is the closest equivalent distinguisher within a GPU
@@ -433,20 +478,12 @@ export function LeadsMap({
 
   const handleClick = useCallback(
     (e: MapMouseEvent) => {
-      // mapbox-gl's own GeoJSONFeature type and the ambient GeoJSON.Feature
-      // type it extends don't resolve cleanly together here (a known
-      // friction point with this library's types) — casting to a minimal
-      // local shape for exactly what's read below sidesteps that instead
-      // of fighting the upstream type conflict.
-      const feature = e.features?.[0] as
-        | {
-            properties: Record<string, unknown> | null;
-            geometry: { type: string; coordinates: [number, number] };
-          }
-        | undefined;
-      if (!feature) return;
       const map = mapRef.current?.getMap();
       if (!map) return;
+      const feature = window.matchMedia("(pointer: coarse)").matches
+        ? findTouchTarget(map, e.point)
+        : (e.features?.[0] as TappedFeature | undefined);
+      if (!feature) return;
 
       if (feature.properties?.cluster) {
         const source = map.getSource("leads") as GeoJSONSource | undefined;
