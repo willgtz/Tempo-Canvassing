@@ -139,7 +139,7 @@ export function HicReviewScreen({
       <div className="space-y-1.5 rounded-md border border-black/10 p-3 dark:border-white/10">
         <SectionLabel>System</SectionLabel>
         <Row label="System size" value={formatKw(hic.system_size_kw)} />
-        <Row label="Panels" value={`${hic.number_of_panels} × ${hic.panel_brand}`} />
+        <Row label="Panels" value={hic.number_of_panels === 0 ? "None (battery only)" : `${hic.number_of_panels} × ${hic.panel_brand}`} />
         <Row label="Est. first-year production" value={formatKwh(hic.est_production_kwh)} />
         {!isCash && (
           <>

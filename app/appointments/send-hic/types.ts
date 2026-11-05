@@ -189,6 +189,10 @@ export type HicFormInput = {
   installCity: string;
   installState: string;
   installZip: string;
+  // Cash only: a battery with no solar. Saves 0 kW, 0 panels and 0 kWh, and
+  // isn't stored on its own; a saved HIC is battery only when its system
+  // size is 0.
+  batteryOnly: boolean;
   systemSizeKw: string; // kept as string while editing; parsed on submit
   estProductionKwh: string;
   firstYearMonthlyPayment: string;

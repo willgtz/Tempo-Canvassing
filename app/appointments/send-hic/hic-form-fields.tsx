@@ -37,6 +37,7 @@ export function blankFormInput(lead: AppointmentLead | null, financingTypeId: st
     installCity: lead?.city ?? "",
     installState: lead?.state ?? "",
     installZip: lead?.zipcode ?? "",
+    batteryOnly: false,
     systemSizeKw: "",
     estProductionKwh: "",
     firstYearMonthlyPayment: "",
@@ -73,6 +74,7 @@ export function hicToFormInput(hic: Hic): HicFormInput {
     installCity: hic.install_city,
     installState: hic.install_state,
     installZip: hic.install_zip,
+    batteryOnly: hic.system_size_kw === 0,
     systemSizeKw: String(hic.system_size_kw),
     estProductionKwh: String(hic.est_production_kwh),
     firstYearMonthlyPayment: String(hic.first_year_monthly_payment),
@@ -152,8 +154,9 @@ export function HicFormFields({
     if (nextKey === "cash" && (form.amountDueAtSigning.trim() === "" || Number(form.amountDueAtSigning) === 0)) {
       update("amountDueAtSigning", String(CASH_DEFAULT_AMOUNT_DUE_AT_SIGNING));
     }
+    if (nextKey !== "cash" && form.batteryOnly) setBatteryOnly(false);
     if (nextKey === "lightreach") {
-      refillLightreachPrice(form.estProductionKwh, form.kwhRate, form.escalator);
+      refillLightreachPrice(form.batteryOnly ? "" : form.estProductionKwh, form.kwhRate, form.escalator);
     } else if (isLightreach) {
       // The formula's price means nothing for a cash/loan deal — start
       // that price blank instead of carrying it over.
@@ -175,6 +178,14 @@ export function HicFormFields({
     update("lightreachCalculatedPrice", calculated);
     update("contractPriceManual", calculated != null ? calculated.toFixed(2) : "");
     update("contractPriceEditAcknowledged", false);
+  }
+
+  // A battery-only sale has no solar, so system size and production are 0.
+  // Turning it off clears them for the rep to fill in.
+  function setBatteryOnly(on: boolean) {
+    update("batteryOnly", on);
+    update("systemSizeKw", on ? "0" : "");
+    update("estProductionKwh", on ? "0" : "");
   }
 
   function handleProductionChange(value: string) {
@@ -356,6 +367,23 @@ export function HicFormFields({
 
       <div className="space-y-2">
         <SectionLabel>System &amp; pricing</SectionLabel>
+        {isCash && (
+          <label className="flex items-start gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={form.batteryOnly}
+              onChange={(e) => setBatteryOnly(e.target.checked)}
+              className="mt-0.5 h-4 w-4"
+            />
+            <span>
+              Battery only (no solar)
+              <span className="block text-[11px] text-black/50 dark:text-white/50">
+                The contract shows 0 kW, 0 panels and 0 kWh. Put the battery details in Notes.
+              </span>
+            </span>
+          </label>
+        )}
+        {!(isCash && form.batteryOnly) && (
         <div className="grid grid-cols-2 gap-2">
           <div className="space-y-1">
             <label className="text-xs font-medium">System size (kW)</label>
@@ -388,6 +416,7 @@ export function HicFormFields({
             </div>
           )}
         </div>
+        )}
 
         {(isLightreach || isSungageLoan) && (
           <div className="grid grid-cols-3 gap-2">

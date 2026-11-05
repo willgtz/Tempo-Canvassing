@@ -38,15 +38,16 @@ function validateInput(input: HicFormInput, settings: HicSettings, financingType
     if (!isValidPhoneInput(input.coBorrowerPhone)) return "Enter a valid 10-digit co-borrower phone number.";
     if (!isValidEmail(input.coBorrowerEmail)) return "Enter a valid co-borrower email address.";
   }
+  const batteryOnly = isBatteryOnly(input, financingTypeKey);
   const systemSizeKw = Number(input.systemSizeKw);
-  if (!(systemSizeKw > 0)) return "System size must be greater than 0.";
+  if (!batteryOnly && !(systemSizeKw > 0)) return "System size must be greater than 0.";
 
   // Est. production is stamped on every financing type's document. The
   // monthly payment is LightReach/Sungage Loan only (from Sungage's own
   // quote for the loan, just without the escalator/kWh-rate math that's
   // unique to LightReach's PPA formula) — cash has no monthly payment.
   const estProductionKwh = Number(input.estProductionKwh);
-  if (!(estProductionKwh > 0)) return "Estimated first-year production must be greater than 0.";
+  if (!batteryOnly && !(estProductionKwh > 0)) return "Estimated first-year production must be greater than 0.";
   if (financingTypeKey === "lightreach" || financingTypeKey === "sungage_loan") {
     const firstYearMonthlyPayment = Number(input.firstYearMonthlyPayment);
     if (!(firstYearMonthlyPayment >= 0)) return "Monthly payment is required.";
@@ -77,6 +78,11 @@ function validateInput(input: HicFormInput, settings: HicSettings, financingType
     }
   }
   return null;
+}
+
+// Battery-only sales (cash only) have no solar: 0 kW, 0 panels, 0 kWh.
+function isBatteryOnly(input: HicFormInput, financingTypeKey: string): boolean {
+  return financingTypeKey === "cash" && input.batteryOnly === true;
 }
 
 // Blank means "use the default" — the form prefills it, but a draft saved
@@ -174,6 +180,17 @@ async function resolvePanelAndPrice(
     }
   | { ok: false; error: string }
 > {
+  if (isBatteryOnly(input, financingTypeKey)) {
+    return {
+      ok: true,
+      panelBrand: "",
+      panelWattageW: 0,
+      numberOfPanels: 0,
+      contractPrice: Number(input.contractPriceManual),
+      calculatedContractPrice: null,
+    };
+  }
+
   const { data: panelOption, error: panelError } = await supabase
     .from("hic_panel_options")
     .select("model_name, wattage_w")
@@ -228,6 +245,7 @@ async function resolvePanelAndPrice(
 function toRow(input: HicFormInput, settings: HicSettings, financingTypeKey: string) {
   const isSungageLoan = financingTypeKey === "sungage_loan";
   const isCash = financingTypeKey === "cash";
+  const batteryOnly = isBatteryOnly(input, financingTypeKey);
   return {
     language: input.language,
     customer_name: input.customerName.trim(),
@@ -241,8 +259,8 @@ function toRow(input: HicFormInput, settings: HicSettings, financingTypeKey: str
     install_city: input.installCity.trim(),
     install_state: input.installState.trim(),
     install_zip: input.installZip.trim(),
-    system_size_kw: Number(input.systemSizeKw),
-    est_production_kwh: Number(input.estProductionKwh) || 0,
+    system_size_kw: batteryOnly ? 0 : Number(input.systemSizeKw),
+    est_production_kwh: batteryOnly ? 0 : Number(input.estProductionKwh) || 0,
     first_year_monthly_payment: isCash ? 0 : Number(input.firstYearMonthlyPayment) || 0,
     escalator: input.escalator,
     kwh_rate: input.kwhRate,
