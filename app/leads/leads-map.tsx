@@ -9,6 +9,7 @@ import { cn } from "@/components/ui/cn";
 import { watchLocation } from "@/lib/geo";
 import { useDuoScreen } from "@/lib/use-duo-screen";
 import { findClosestTapTarget, TOUCH_TAP_REACH_PX } from "@/lib/map-tap-target";
+import { reportTapResult, TapCheckReadout } from "./tap-check";
 import type { Disposition, Lead } from "./types";
 
 const STREETS_STYLE = "mapbox://styles/mapbox/streets-v12";
@@ -483,6 +484,7 @@ export function LeadsMap({
       const feature = window.matchMedia("(pointer: coarse)").matches
         ? findTouchTarget(map, e.point)
         : (e.features?.[0] as TappedFeature | undefined);
+      reportTapResult(!feature ? "nothing" : feature.properties?.cluster ? "cluster" : "pin");
       if (!feature) return;
 
       if (feature.properties?.cluster) {
@@ -542,6 +544,7 @@ export function LeadsMap({
     // the containing block's actual box, sidestepping the issue — this is
     // what was silently collapsing the whole map to 0 height.
     <div className="absolute inset-0">
+      <TapCheckReadout mapRef={mapRef} mapLoaded={loaded} />
       {mapError && (
         <div className="absolute inset-x-0 top-0 z-10 bg-red-600 px-3 py-1.5 text-center text-xs font-medium text-white">
           Map error: {mapError}
