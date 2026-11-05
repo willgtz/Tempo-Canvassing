@@ -9,7 +9,6 @@ import { cn } from "@/components/ui/cn";
 import { watchLocation } from "@/lib/geo";
 import { useDuoScreen } from "@/lib/use-duo-screen";
 import { findClosestTapTarget, isTapGesture, TOUCH_TAP_REACH_PX } from "@/lib/map-tap-target";
-import { reportTapResult, TapCheckReadout } from "./tap-check";
 import type { Disposition, Lead } from "./types";
 
 const STREETS_STYLE = "mapbox://styles/mapbox/streets-v12";
@@ -512,7 +511,6 @@ export function LeadsMap({
       const isTouch = window.matchMedia("(pointer: coarse)").matches;
       if (isTouch && Date.now() - lastTouchTapAtRef.current < LATE_CLICK_WINDOW_MS) return;
       const feature = isTouch ? findTouchTarget(map, e.point) : (e.features?.[0] as TappedFeature | undefined);
-      reportTapResult(!feature ? "nothing" : feature.properties?.cluster ? "cluster" : "pin");
       if (feature) activateFeature(feature, map);
     },
     [activateFeature]
@@ -557,7 +555,6 @@ export function LeadsMap({
 
       lastTouchTapAtRef.current = Date.now();
       const feature = findTouchTarget(map!, pointIn(e.changedTouches[0]));
-      reportTapResult(!feature ? "nothing" : feature.properties?.cluster ? "cluster" : "pin");
       if (!feature) return;
       // Stops the browser's own click from landing on the panel that's about to
       // open under the finger, which would close it again.
@@ -616,7 +613,6 @@ export function LeadsMap({
     // the containing block's actual box, sidestepping the issue — this is
     // what was silently collapsing the whole map to 0 height.
     <div className="absolute inset-0">
-      <TapCheckReadout mapRef={mapRef} mapLoaded={loaded} />
       {mapError && (
         <div className="absolute inset-x-0 top-0 z-10 bg-red-600 px-3 py-1.5 text-center text-xs font-medium text-white">
           Map error: {mapError}
