@@ -1,7 +1,7 @@
 // A fingertip can't aim as precisely as a mouse, and a map pin is smaller than
 // the 44pt tap target Apple recommends. On touch screens a tap counts if it
 // lands within this distance of the visible edge of a pin or cluster.
-export const TOUCH_TAP_REACH_PX = 11;
+export const TOUCH_TAP_REACH_PX = 20;
 
 export type TapCandidate<T> = {
   target: T;
