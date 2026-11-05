@@ -31,3 +31,11 @@ export function findClosestTapTarget<T>(
   }
   return closest;
 }
+
+// A touch counts as a tap, rather than a drag or long press, within these limits.
+const TAP_MAX_MOVE_PX = 10;
+const TAP_MAX_HELD_MS = 500;
+
+export function isTapGesture(gesture: { movedPx: number; heldMs: number; maxFingers: number }): boolean {
+  return gesture.maxFingers === 1 && gesture.movedPx <= TAP_MAX_MOVE_PX && gesture.heldMs <= TAP_MAX_HELD_MS;
+}

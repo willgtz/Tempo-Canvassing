@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { findClosestTapTarget, TOUCH_TAP_REACH_PX } from "./map-tap-target";
+import { findClosestTapTarget, isTapGesture, TOUCH_TAP_REACH_PX } from "./map-tap-target";
 
 const pin = (target: string, x: number, y: number, radius = 13.5) => ({ target, x, y, radius });
 
@@ -36,5 +36,27 @@ describe("findClosestTapTarget", () => {
 
   it("returns null with nothing nearby", () => {
     expect(findClosestTapTarget(100, 100, [])).toBeNull();
+  });
+});
+
+describe("isTapGesture", () => {
+  it("accepts a still, quick, one-finger touch", () => {
+    expect(isTapGesture({ movedPx: 0, heldMs: 161, maxFingers: 1 })).toBe(true);
+  });
+
+  it("accepts a little finger movement", () => {
+    expect(isTapGesture({ movedPx: 10, heldMs: 120, maxFingers: 1 })).toBe(true);
+  });
+
+  it("rejects a drag", () => {
+    expect(isTapGesture({ movedPx: 11, heldMs: 120, maxFingers: 1 })).toBe(false);
+  });
+
+  it("rejects a long press", () => {
+    expect(isTapGesture({ movedPx: 0, heldMs: 501, maxFingers: 1 })).toBe(false);
+  });
+
+  it("rejects a pinch", () => {
+    expect(isTapGesture({ movedPx: 0, heldMs: 100, maxFingers: 2 })).toBe(false);
   });
 });

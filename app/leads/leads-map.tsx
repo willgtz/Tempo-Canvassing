@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/components/ui/cn";
 import { watchLocation } from "@/lib/geo";
 import { useDuoScreen } from "@/lib/use-duo-screen";
-import { findClosestTapTarget, TOUCH_TAP_REACH_PX } from "@/lib/map-tap-target";
+import { findClosestTapTarget, isTapGesture, TOUCH_TAP_REACH_PX } from "@/lib/map-tap-target";
 import { reportTapResult, TapCheckReadout } from "./tap-check";
 import type { Disposition, Lead } from "./types";
 
@@ -89,6 +89,8 @@ const CLUSTER_RADIUS_MEDIUM = 20;
 const CLUSTER_RADIUS_LARGE = 26;
 const CIRCLE_STROKE_WIDTH = 2.5;
 const TOUCH_TAP_SEARCH_PX = CLUSTER_RADIUS_LARGE + CIRCLE_STROKE_WIDTH + TOUCH_TAP_REACH_PX;
+// How long after a touch tap the browser's own click for it is ignored.
+const LATE_CLICK_WINDOW_MS = 1000;
 
 function visibleRadius(properties: Record<string, unknown> | null): number {
   if (!properties?.cluster) return PIN_RADIUS + CIRCLE_STROKE_WIDTH;
@@ -245,6 +247,7 @@ export function LeadsMap({
 }) {
   const isDuo = useDuoScreen();
   const mapRef = useRef<MapRef>(null);
+  const lastTouchTapAtRef = useRef(0);
   // Mapbox failures (bad token, network/adblock-blocked tile requests,
   // WebGL context loss) otherwise fail silently into a blank canvas with
   // nothing in the UI explaining why — this surfaces whatever Mapbox
@@ -477,16 +480,8 @@ export function LeadsMap({
     [locatedLeads, dispositionById]
   );
 
-  const handleClick = useCallback(
-    (e: MapMouseEvent) => {
-      const map = mapRef.current?.getMap();
-      if (!map) return;
-      const feature = window.matchMedia("(pointer: coarse)").matches
-        ? findTouchTarget(map, e.point)
-        : (e.features?.[0] as TappedFeature | undefined);
-      reportTapResult(!feature ? "nothing" : feature.properties?.cluster ? "cluster" : "pin");
-      if (!feature) return;
-
+  const activateFeature = useCallback(
+    (feature: TappedFeature, map: MapboxMap) => {
       if (feature.properties?.cluster) {
         const source = map.getSource("leads") as GeoJSONSource | undefined;
         const clusterId = feature.properties.cluster_id as number;
@@ -508,6 +503,83 @@ export function LeadsMap({
     },
     [selectMode, onSelectLead, onTogglePin]
   );
+
+  // Mouse clicks only. Touch taps are handled in the effect below.
+  const handleClick = useCallback(
+    (e: MapMouseEvent) => {
+      const map = mapRef.current?.getMap();
+      if (!map) return;
+      const isTouch = window.matchMedia("(pointer: coarse)").matches;
+      if (isTouch && Date.now() - lastTouchTapAtRef.current < LATE_CLICK_WINDOW_MS) return;
+      const feature = isTouch ? findTouchTarget(map, e.point) : (e.features?.[0] as TappedFeature | undefined);
+      reportTapResult(!feature ? "nothing" : feature.properties?.cluster ? "cluster" : "pin");
+      if (feature) activateFeature(feature, map);
+    },
+    [activateFeature]
+  );
+
+  // On a real iPhone Duo, Mapbox's click event often never ran for a perfectly
+  // still tap on a pin, so touch screens read the tap from the touch events
+  // themselves. Listens on the canvas so route-building markers keep their own
+  // taps.
+  useEffect(() => {
+    if (!loaded || selectMode || isStaging || !window.matchMedia("(pointer: coarse)").matches) return;
+    const map = mapRef.current?.getMap();
+    if (!map) return;
+    const canvas = map.getCanvas();
+    let gesture: { x: number; y: number; at: number; movedPx: number; maxFingers: number } | null = null;
+
+    const pointIn = (touch: Touch) => {
+      const rect = canvas.getBoundingClientRect();
+      return { x: touch.clientX - rect.left, y: touch.clientY - rect.top };
+    };
+
+    function onTouchStart(e: TouchEvent) {
+      if (gesture) {
+        gesture.maxFingers = Math.max(gesture.maxFingers, e.touches.length);
+        return;
+      }
+      gesture = { ...pointIn(e.touches[0]), at: performance.now(), movedPx: 0, maxFingers: e.touches.length };
+    }
+
+    function onTouchMove(e: TouchEvent) {
+      if (!gesture) return;
+      const point = pointIn(e.touches[0]);
+      gesture.movedPx = Math.max(gesture.movedPx, Math.hypot(point.x - gesture.x, point.y - gesture.y));
+      gesture.maxFingers = Math.max(gesture.maxFingers, e.touches.length);
+    }
+
+    function onTouchEnd(e: TouchEvent) {
+      if (!gesture || e.touches.length > 0) return;
+      const finished = gesture;
+      gesture = null;
+      if (!isTapGesture({ ...finished, heldMs: performance.now() - finished.at })) return;
+
+      lastTouchTapAtRef.current = Date.now();
+      const feature = findTouchTarget(map!, pointIn(e.changedTouches[0]));
+      reportTapResult(!feature ? "nothing" : feature.properties?.cluster ? "cluster" : "pin");
+      if (!feature) return;
+      // Stops the browser's own click from landing on the panel that's about to
+      // open under the finger, which would close it again.
+      if (e.cancelable) e.preventDefault();
+      activateFeature(feature, map!);
+    }
+
+    function onTouchCancel() {
+      gesture = null;
+    }
+
+    canvas.addEventListener("touchstart", onTouchStart, { passive: true });
+    canvas.addEventListener("touchmove", onTouchMove, { passive: true });
+    canvas.addEventListener("touchend", onTouchEnd, { passive: false });
+    canvas.addEventListener("touchcancel", onTouchCancel, { passive: true });
+    return () => {
+      canvas.removeEventListener("touchstart", onTouchStart);
+      canvas.removeEventListener("touchmove", onTouchMove);
+      canvas.removeEventListener("touchend", onTouchEnd);
+      canvas.removeEventListener("touchcancel", onTouchCancel);
+    };
+  }, [loaded, selectMode, isStaging, activateFeature]);
 
   if (!apiKey) {
     return (

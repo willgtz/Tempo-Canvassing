@@ -87,7 +87,7 @@ export function TapCheckReadout({ mapRef, mapLoaded }: { mapRef: RefObject<MapRe
           `#${count}`,
           `finger ${Math.round(tap.moved)}pt`,
           `${heldMs}ms`,
-          record?.clickFired ? "TAP COUNTED" : "TAP NOT COUNTED",
+          record?.clickFired || record?.result !== "none" ? "TAP COUNTED" : "TAP NOT COUNTED",
           `found: ${record?.result ?? "none"}`,
           `pin ${pinNote}`,
           `map moved ${mapShift}pt`,
