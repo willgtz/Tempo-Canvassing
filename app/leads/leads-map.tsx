@@ -6,7 +6,7 @@ import type { CircleLayerSpecification, SymbolLayerSpecification, GeoJSONSource,
 import "mapbox-gl/dist/mapbox-gl.css";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/components/ui/cn";
-import { watchLocation } from "@/lib/geo";
+import { getCurrentLocation, watchLocation } from "@/lib/geo";
 import { useDuoScreen } from "@/lib/use-duo-screen";
 import { findClosestTapTarget, isTapGesture, TOUCH_TAP_REACH_PX } from "@/lib/map-tap-target";
 import type { Disposition, Lead } from "./types";
@@ -355,6 +355,10 @@ export function LeadsMap({
 
   const [myLocation, setMyLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [locationError, setLocationError] = useState<string | null>(null);
+  // Set when a tap on "center on me" couldn't get a location, so the reason
+  // shows on screen instead of only in a tooltip phones never display.
+  const [locationNotice, setLocationNotice] = useState<string | null>(null);
+  const [locating, setLocating] = useState(false);
 
   // Continuous tracking while the map is mounted — gives a live "where am
   // I" dot (like MapKit's built-in blue dot) without the rep needing to
@@ -600,9 +604,27 @@ export function LeadsMap({
   // Matches the iOS app's "center on me" map control. myLocation is kept
   // current by the continuous watchLocation effect above, so this just
   // pans/flies there — no separate fetch needed on every tap.
-  function handleLocateMe() {
-    if (!myLocation) return;
-    mapRef.current?.getMap().flyTo({ center: [myLocation.lng, myLocation.lat], zoom: 15, duration: 800 });
+  // With no location yet, a tap asks again (which can bring back the
+  // permission prompt) and explains on screen if it still fails.
+  async function handleLocateMe() {
+    if (myLocation) {
+      setLocationNotice(null);
+      mapRef.current?.getMap().flyTo({ center: [myLocation.lng, myLocation.lat], zoom: 15, duration: 800 });
+      return;
+    }
+    if (locating) return;
+    setLocating(true);
+    setLocationNotice(null);
+    try {
+      const loc = await getCurrentLocation();
+      setMyLocation(loc);
+      setLocationError(null);
+      mapRef.current?.getMap().flyTo({ center: [loc.lng, loc.lat], zoom: 15, duration: 800 });
+    } catch (err) {
+      setLocationNotice(err instanceof Error ? err.message : "Couldn't get your location.");
+    } finally {
+      setLocating(false);
+    }
   }
 
   return (
@@ -616,6 +638,21 @@ export function LeadsMap({
       {mapError && (
         <div className="absolute inset-x-0 top-0 z-10 bg-red-600 px-3 py-1.5 text-center text-xs font-medium text-white">
           Map error: {mapError}
+        </div>
+      )}
+      {locationNotice && (
+        <div
+          role="alert"
+          className="absolute left-2 right-12 top-2 z-20 flex items-start gap-2 rounded-lg border border-black/10 bg-white/95 p-2.5 text-xs text-black/80 shadow-lg dark:border-white/10 dark:bg-neutral-950/95 dark:text-white/80"
+        >
+          <p className="flex-1">{locationNotice}</p>
+          <button
+            type="button"
+            onClick={() => setLocationNotice(null)}
+            className="shrink-0 rounded px-1.5 font-medium text-blue-600 dark:text-blue-400"
+          >
+            OK
+          </button>
         </div>
       )}
       {stuck && !loaded && (
@@ -667,12 +704,14 @@ export function LeadsMap({
         </button>
         <button
           onClick={handleLocateMe}
-          disabled={!myLocation}
-          className="flex h-8 w-8 items-center justify-center rounded-full border border-black/10 bg-white/90 text-black/60 shadow active:bg-black/10 disabled:opacity-50 dark:border-white/10 dark:bg-neutral-950/90 dark:text-white/60 dark:active:bg-white/20"
+          className={cn(
+            "flex h-8 w-8 items-center justify-center rounded-full border border-black/10 bg-white/90 text-black/60 shadow active:bg-black/10 dark:border-white/10 dark:bg-neutral-950/90 dark:text-white/60 dark:active:bg-white/20",
+            !myLocation && "opacity-50"
+          )}
           aria-label="Center on my location"
           title={locationError ?? (myLocation ? "Center on my location" : "Finding your location…")}
         >
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className={cn("h-4 w-4", !myLocation && "animate-pulse")}>
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className={cn("h-4 w-4", (!myLocation || locating) && "animate-pulse")}>
             <circle cx="12" cy="12" r="3" />
             <path strokeLinecap="round" d="M12 2v3M12 19v3M2 12h3M19 12h3" />
           </svg>

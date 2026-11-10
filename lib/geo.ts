@@ -11,15 +11,25 @@ export function getCurrentLocation(): Promise<{ lat: number; lng: number }> {
     }
     navigator.geolocation.getCurrentPosition(
       (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-      (err) =>
-        reject(
-          new Error(
-            err.message || "Couldn't get your location — allow location access and try again."
-          )
-        ),
+      (err) => reject(new Error(locationErrorMessage(err))),
       { enableHighAccuracy: true, timeout: 10000 }
     );
   });
+}
+
+// The browser's own error text is technical ("User denied Geolocation"),
+// so each kind of failure gets a plain explanation of how to fix it.
+export function locationErrorMessage(err: GeolocationPositionError): string {
+  switch (err.code) {
+    case err.PERMISSION_DENIED:
+      return "Location is blocked for this site. On iPhone: Settings > Privacy & Security > Location Services > Safari Websites > While Using the App, then reload. On Android: tap the icon left of the address bar > Permissions > Location > Allow.";
+    case err.POSITION_UNAVAILABLE:
+      return "Your phone couldn't find its location. Check that Location Services is on, then try again.";
+    case err.TIMEOUT:
+      return "Finding your location is taking too long. Move somewhere with better signal and try again.";
+    default:
+      return "Couldn't get your location. Allow location access and try again.";
+  }
 }
 
 // Continuous location tracking — backs the Leads map's live "where am I"
@@ -40,10 +50,7 @@ export function watchLocation(
   }
   const watchId = navigator.geolocation.watchPosition(
     (pos) => onUpdate({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-    (err) =>
-      onError(
-        err.message || "Couldn't get your location — allow location access and try again."
-      ),
+    (err) => onError(locationErrorMessage(err)),
     { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 }
   );
   return () => navigator.geolocation.clearWatch(watchId);
