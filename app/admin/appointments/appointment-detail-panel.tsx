@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useSlideIn } from "@/lib/use-slide-in";
 import { cn } from "@/components/ui/cn";
 import { AddressActionsMenu } from "@/components/address-actions-menu";
+import { CscOriginBanner } from "@/components/csc-origin-banner";
 import {
   addAppointmentNote,
   deleteAppointment,
@@ -403,6 +404,11 @@ export function AppointmentDetailPanel({
         {lead?.phone && (
           <p className="mt-1 text-sm text-black/70 dark:text-white/70">{lead.phone}</p>
         )}
+        <CscOriginBanner
+          originAppointmentId={appointment.origin_appointment_id}
+          leadId={appointment.lead_id}
+          isAdmin
+        />
       </div>
     ),
 

@@ -9,7 +9,9 @@ export type CsvField =
   | "zipcode"
   | "phone"
   | "email"
-  | "priorSaleDate";
+  | "priorSaleDate"
+  | "status"
+  | "notes";
 
 export const FIELD_LABELS: Record<CsvField, string> = {
   firstName: "First Name",
@@ -21,6 +23,8 @@ export const FIELD_LABELS: Record<CsvField, string> = {
   phone: "Phone",
   email: "Email",
   priorSaleDate: "Sold Date",
+  status: "Status",
+  notes: "Notes",
 };
 
 // Fields the insert can't proceed without (leads.address_line / leads.zipcode
@@ -59,6 +63,11 @@ const EXACT_ALIASES: Record<CsvField, string[]> = {
     "lastsolddate",
     "saleddate",
   ],
+  // Matched against disposition names at upload; a blank or unknown value
+  // falls back to the disposition picked for the whole file.
+  status: ["status", "leadstatus", "disposition", "dispo", "subdispo"],
+  // Becomes the lead's first note.
+  notes: ["notes", "note", "comments", "comment", "details", "apptnotes", "appointmentnotes"],
 };
 
 // Looser fallback: header just needs to *contain* one of these. Only used
@@ -74,6 +83,8 @@ const SUBSTRING_ALIASES: Partial<Record<CsvField, string[]>> = {
   phone: ["phone", "mobile", "cell"],
   email: ["email"],
   priorSaleDate: ["sold", "saledate"],
+  status: ["status", "dispo"],
+  notes: ["note", "comment"],
 };
 
 const FIELD_ORDER: CsvField[] = [
@@ -86,6 +97,8 @@ const FIELD_ORDER: CsvField[] = [
   "phone",
   "email",
   "priorSaleDate",
+  "status",
+  "notes",
 ];
 
 export function normalizeHeader(header: string): string {
@@ -180,6 +193,8 @@ export function rowsToPreview(
       phone: cell(row, "phone", fieldMap) || null,
       email: cell(row, "email", fieldMap) || null,
       priorSaleDate: parseDateCell(cell(row, "priorSaleDate", fieldMap)),
+      status: cell(row, "status", fieldMap) || null,
+      notes: cell(row, "notes", fieldMap) || null,
       validationError: missing.length
         ? `Missing required ${missing.join(" and ")}`
         : null,

@@ -11,12 +11,15 @@ const TABS = [
   { href: "/admin/leads/archived", label: "Archived" },
 ];
 
-export function LeadsSubnav() {
+const SUPER_ADMIN_TABS = [{ href: "/admin/leads/special-lists", label: "Special Lists" }];
+
+export function LeadsSubnav({ isSuperAdmin }: { isSuperAdmin: boolean }) {
   const pathname = usePathname();
+  const tabs = isSuperAdmin ? [...TABS, ...SUPER_ADMIN_TABS] : TABS;
 
   return (
-    <nav className="flex gap-4 border-b border-black/10 px-6 py-2 text-sm dark:border-white/10">
-      {TABS.map((tab) => {
+    <nav className="flex gap-4 overflow-x-auto whitespace-nowrap border-b border-black/10 px-6 py-2 text-sm dark:border-white/10">
+      {tabs.map((tab) => {
         const active = pathname === tab.href || pathname.startsWith(`${tab.href}/`);
         return (
           <Link

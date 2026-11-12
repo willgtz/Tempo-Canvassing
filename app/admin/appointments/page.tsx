@@ -56,7 +56,7 @@ export default async function AppointmentsPage() {
     supabase
       .from("appointments")
       .select(
-        "id, lead_id, scheduled_at, status_id, custom_field_responses, created_by, created_at, updated_at, deal_submitted_at"
+        "id, lead_id, scheduled_at, status_id, custom_field_responses, created_by, created_at, updated_at, deal_submitted_at, origin_appointment_id"
       )
       .order("scheduled_at", { ascending: true }),
     supabase

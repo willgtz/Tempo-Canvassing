@@ -15,6 +15,9 @@ export type Lead = {
   is_manual: boolean;
   entered_by: string | null;
   entered_by_name: string | null;
+  // Set for leads in a special list (e.g. Tempo CSC). Their main status
+  // is the list's name; disposition_id is their sub-dispo.
+  special_list_id: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -24,6 +27,8 @@ export type Disposition = {
   name: string;
   color: string;
   sort_order: number;
+  // Only usable on special list leads (e.g. Dead Lead).
+  special_only: boolean;
 };
 
 // Every active profile — used to populate the rep filter dropdown so a

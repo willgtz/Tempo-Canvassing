@@ -28,11 +28,18 @@ type Disposition = {
   name: string;
   color: string;
   is_default: boolean;
+  special_only: boolean;
 };
+
+type SpecialListOption = { id: string; name: string; color: string };
 
 const POLL_MS = 1500;
 
-function toCommitRow(row: PreviewRow): CommitRow {
+function normalizeStatus(value: string) {
+  return value.trim().toLowerCase();
+}
+
+function toCommitRow(row: PreviewRow, dispositionIdByName: Map<string, string>): CommitRow {
   return {
     firstName: row.firstName,
     lastName: row.lastName,
@@ -43,10 +50,24 @@ function toCommitRow(row: PreviewRow): CommitRow {
     phone: row.phone,
     email: row.email,
     priorSaleDate: row.priorSaleDate,
+    dispositionId: row.status ? (dispositionIdByName.get(normalizeStatus(row.status)) ?? null) : null,
+    notes: row.notes,
   };
 }
 
-export function UploadLeadsClient({ dispositions }: { dispositions: Disposition[] }) {
+export function UploadLeadsClient({
+  dispositions,
+  specialLists,
+  initialListId,
+}: {
+  dispositions: Disposition[];
+  // Empty unless the uploader is a super admin.
+  specialLists: SpecialListOption[];
+  initialListId: string;
+}) {
+  // "" = the regular new-homeowner pool; otherwise a special list id.
+  const [listId, setListId] = useState(initialListId);
+  const [duplicateCount, setDuplicateCount] = useState(0);
   const [phase, setPhase] = useState<Phase>("idle");
   const [filename, setFilename] = useState("");
   const [rows, setRows] = useState<PreviewRow[]>([]);
@@ -72,6 +93,24 @@ export function UploadLeadsClient({ dispositions }: { dispositions: Disposition[
   const validRows = useMemo(() => rows.filter((r) => !r.validationError), [rows]);
   const skippedRows = useMemo(() => rows.filter((r) => r.validationError), [rows]);
   const missingColumns = useMemo(() => missingRequiredColumns(columnMap), [columnMap]);
+
+  // Special-only sub-dispos (Dead Lead) are only offered for special lists.
+  const availableDispositions = useMemo(
+    () => (listId ? dispositions : dispositions.filter((d) => !d.special_only)),
+    [dispositions, listId]
+  );
+  const dispositionIdByName = useMemo(
+    () => new Map(availableDispositions.map((d) => [normalizeStatus(d.name), d.id])),
+    [availableDispositions]
+  );
+  const dispositionNameById = useMemo(() => new Map(dispositions.map((d) => [d.id, d.name])), [dispositions]);
+  const effectiveDispositionId = availableDispositions.some((d) => d.id === dispositionId) ? dispositionId : "";
+  const unknownStatusCount = validRows.filter(
+    (r) => r.status && !dispositionIdByName.has(normalizeStatus(r.status))
+  ).length;
+  const hasStatusColumn = Boolean(columnMap.status);
+  const hasNotesColumn = Boolean(columnMap.notes);
+  const selectedList = specialLists.find((l) => l.id === listId) ?? null;
 
   useEffect(() => {
     if (phase !== "processing" || !batchId) return;
@@ -175,6 +214,7 @@ export function UploadLeadsClient({ dispositions }: { dispositions: Disposition[
     setRawData([]);
     setBatchId(null);
     setProgress(null);
+    setDuplicateCount(0);
     if (fileInputRef.current) fileInputRef.current.value = "";
   }
 
@@ -182,13 +222,19 @@ export function UploadLeadsClient({ dispositions }: { dispositions: Disposition[
     setCommitError(null);
     setPhase("committing");
     startCommit(async () => {
-      const result = await commitLeadBatch(filename, validRows.map(toCommitRow), dispositionId || null);
+      const result = await commitLeadBatch(
+        filename,
+        validRows.map((row) => toCommitRow(row, dispositionIdByName)),
+        effectiveDispositionId || null,
+        listId || null
+      );
       if (!result.ok) {
         setCommitError(result.error);
         setPhase("ready");
         return;
       }
       setBatchId(result.batchId);
+      setDuplicateCount(result.duplicateCount);
       setProgress({ total: result.insertedCount, geocoded: 0, rooftop: 0, failed: 0 });
       setPhase("processing");
     });
@@ -200,12 +246,39 @@ export function UploadLeadsClient({ dispositions }: { dispositions: Disposition[
         <h1 className="text-xl font-semibold">Upload Leads</h1>
         <p className="text-sm text-black/60 dark:text-white/60">
           CSV columns recognized: first name, last name, address, city, state,
-          zip, phone, email, sold date. Address and zip are required. Columns
+          zip, phone, email, sold date, status, notes. Address and zip are
+          required. Status sets each lead&apos;s disposition (matched by name);
+          Notes becomes the lead&apos;s first note. Columns
           are matched by header name automatically, but can be reassigned
           manually after upload if a header doesn&apos;t match what&apos;s
           actually in it. Max {MAX_ROWS} rows per upload.
         </p>
       </div>
+
+      {specialLists.length > 0 && (
+        <div className="space-y-1 rounded-lg border border-black/10 p-4 dark:border-white/10">
+          <label className="text-xs font-medium">Upload to</label>
+          <select
+            value={listId}
+            onChange={(e) => setListId(e.target.value)}
+            disabled={phase !== "idle" && phase !== "ready"}
+            className="block w-full max-w-sm rounded border border-black/15 px-2 py-1.5 text-sm dark:border-white/20 dark:bg-transparent"
+          >
+            <option value="">New Homeowner Leads (regular)</option>
+            {specialLists.map((l) => (
+              <option key={l.id} value={l.id}>
+                ★ {l.name} (special list)
+              </option>
+            ))}
+          </select>
+          {selectedList && (
+            <p className="text-xs text-black/60 dark:text-white/60">
+              These leads only show for people with access to {selectedList.name} (and admins), as stars on the map.
+              Addresses already in the list are skipped.
+            </p>
+          )}
+        </div>
+      )}
 
       {phase === "idle" && (
         <div className="rounded-lg border border-dashed border-black/20 p-8 text-center dark:border-white/20">
@@ -295,6 +368,8 @@ export function UploadLeadsClient({ dispositions }: { dispositions: Disposition[
                   <th className="px-3 py-2 font-medium">Address</th>
                   <th className="px-3 py-2 font-medium">CSV Zip</th>
                   <th className="px-3 py-2 font-medium">Sold Date</th>
+                  {hasStatusColumn && <th className="px-3 py-2 font-medium">Status</th>}
+                  {hasNotesColumn && <th className="px-3 py-2 font-medium">Notes</th>}
                 </tr>
               </thead>
               <tbody>
@@ -317,6 +392,24 @@ export function UploadLeadsClient({ dispositions }: { dispositions: Disposition[
                     </td>
                     <td className="px-3 py-2">{row.zipcode || "—"}</td>
                     <td className="px-3 py-2">{row.priorSaleDate ?? "—"}</td>
+                    {hasStatusColumn && (
+                      <td className="px-3 py-2">
+                        {!row.status ? (
+                          <span className="text-black/40 dark:text-white/40">Default</span>
+                        ) : dispositionIdByName.has(normalizeStatus(row.status)) ? (
+                          dispositionNameById.get(dispositionIdByName.get(normalizeStatus(row.status))!)
+                        ) : (
+                          <span className="text-amber-600 dark:text-amber-400">
+                            &quot;{row.status}&quot; not found — uses default
+                          </span>
+                        )}
+                      </td>
+                    )}
+                    {hasNotesColumn && (
+                      <td className="max-w-64 truncate px-3 py-2" title={row.notes ?? undefined}>
+                        {row.notes ?? "—"}
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
@@ -327,16 +420,17 @@ export function UploadLeadsClient({ dispositions }: { dispositions: Disposition[
             <div className="flex items-center justify-between gap-4">
               <div className="space-y-1">
                 <label className="text-xs font-medium">
-                  Apply disposition to all {validRows.length} lead
-                  {validRows.length === 1 ? "" : "s"}
+                  {hasStatusColumn
+                    ? `Default ${listId ? "sub-dispo" : "disposition"} (rows with no matching Status)`
+                    : `Apply ${listId ? "sub-dispo" : "disposition"} to all ${validRows.length} lead${validRows.length === 1 ? "" : "s"}`}
                 </label>
                 <select
-                  value={dispositionId}
+                  value={effectiveDispositionId}
                   onChange={(e) => setDispositionId(e.target.value)}
                   className="block rounded border border-black/15 px-2 py-1 text-sm dark:border-white/20 dark:bg-transparent"
                 >
                   <option value="">No disposition</option>
-                  {dispositions.map((d) => (
+                  {availableDispositions.map((d) => (
                     <option key={d.id} value={d.id}>
                       {d.name}
                       {d.is_default ? " (default)" : ""}
@@ -357,6 +451,8 @@ export function UploadLeadsClient({ dispositions }: { dispositions: Disposition[
             <p className="text-sm text-black/60 dark:text-white/60">
               Addresses will be geocoded in the background right after — no
               need to wait here.
+              {unknownStatusCount > 0 &&
+                ` ${unknownStatusCount} row${unknownStatusCount === 1 ? "" : "s"} have a Status that doesn't match any disposition and will use the default.`}
               {skippedRows.length > 0 &&
                 ` ${skippedRows.length} row${skippedRows.length === 1 ? "" : "s"} will be skipped.`}
             </p>
@@ -410,6 +506,11 @@ export function UploadLeadsClient({ dispositions }: { dispositions: Disposition[
           {phase === "done" && (
             <div className="rounded-lg border border-black/10 p-4 text-sm dark:border-white/10">
               <p className="font-medium">Done.</p>
+              {duplicateCount > 0 && (
+                <p className="mt-1 text-black/70 dark:text-white/70">
+                  {duplicateCount} address{duplicateCount === 1 ? " was" : "es were"} already in {selectedList?.name ?? "the list"} and skipped.
+                </p>
+              )}
               <ul className="mt-2 space-y-1 text-black/70 dark:text-white/70">
                 <li>{progress.rooftop} rooftop-accurate</li>
                 <li>

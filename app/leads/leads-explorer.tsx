@@ -18,8 +18,14 @@ import { usePersistedLeadsFilters } from "./use-persisted-leads-filters";
 import { usePersistedActiveRoute } from "./use-persisted-active-route";
 import { updateLeadLocation, toggleRouteStopVisited } from "./actions";
 import type { AppointmentFormField, Disposition, Lead, Profile, RouteStop } from "./types";
+import type { SpecialList } from "@/lib/special-lists";
+import { StarIcon } from "./star-icon";
 
 type ViewMode = "map" | "list";
+
+// Key for "regular leads" in the lead-list filter; every other key is a
+// special list id.
+const REGULAR_LIST_KEY = "regular";
 
 // Overall selection cap — the server (app/api/leads/route/route.ts) splits
 // anything beyond Google's own 24-leads-per-request limit into sequential
@@ -38,6 +44,9 @@ export function LeadsExplorer({
   canArchive,
   mapboxAccessToken,
   doorKnockRadiusFeet,
+  specialLists,
+  soldSpecialLeadIds,
+  specialListAccess,
 }: {
   leads: Lead[];
   dispositions: Disposition[];
@@ -49,12 +58,20 @@ export function LeadsExplorer({
   canArchive: boolean;
   mapboxAccessToken: string;
   doorKnockRadiusFeet: number;
+  // Only the lists this user can see — empty for anyone without access,
+  // which also hides the lead-list filter entirely.
+  specialLists: SpecialList[];
+  soldSpecialLeadIds: string[];
+  specialListAccess: { list_id: string; user_id: string }[];
 }) {
   const [viewMode, setViewMode] = useState<ViewMode>("map");
   // Empty set means "show all" — same convention the Appointments status
   // filter already uses. Multi-select (not a single dropdown value) so a
   // rep can filter to e.g. "Not Home" + "Callback" at once.
   const [dispositionFilter, setDispositionFilter] = useState<Set<string>>(new Set());
+  // Empty = every lead this user can see; otherwise REGULAR_LIST_KEY
+  // and/or special list ids.
+  const [listFilter, setListFilter] = useState<Set<string>>(new Set());
   const [zipFilter, setZipFilter] = useState<string[]>([]);
   const [repFilter, setRepFilter] = useState("all");
   const [dateFrom, setDateFrom] = useState("");
@@ -147,6 +164,14 @@ export function LeadsExplorer({
     // at mount — restoring here can still safely override viewMode itself
     // (which tab was open), just not selectedLeadId (left untouched).
     setDispositionFilter(new Set(restoredFilters.dispositionFilter));
+    // Drops any list this user has since lost access to.
+    setListFilter(
+      new Set(
+        restoredFilters.listFilter.filter(
+          (key) => key === REGULAR_LIST_KEY || specialLists.some((l) => l.id === key)
+        )
+      )
+    );
     setZipFilter(restoredFilters.zipFilter);
     setRepFilter(restoredFilters.repFilter);
     setDateFrom(restoredFilters.dateFrom);
@@ -156,11 +181,12 @@ export function LeadsExplorer({
     setAppliedAddressQuery(restoredFilters.appliedAddressQuery);
     setAddressQuery(restoredFilters.appliedAddressQuery);
     setViewMode(restoredFilters.viewMode);
-  }, [restoredFilters]);
+  }, [restoredFilters, specialLists]);
 
   useEffect(() => {
     savePersistedFilters({
       dispositionFilter: Array.from(dispositionFilter),
+      listFilter: Array.from(listFilter),
       zipFilter,
       repFilter,
       dateFrom,
@@ -172,6 +198,7 @@ export function LeadsExplorer({
     });
   }, [
     dispositionFilter,
+    listFilter,
     zipFilter,
     repFilter,
     dateFrom,
@@ -222,6 +249,22 @@ export function LeadsExplorer({
     () => new Map(dispositions.map((d) => [d.id, d])),
     [dispositions]
   );
+
+  const specialListById = useMemo(() => new Map(specialLists.map((l) => [l.id, l])), [specialLists]);
+  const hasSpecialAccess = specialLists.length > 0;
+  // Special-only sub-dispos (Dead Lead) never apply to regular leads, and
+  // only people with a list need to filter by them.
+  const regularDispositions = useMemo(() => dispositions.filter((d) => !d.special_only), [dispositions]);
+  const filterDispositions = hasSpecialAccess ? dispositions : regularDispositions;
+  const soldSpecialLeadIdSet = useMemo(() => new Set(soldSpecialLeadIds), [soldSpecialLeadIds]);
+  const specialAccessByList = useMemo(() => {
+    const byList = new Map<string, Set<string>>();
+    for (const row of specialListAccess) {
+      if (!byList.has(row.list_id)) byList.set(row.list_id, new Set());
+      byList.get(row.list_id)!.add(row.user_id);
+    }
+    return byList;
+  }, [specialListAccess]);
 
   // Every active profile, not just reps who hold a direct zip
   // assignment — a rep can now also see leads purely through team-based
@@ -308,15 +351,19 @@ export function LeadsExplorer({
 
     return leadsState.filter((lead) => {
       if (dispositionFilter.size > 0 && !dispositionFilter.has(lead.disposition_id ?? "")) return false;
+      if (listFilter.size > 0 && !listFilter.has(lead.special_list_id ?? REGULAR_LIST_KEY)) return false;
       if (zipSet && !zipSet.has(lead.zipcode)) return false;
 
       // Mirrors leads_select's real logic (zip visibility for regular
       // leads; own/teammate entry or a team lead's own zip for manual
-      // ones) minus its appointment-assignment clause — a lead
-      // visible to this rep ONLY because they're assigned to an
-      // appointment on it won't show up here. Accepted simplification
-      // for a "what can they broadly see" preview.
-      if (repFilter !== "all" && effectiveRepZips) {
+      // ones; list access for special leads, which ignore zips) minus
+      // its appointment-assignment clause — a lead visible to this rep
+      // ONLY because they're assigned to an appointment on it won't
+      // show up here. Accepted simplification for a "what can they
+      // broadly see" preview.
+      if (repFilter !== "all" && lead.special_list_id) {
+        if (!specialAccessByList.get(lead.special_list_id)?.has(repFilter)) return false;
+      } else if (repFilter !== "all" && effectiveRepZips) {
         const isManualCarveOut =
           lead.is_manual &&
           (lead.entered_by === repFilter ||
@@ -343,6 +390,8 @@ export function LeadsExplorer({
   }, [
     leadsState,
     dispositionFilter,
+    listFilter,
+    specialAccessByList,
     zipFilter,
     repFilter,
     effectiveRepZips,
@@ -355,10 +404,26 @@ export function LeadsExplorer({
     appliedAddressQuery,
   ]);
 
-  const withoutLocation = filteredLeads.filter((l) => l.lat == null || l.lng == null).length;
+  // A special lead leaves the map (but stays in List view, for tracking)
+  // once it's marked with one of its list's map-hiding sub-dispos (Dead
+  // Lead) or an appointment set from it was marked sold.
+  const mapLeads = useMemo(
+    () =>
+      filteredLeads.filter((lead) => {
+        if (!lead.special_list_id) return true;
+        if (soldSpecialLeadIdSet.has(lead.id)) return false;
+        const list = specialListById.get(lead.special_list_id);
+        return !(lead.disposition_id && list?.map_hidden_disposition_ids.includes(lead.disposition_id));
+      }),
+    [filteredLeads, soldSpecialLeadIdSet, specialListById]
+  );
+  const hiddenFromMapCount = filteredLeads.length - mapLeads.length;
+
+  const withoutLocation = mapLeads.filter((l) => l.lat == null || l.lng == null).length;
 
   const activeFilterCount =
     (dispositionFilter.size > 0 ? 1 : 0) +
+    (listFilter.size > 0 ? 1 : 0) +
     (repFilter !== "all" ? 1 : 0) +
     (zipFilter.length > 0 ? 1 : 0) +
     (dateFrom ? 1 : 0) +
@@ -372,6 +437,7 @@ export function LeadsExplorer({
 
   function handleClearFilters() {
     setDispositionFilter(new Set());
+    setListFilter(new Set());
     setZipFilter([]);
     setRepFilter("all");
     setDateFrom("");
@@ -390,6 +456,45 @@ export function LeadsExplorer({
       return next;
     });
   }
+
+  function toggleList(key: string) {
+    setListFilter((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
+
+  const listFilterSection = hasSpecialAccess && (
+    <div className="space-y-1">
+      <label className="text-xs font-medium">Lead lists</label>
+      <div className="flex flex-wrap items-center gap-2">
+        {[
+          { key: "", label: "All" },
+          { key: REGULAR_LIST_KEY, label: "Regular leads" },
+          ...specialLists.map((l) => ({ key: l.id, label: l.name, color: l.color })),
+        ].map((option) => {
+          const active = option.key === "" ? listFilter.size === 0 : listFilter.has(option.key);
+          return (
+            <button
+              key={option.key || "all"}
+              onClick={() => (option.key === "" ? setListFilter(new Set()) : toggleList(option.key))}
+              className={cn(
+                "flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors",
+                active
+                  ? "border-blue-600 bg-blue-600 text-white dark:border-blue-500 dark:bg-blue-500"
+                  : "border-black/15 hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+              )}
+            >
+              {"color" in option && <StarIcon color={option.color} className="h-3.5 w-3.5" />}
+              {option.label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
 
   function handleTogglePin(leadId: string) {
     setSelectedLeadIds((prev) => {
@@ -723,7 +828,7 @@ export function LeadsExplorer({
                   <span className="inline-block h-2 w-2 rounded-full border border-black/20 dark:border-white/30" />
                   No disposition
                 </button>
-                {dispositions.map((d) => (
+                {filterDispositions.map((d) => (
                   <button
                     key={d.id}
                     onClick={() => toggleDisposition(d.id)}
@@ -740,6 +845,8 @@ export function LeadsExplorer({
                 ))}
               </div>
             </div>
+
+            {listFilterSection}
 
             {canFilterByRep && (
               <div className="space-y-1">
@@ -852,7 +959,7 @@ export function LeadsExplorer({
               <span className="inline-block h-2 w-2 rounded-full border border-black/20 dark:border-white/30" />
               No disposition
             </button>
-            {dispositions.map((d) => (
+            {filterDispositions.map((d) => (
               <button
                 key={d.id}
                 onClick={() => toggleDisposition(d.id)}
@@ -869,6 +976,7 @@ export function LeadsExplorer({
             ))}
           </div>
         </div>
+        {listFilterSection && <div className="mt-3">{listFilterSection}</div>}
       </div>
 
       <div className="duo-hide hidden border-b border-black/10 px-6 py-3 md:block dark:border-white/10">
@@ -987,6 +1095,7 @@ export function LeadsExplorer({
           <span className="text-sm text-black/60 dark:text-white/60">
             {filteredLeads.length} lead{filteredLeads.length === 1 ? "" : "s"}
             {viewMode === "map" && withoutLocation > 0 && ` (${withoutLocation} without a location)`}
+            {viewMode === "map" && hiddenFromMapCount > 0 && ` (${hiddenFromMapCount} closed out, in List only)`}
           </span>
           <div className="flex overflow-hidden rounded-full border border-black/15 dark:border-white/20">
             <button
@@ -1075,8 +1184,9 @@ export function LeadsExplorer({
         )}
         {viewMode === "map" ? (
           <LeadsMap
-            leads={filteredLeads}
+            leads={mapLeads}
             dispositionById={dispositionById}
+            specialListById={specialListById}
             apiKey={mapboxAccessToken}
             selectMode={selectMode}
             selectedLeadIds={selectedLeadIds}
@@ -1093,6 +1203,7 @@ export function LeadsExplorer({
             leads={filteredLeads}
             dispositions={dispositions}
             dispositionById={dispositionById}
+            specialLists={specialLists}
             onSelectLead={setSelectedLeadId}
           />
         )}
@@ -1108,7 +1219,8 @@ export function LeadsExplorer({
         <LeadDetailPanel
           key={selectedLead.id}
           lead={selectedLead}
-          dispositions={dispositions}
+          dispositions={selectedLead.special_list_id ? dispositions : regularDispositions}
+          specialList={selectedLead.special_list_id ? (specialListById.get(selectedLead.special_list_id) ?? null) : null}
           appointmentFormFields={appointmentFormFields}
           isAdmin={isAdmin}
           canArchive={canArchive}
@@ -1137,7 +1249,7 @@ export function LeadsExplorer({
 
       {showAddLead && (
         <AddLeadModal
-          dispositions={dispositions}
+          dispositions={regularDispositions}
           lockedLocation={newPinLocation}
           onClose={() => {
             setShowAddLead(false);

@@ -18,6 +18,9 @@ import { getCurrentLocation, distanceFeet } from "@/lib/geo";
 import { useSlideIn } from "@/lib/use-slide-in";
 import { cn } from "@/components/ui/cn";
 import type { AppointmentFormField, Disposition, Lead } from "./types";
+import type { SpecialList } from "@/lib/special-lists";
+import { StarIcon } from "./star-icon";
+import { SpecialLeadDetailsSection } from "./special-lead-details";
 
 const VISIBILITY_REASON_LABELS: Record<string, string> = {
   admin: "Admin",
@@ -26,6 +29,7 @@ const VISIBILITY_REASON_LABELS: Record<string, string> = {
   teammate_manual_entry: "Teammate of who entered it",
   team_lead_zip: "Team lead for this zip",
   appointment_assignment: "Assigned to an appointment",
+  special_list_access: "Has access to this list",
 };
 
 type Note = {
@@ -47,6 +51,7 @@ type HistoryEntry = {
 export function LeadDetailPanel({
   lead,
   dispositions,
+  specialList,
   appointmentFormFields,
   isAdmin,
   canArchive,
@@ -60,6 +65,9 @@ export function LeadDetailPanel({
 }: {
   lead: Lead;
   dispositions: Disposition[];
+  // Set for a special list lead: its locked main status. The disposition
+  // picker below becomes its sub-dispo.
+  specialList: SpecialList | null;
   appointmentFormFields: AppointmentFormField[];
   isAdmin: boolean;
   canArchive: boolean;
@@ -102,8 +110,14 @@ export function LeadDetailPanel({
   const [visibility, setVisibility] = useState<LeadVisibilityEntry[] | null>(null);
   const [visibilityError, setVisibilityError] = useState<string | null>(null);
 
+  // Only admins remove special list leads (archive_lead enforces it too).
+  const canRemove = specialList ? isAdmin : canArchive;
+
   function handleArchive() {
-    if (!confirm("Archive this lead? It will disappear from the map and list for everyone.")) return;
+    const message = specialList
+      ? `Remove this lead from ${specialList.name}? It disappears for everyone with access. You can restore it from Manage Leads → Archived.`
+      : "Archive this lead? It will disappear from the map and list for everyone.";
+    if (!confirm(message)) return;
     setArchiveError(null);
     startArchiving(async () => {
       const result = await archiveLead(lead.id);
@@ -358,6 +372,16 @@ export function LeadDetailPanel({
           />
         </div>
 
+        {specialList && (
+          <p
+            className="mt-2 inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium"
+            style={{ borderColor: specialList.color }}
+          >
+            <StarIcon color={specialList.color} className="h-4 w-4" />
+            {specialList.name}
+          </p>
+        )}
+
         {lead.is_manual && (
           <p className="mt-2 inline-block rounded border border-black/20 px-2 py-1 text-xs text-black/60 dark:border-white/30 dark:text-white/60">
             Entered manually by {lead.entered_by_name ?? "Unknown"} — may be outside their
@@ -383,13 +407,13 @@ export function LeadDetailPanel({
           Fix Location
         </button>
 
-        {canArchive && (
+        {canRemove && (
           <button
             onClick={handleArchive}
             disabled={isArchiving}
             className="mt-3 ml-2 rounded border border-red-300 px-3 py-1.5 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-950/30"
           >
-            {isArchiving ? "Archiving…" : "Archive"}
+            {isArchiving ? "Removing…" : specialList ? "Remove from list" : "Archive"}
           </button>
         )}
         {archiveError && <p className="mt-1 text-xs text-red-600 dark:text-red-400">{archiveError}</p>}
@@ -458,7 +482,12 @@ export function LeadDetailPanel({
         )}
 
         <div className="mt-6 space-y-2 border-t border-black/10 pt-4 dark:border-white/10">
-          <label className="text-xs font-medium">Disposition</label>
+          <label className="text-xs font-medium">{specialList ? "Sub-dispo" : "Disposition"}</label>
+          {specialList && (
+            <p className="text-xs text-black/50 dark:text-white/50">
+              The main status always stays {specialList.name}.
+            </p>
+          )}
           <div className="flex items-center gap-2">
             <DispositionSelect dispositions={dispositions} value={dispositionId} onChange={setDispositionId} />
             <button
@@ -473,6 +502,8 @@ export function LeadDetailPanel({
             <p className="text-xs text-red-600 dark:text-red-400">{dispositionError}</p>
           )}
         </div>
+
+        {specialList && <SpecialLeadDetailsSection leadId={lead.id} isAdmin={isAdmin} />}
 
         <div className="mt-6 space-y-3 border-t border-black/10 pt-4 dark:border-white/10">
           <h3 className="text-sm font-medium">Notes</h3>

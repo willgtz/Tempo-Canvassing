@@ -103,3 +103,11 @@ export async function requireAdmin(): Promise<AdminSession> {
   }
   return session;
 }
+
+// Special lead lists (create, upload, grant/remove access, CSC settings)
+// are super-admin only. RLS (is_super_admin, special_lists policies) is
+// the real boundary; this gives Server Actions a clean early exit.
+export async function getSuperAdminSession(): Promise<AdminSession | null> {
+  const session = await getAdminSession();
+  return session?.role === "super_admin" ? session : null;
+}

@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { AddressActionsMenu } from "@/components/address-actions-menu";
+import { CscOriginBanner } from "@/components/csc-origin-banner";
 import { useSlideIn } from "@/lib/use-slide-in";
 import { cn } from "@/components/ui/cn";
 import type {
@@ -224,6 +225,11 @@ export function RepAppointmentDetail({
             {lead?.phone && (
               <p className="mt-0.5 text-sm text-black/60 dark:text-white/60">{lead.phone}</p>
             )}
+            <CscOriginBanner
+              originAppointmentId={appointment.origin_appointment_id}
+              leadId={appointment.lead_id}
+              isAdmin={false}
+            />
           </div>
           <Button variant="ghost" size="sm" onClick={onClose}>
             Close

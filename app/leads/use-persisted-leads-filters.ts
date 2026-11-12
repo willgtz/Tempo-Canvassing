@@ -6,6 +6,7 @@ const STORAGE_KEY = "leads-explorer-filters-v1";
 
 export type PersistedLeadsFilters = {
   dispositionFilter: string[]; // Set serialized as an array
+  listFilter: string[]; // "regular" and/or special list ids
   zipFilter: string[];
   repFilter: string;
   dateFrom: string;
@@ -18,6 +19,7 @@ export type PersistedLeadsFilters = {
 
 const DEFAULTS: PersistedLeadsFilters = {
   dispositionFilter: [],
+  listFilter: [],
   zipFilter: [],
   repFilter: "all",
   dateFrom: "",

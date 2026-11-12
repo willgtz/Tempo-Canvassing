@@ -14,6 +14,9 @@ export type Appointment = {
   created_at: string;
   updated_at: string;
   deal_submitted_at: string | null;
+  // Set when this appointment was set from a Tempo CSC lead: the original
+  // (neglected) appointment that lead came from.
+  origin_appointment_id: string | null;
 };
 
 export type AppointmentStatus = {

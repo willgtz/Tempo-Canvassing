@@ -2,6 +2,8 @@
 
 import { after } from "next/server";
 import { getAdminSession } from "@/lib/auth/admin";
+import { fetchAllRows } from "@/lib/supabase/fetch-all-rows";
+import { specialAddressKey } from "@/lib/special-lists";
 import { createClient } from "@/lib/supabase/server";
 import { geocodeAddress } from "@/lib/geocode/google";
 import { MAX_ROWS } from "./constants";
@@ -16,10 +18,14 @@ export type CommitRow = {
   phone: string | null;
   email: string | null;
   priorSaleDate: string | null;
+  // From the file's Status column, already matched to a disposition by
+  // the client; null falls back to the disposition picked for the file.
+  dispositionId: string | null;
+  notes: string | null;
 };
 
 export type CommitResult =
-  | { ok: true; batchId: string; insertedCount: number }
+  | { ok: true; batchId: string; insertedCount: number; duplicateCount: number }
   | { ok: false; error: string };
 
 const GEOCODE_CONCURRENCY = 8;
@@ -110,11 +116,16 @@ async function geocodeBatchInBackground(
 export async function commitLeadBatch(
   filename: string,
   rows: CommitRow[],
-  dispositionId: string | null
+  dispositionId: string | null,
+  // Upload into a special list instead of the regular new-homeowner pool.
+  specialListId: string | null = null
 ): Promise<CommitResult> {
   const session = await getAdminSession();
   if (!session) {
     return { ok: false, error: "Unauthorized" };
+  }
+  if (specialListId && session.role !== "super_admin") {
+    return { ok: false, error: "Only super admins can upload to a special list." };
   }
 
   if (rows.length === 0) {
@@ -130,6 +141,47 @@ export async function commitLeadBatch(
 
   const supabase = await createClient();
 
+  let listName: string | null = null;
+  if (specialListId) {
+    const { data: list } = await supabase.from("special_lists").select("name").eq("id", specialListId).maybeSingle();
+    if (!list) return { ok: false, error: "That special list no longer exists." };
+    listName = list.name;
+  }
+
+  // Special-only sub-dispos (Dead Lead) can't go on regular leads; the
+  // database rejects them too, this just falls back instead of failing.
+  const { data: dispositionRows } = await supabase.from("dispositions").select("id, special_only");
+  const allowedDispositionIds = new Set(
+    (dispositionRows ?? []).filter((d) => specialListId || !d.special_only).map((d) => d.id)
+  );
+  const fileDispositionId = dispositionId && allowedDispositionIds.has(dispositionId) ? dispositionId : null;
+
+  // A special list never holds the same address twice — skip rows already
+  // in the list or repeated earlier in this file.
+  let rowsToInsert = rows;
+  if (specialListId) {
+    const { data: existing, error: existingError } = await fetchAllRows<{ address_line: string; zipcode: string }>(
+      (from, to) =>
+        supabase
+          .from("leads")
+          .select("address_line, zipcode")
+          .eq("special_list_id", specialListId)
+          .order("id")
+          .range(from, to)
+    );
+    if (existingError) return { ok: false, error: existingError.message };
+    const seen = new Set(existing.map((l) => specialAddressKey(l.address_line, l.zipcode)));
+    rowsToInsert = rows.filter((row) => {
+      const key = specialAddressKey(row.addressLine, row.zipcode);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    if (rowsToInsert.length === 0) {
+      return { ok: false, error: `Every address in this file is already in ${listName}.` };
+    }
+  }
+
   // Row-Level Security (leads_insert_admin / batches_admin in schema.sql)
   // is what actually enforces admin-only writes here — this call runs
   // under the signed-in user's own session, not a service-role key.
@@ -138,7 +190,8 @@ export async function commitLeadBatch(
     .insert({
       filename,
       uploaded_by: session.userId,
-      row_count: rows.length,
+      row_count: rowsToInsert.length,
+      notes: listName ? `Special list: ${listName}` : null,
     })
     .select("id")
     .single();
@@ -150,7 +203,7 @@ export async function commitLeadBatch(
     };
   }
 
-  const leadsToInsert = rows.map((row) => ({
+  const leadsToInsert = rowsToInsert.map((row) => ({
     batch_id: batch.id,
     first_name: row.firstName,
     last_name: row.lastName,
@@ -161,7 +214,9 @@ export async function commitLeadBatch(
     phone: row.phone,
     email: row.email,
     prior_sale_date: row.priorSaleDate,
-    disposition_id: dispositionId,
+    disposition_id:
+      row.dispositionId && allowedDispositionIds.has(row.dispositionId) ? row.dispositionId : fileDispositionId,
+    special_list_id: specialListId,
   }));
 
   const { data: insertedLeads, error: insertError } = await supabase
@@ -177,9 +232,26 @@ export async function commitLeadBatch(
   // upload itself doesn't wait on Google.
   after(() => geocodeBatchInBackground(supabase, insertedLeads));
 
+  // The Notes column becomes each lead's first note. PostgREST returns
+  // inserted rows in input order, so index i is rowsToInsert[i].
+  const notesToInsert = insertedLeads.flatMap((lead, i) => {
+    const note = rowsToInsert[i]?.notes?.trim();
+    return note ? [{ lead_id: lead.id, user_id: session.userId, note }] : [];
+  });
+  if (notesToInsert.length > 0) {
+    const { error: notesError } = await supabase.from("lead_notes").insert(notesToInsert);
+    if (notesError) {
+      return {
+        ok: false,
+        error: `${insertedLeads.length} leads were added, but their notes couldn't be saved: ${notesError.message}`,
+      };
+    }
+  }
+
   return {
     ok: true,
     batchId: batch.id as string,
     insertedCount: insertedLeads.length,
+    duplicateCount: rows.length - rowsToInsert.length,
   };
 }

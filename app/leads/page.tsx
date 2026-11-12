@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { fetchAllRows } from "@/lib/supabase/fetch-all-rows";
 import { LeadsExplorer } from "./leads-explorer";
 import type { AppointmentFormField, Disposition, Lead, Profile } from "./types";
+import { SPECIAL_LIST_COLUMNS, type SpecialList } from "@/lib/special-lists";
 
 type RawLeadRow = Omit<Lead, "entered_by_name"> & {
   profiles: { full_name: string } | null;
@@ -11,6 +12,7 @@ type RawLeadRow = Omit<Lead, "entered_by_name"> & {
 export default async function LeadsPage() {
   const session = await requireSession();
   const supabase = await createClient();
+  const isAdmin = session.role === "admin" || session.role === "super_admin";
 
   // Rep-filter dropdown scoping: a team_lead should only be able to
   // browse/preview teammates (the admin-managed Teams grouping —
@@ -51,12 +53,15 @@ export default async function LeadsPage() {
     { data: appointmentFormFields, error: appointmentFormFieldsError },
     { data: radiusRow, error: radiusError },
     { data: profiles, error: profilesError },
+    { data: specialLists, error: specialListsError },
+    { data: soldSpecialLeadIds },
+    { data: specialListAccess },
   ] = await Promise.all([
     fetchAllRows((from, to) =>
       supabase
         .from("leads")
         .select(
-          "id, first_name, last_name, address_line, city, state, zipcode, phone, lat, lng, geocode_precision, disposition_id, prior_sale_date, is_manual, entered_by, profiles!entered_by(full_name), created_at, updated_at"
+          "id, first_name, last_name, address_line, city, state, zipcode, phone, lat, lng, geocode_precision, disposition_id, prior_sale_date, is_manual, entered_by, special_list_id, profiles!entered_by(full_name), created_at, updated_at"
         )
         // id as a secondary, unique sort key — see fetch-all-rows.ts's
         // comment: .range() pagination needs a fully deterministic order,
@@ -66,7 +71,7 @@ export default async function LeadsPage() {
         .order("id", { ascending: true })
         .range(from, to)
     ),
-    supabase.from("dispositions").select("id, name, color, sort_order").order("sort_order"),
+    supabase.from("dispositions").select("id, name, color, sort_order, special_only").order("sort_order"),
     // Same admin-configurable question list the iOS app's NewAppointmentSheet
     // renders — fetched once here (small, mostly-static, same treatment as
     // dispositions above) rather than lazily per-lead like notes/history.
@@ -89,6 +94,16 @@ export default async function LeadsPage() {
     // That rep's true effective zips/teammates are fetched on demand
     // (see /api/reps/[repId]/effective-zips) once actually selected.
     profilesQuery,
+    // special_lists_select RLS returns every list to an admin and only
+    // the lists this user was granted to anyone else.
+    supabase.from("special_lists").select(SPECIAL_LIST_COLUMNS).order("name"),
+    // Special leads whose appointment was marked sold — they stay in the
+    // list view but leave the map.
+    supabase.rpc("special_leads_hidden_by_appointment"),
+    // Admin-only: who holds which list, for the rep-preview filter.
+    isAdmin
+      ? supabase.from("special_list_access").select("list_id, user_id")
+      : Promise.resolve({ data: [] as { list_id: string; user_id: string }[], error: null }),
   ]);
 
   if (leadsError || dispositionsError) {
@@ -120,6 +135,12 @@ export default async function LeadsPage() {
     console.error("Failed to load profiles for rep filter:", profilesError.message);
   }
 
+  // Non-blocking — without lists, special leads still load but show as
+  // plain pins.
+  if (specialListsError) {
+    console.error("Failed to load special_lists:", specialListsError.message);
+  }
+
   const transformedLeads: Lead[] = ((leads ?? []) as unknown as RawLeadRow[]).map((l) => ({
     ...l,
     entered_by_name: l.profiles?.full_name ?? null,
@@ -134,7 +155,10 @@ export default async function LeadsPage() {
       doorKnockRadiusFeet={typeof radiusRow?.value === "number" ? radiusRow.value : 150}
       currentUserId={session.userId}
       canFilterByRep={session.role === "team_lead" || session.role === "admin" || session.role === "super_admin"}
-      isAdmin={session.role === "admin" || session.role === "super_admin"}
+      isAdmin={isAdmin}
+      specialLists={(specialLists ?? []) as SpecialList[]}
+      soldSpecialLeadIds={(soldSpecialLeadIds ?? []) as string[]}
+      specialListAccess={specialListAccess ?? []}
       canArchive={session.role === "team_lead" || session.role === "admin" || session.role === "super_admin"}
       mapboxAccessToken={process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN ?? ""}
     />

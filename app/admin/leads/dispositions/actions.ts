@@ -9,6 +9,9 @@ export type DispositionInput = {
   color: string;
   sortOrder: number;
   isDefault: boolean;
+  // Only usable on special list leads (e.g. Dead Lead). Leaves out of
+  // every regular lead's picker; can't be the new-lead default.
+  specialOnly?: boolean;
 };
 
 export type DispositionActionResult = { ok: true } | { ok: false; error: string };
@@ -24,7 +27,8 @@ function normalizeInput(input: DispositionInput): DispositionInput | { error: st
     name,
     color: HEX_COLOR.test(input.color) ? input.color : "#6B7280",
     sortOrder: input.sortOrder,
-    isDefault: input.isDefault,
+    isDefault: input.specialOnly ? false : input.isDefault,
+    specialOnly: input.specialOnly ?? false,
   };
 }
 
@@ -83,6 +87,7 @@ export async function updateDisposition(
       color: normalized.color,
       sort_order: normalized.sortOrder,
       is_default: normalized.isDefault,
+      special_only: normalized.specialOnly,
     })
     .eq("id", id);
 

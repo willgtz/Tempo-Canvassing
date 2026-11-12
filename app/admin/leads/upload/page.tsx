@@ -1,12 +1,19 @@
+import { getAdminSession } from "@/lib/auth/admin";
 import { createClient } from "@/lib/supabase/server";
 import { UploadLeadsClient } from "./upload-client";
 
-export default async function UploadLeadsPage() {
+export default async function UploadLeadsPage({ searchParams }: { searchParams: Promise<{ list?: string }> }) {
+  const session = await getAdminSession();
+  const isSuperAdmin = session?.role === "super_admin";
+  const { list: initialListId } = await searchParams;
   const supabase = await createClient();
-  const { data: dispositions, error } = await supabase
-    .from("dispositions")
-    .select("id, name, color, is_default")
-    .order("sort_order");
+  const [{ data: dispositions, error }, { data: specialLists }] = await Promise.all([
+    supabase.from("dispositions").select("id, name, color, is_default, special_only").order("sort_order"),
+    // Uploading to a special list is super-admin only.
+    isSuperAdmin
+      ? supabase.from("special_lists").select("id, name, color").order("is_csc", { ascending: false }).order("name")
+      : Promise.resolve({ data: [] as { id: string; name: string; color: string }[] }),
+  ]);
 
   if (error) {
     return (
@@ -16,5 +23,12 @@ export default async function UploadLeadsPage() {
     );
   }
 
-  return <UploadLeadsClient dispositions={dispositions ?? []} />;
+  const lists = specialLists ?? [];
+  return (
+    <UploadLeadsClient
+      dispositions={dispositions ?? []}
+      specialLists={lists}
+      initialListId={lists.some((l) => l.id === initialListId) ? initialListId! : ""}
+    />
+  );
 }

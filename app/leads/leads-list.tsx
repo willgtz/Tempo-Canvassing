@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import type { Disposition, Lead } from "./types";
+import type { SpecialList } from "@/lib/special-lists";
+import { StarIcon } from "./star-icon";
 
 const DEFAULT_COLOR = "#6B7280";
 // Sentinel key for the "no disposition set" group — distinct from any
@@ -16,11 +18,13 @@ export function LeadsList({
   leads,
   dispositions,
   dispositionById,
+  specialLists,
   onSelectLead,
 }: {
   leads: Lead[];
   dispositions: Disposition[];
   dispositionById: Map<string, Disposition>;
+  specialLists: SpecialList[];
   onSelectLead: (leadId: string) => void;
 }) {
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set());
@@ -33,12 +37,29 @@ export function LeadsList({
     );
   }
 
-  const groups = dispositions
-    .map((d) => ({ id: d.id, name: d.name, color: d.color, leads: leads.filter((l) => l.disposition_id === d.id) }))
-    .filter((g) => g.leads.length > 0);
-  const noDispositionLeads = leads.filter((l) => !l.disposition_id);
+  // Each special list is one group (its leads' main status), listed
+  // first, including leads that left the map (Dead Lead / sold) so
+  // they can still be tracked. Regular leads group by disposition.
+  const regularLeads = leads.filter((l) => !l.special_list_id);
+  const groups: { id: string; name: string; color: string; isSpecial: boolean; leads: Lead[] }[] = [
+    ...specialLists.map((list) => ({
+      id: list.id,
+      name: list.name,
+      color: list.color,
+      isSpecial: true,
+      leads: leads.filter((l) => l.special_list_id === list.id),
+    })),
+    ...dispositions.map((d) => ({
+      id: d.id,
+      name: d.name,
+      color: d.color,
+      isSpecial: false,
+      leads: regularLeads.filter((l) => l.disposition_id === d.id),
+    })),
+  ].filter((g) => g.leads.length > 0);
+  const noDispositionLeads = regularLeads.filter((l) => !l.disposition_id);
   if (noDispositionLeads.length > 0) {
-    groups.push({ id: NO_DISPOSITION_KEY, name: "No Status", color: DEFAULT_COLOR, leads: noDispositionLeads });
+    groups.push({ id: NO_DISPOSITION_KEY, name: "No Status", color: DEFAULT_COLOR, isSpecial: false, leads: noDispositionLeads });
   }
 
   function toggleCollapsed(id: string) {
@@ -60,7 +81,11 @@ export function LeadsList({
               onClick={() => toggleCollapsed(group.id)}
               className="mb-2 flex w-full items-center gap-2 text-sm font-medium md:min-w-[720px]"
             >
-              <span className="inline-block h-2 w-2 rounded-full" style={{ backgroundColor: group.color }} />
+              {group.isSpecial ? (
+                <StarIcon color={group.color} className="h-4 w-4" />
+              ) : (
+                <span className="inline-block h-2 w-2 rounded-full" style={{ backgroundColor: group.color }} />
+              )}
               {group.name}
               <span className="text-black/40 dark:text-white/40">({group.leads.length})</span>
               <svg
@@ -97,7 +122,7 @@ export function LeadsList({
                             )}
                           </span>
                           <Badge color={disposition?.color ?? DEFAULT_COLOR} className="shrink-0">
-                            {disposition?.name ?? "—"}
+                            {disposition?.name ?? (group.isSpecial ? "No sub-dispo" : "—")}
                           </Badge>
                         </div>
                         <span className="text-sm text-black/60 dark:text-white/60">
@@ -136,7 +161,7 @@ export function LeadsList({
                         <th className="px-3 py-2 font-medium">Name</th>
                         <th className="px-3 py-2 font-medium">Address</th>
                         <th className="px-3 py-2 font-medium">Zip</th>
-                        <th className="px-3 py-2 font-medium">Disposition</th>
+                        <th className="px-3 py-2 font-medium">{group.isSpecial ? "Sub-dispo" : "Disposition"}</th>
                         <th className="px-3 py-2 font-medium">Added</th>
                       </tr>
                     </thead>
@@ -163,7 +188,9 @@ export function LeadsList({
                             </td>
                             <td className="px-3 py-2">{lead.zipcode}</td>
                             <td className="px-3 py-2">
-                              <Badge color={disposition?.color ?? DEFAULT_COLOR}>{disposition?.name ?? "—"}</Badge>
+                              <Badge color={disposition?.color ?? DEFAULT_COLOR}>
+                                {disposition?.name ?? (group.isSpecial ? "No sub-dispo" : "—")}
+                              </Badge>
                             </td>
                             <td className="px-3 py-2">{new Date(lead.created_at).toLocaleDateString()}</td>
                           </tr>

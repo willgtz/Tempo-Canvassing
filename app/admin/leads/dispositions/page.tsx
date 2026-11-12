@@ -6,7 +6,7 @@ export default async function DispositionsPage() {
   const supabase = await createClient();
   const { data: dispositions, error } = await supabase
     .from("dispositions")
-    .select("id, name, color, sort_order, is_default")
+    .select("id, name, color, sort_order, is_default, special_only")
     .order("sort_order");
 
   if (error) {
@@ -23,7 +23,8 @@ export default async function DispositionsPage() {
         <h1 className="text-xl font-semibold">Dispositions</h1>
         <p className="text-sm text-black/60 dark:text-white/60">
           Colors are used for map pins. Only one disposition can be the
-          default for new leads.
+          default for new leads. &quot;Special leads only&quot; statuses (like Dead
+          Lead) can only be used as a sub-dispo on special list leads.
         </p>
       </div>
 
@@ -37,6 +38,7 @@ export default async function DispositionsPage() {
               <th className="px-3 py-2 font-medium">Color</th>
               <th className="px-3 py-2 font-medium">Sort Order</th>
               <th className="px-3 py-2 font-medium">Default</th>
+              <th className="px-3 py-2 font-medium">Special leads only</th>
               <th className="px-3 py-2 font-medium text-right">Actions</th>
             </tr>
           </thead>

@@ -154,6 +154,7 @@ export type AddMyManualAppointmentResult =
         created_at: string;
         updated_at: string;
         deal_submitted_at: string | null;
+        origin_appointment_id: string | null;
       };
       lead: {
         id: string;
@@ -268,7 +269,7 @@ export async function addMyManualAppointment(
       custom_field_responses: input.responses,
       created_by: session.userId,
     })
-    .select("id, lead_id, scheduled_at, status_id, custom_field_responses, created_by, created_at, updated_at, deal_submitted_at")
+    .select("id, lead_id, scheduled_at, status_id, custom_field_responses, created_by, created_at, updated_at, deal_submitted_at, origin_appointment_id")
     .single();
 
   if (apptError || !appointment) {

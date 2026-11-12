@@ -10,6 +10,8 @@ import { getCurrentLocation, watchLocation } from "@/lib/geo";
 import { useDuoScreen } from "@/lib/use-duo-screen";
 import { findClosestTapTarget, isTapGesture, TOUCH_TAP_REACH_PX } from "@/lib/map-tap-target";
 import type { Disposition, Lead } from "./types";
+import type { SpecialList } from "@/lib/special-lists";
+import { STAR_PATH, StarIcon } from "./star-icon";
 
 const STREETS_STYLE = "mapbox://styles/mapbox/streets-v12";
 const SATELLITE_STYLE = "mapbox://styles/mapbox/satellite-streets-v12";
@@ -106,6 +108,8 @@ type TappedFeature = {
   geometry: { type: string; coordinates: [number, number] };
 };
 
+const TAP_LAYERS = ["clusters", "unclustered-point", "special-point"];
+
 // On touch screens, finds the closest pin or cluster around a tap. A mouse
 // click keeps Mapbox's exact hit on the circle.
 function findTouchTarget(map: MapboxMap, point: { x: number; y: number }): TappedFeature | null {
@@ -114,7 +118,7 @@ function findTouchTarget(map: MapboxMap, point: { x: number; y: number }): Tappe
       [point.x - TOUCH_TAP_SEARCH_PX, point.y - TOUCH_TAP_SEARCH_PX],
       [point.x + TOUCH_TAP_SEARCH_PX, point.y + TOUCH_TAP_SEARCH_PX],
     ],
-    { layers: ["clusters", "unclustered-point"] }
+    { layers: TAP_LAYERS }
   ) as unknown as TappedFeature[];
   return findClosestTapTarget(
     point.x,
@@ -168,7 +172,7 @@ const UNCLUSTERED_LAYER: CircleLayerSpecification = {
   id: "unclustered-point",
   type: "circle",
   source: "leads",
-  filter: ["!", ["has", "point_count"]],
+  filter: ["all", ["!", ["has", "point_count"]], ["!", ["get", "isSpecial"]]],
   paint: {
     "circle-color": ["get", "color"],
     "circle-radius": PIN_RADIUS,
@@ -180,6 +184,42 @@ const UNCLUSTERED_LAYER: CircleLayerSpecification = {
     "circle-stroke-color": ["case", ["get", "isManual"], "#000000", "#ffffff"],
   },
 };
+
+// Special list leads (Tempo CSC etc.) are stars in their list's color
+// instead of circles. Each color's star image is drawn on demand — see
+// handleStyleImageMissing.
+const STAR_IMAGE_PREFIX = "special-star-";
+const STAR_ICON_PX = 30;
+const STAR_IMAGE_PIXEL_RATIO = 2;
+
+const SPECIAL_LAYER: SymbolLayerSpecification = {
+  id: "special-point",
+  type: "symbol",
+  source: "leads",
+  filter: ["all", ["!", ["has", "point_count"]], ["get", "isSpecial"]],
+  layout: {
+    "icon-image": ["concat", STAR_IMAGE_PREFIX, ["get", "color"]],
+    "icon-allow-overlap": true,
+    "icon-ignore-placement": true,
+  },
+};
+
+function drawStarImage(color: string) {
+  const size = STAR_ICON_PX * STAR_IMAGE_PIXEL_RATIO;
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext("2d")!;
+  ctx.scale(size / 24, size / 24);
+  const star = new Path2D(STAR_PATH);
+  ctx.lineJoin = "round";
+  ctx.lineWidth = 2.4;
+  ctx.strokeStyle = "#ffffff";
+  ctx.stroke(star);
+  ctx.fillStyle = color;
+  ctx.fill(star);
+  return ctx.getImageData(0, 0, size, size);
+}
 
 // Same filter as UNCLUSTERED_LAYER (only individual, not-yet-clustered
 // pins), so labels only ever show once zoomed in enough that a pin
@@ -211,6 +251,7 @@ const UNCLUSTERED_LABEL_LAYER: SymbolLayerSpecification = {
 export function LeadsMap({
   leads,
   dispositionById,
+  specialListById,
   apiKey,
   selectMode,
   selectedLeadIds,
@@ -224,6 +265,7 @@ export function LeadsMap({
 }: {
   leads: Lead[];
   dispositionById: Map<string, Disposition>;
+  specialListById: Map<string, SpecialList>;
   apiKey: string;
   selectMode: boolean;
   selectedLeadIds: string[];
@@ -468,19 +510,25 @@ export function LeadsMap({
       type: "FeatureCollection" as const,
       features: locatedLeads.map((lead) => {
         const disposition = lead.disposition_id ? dispositionById.get(lead.disposition_id) : undefined;
+        const specialList = lead.special_list_id ? specialListById.get(lead.special_list_id) : undefined;
         return {
           type: "Feature" as const,
           properties: {
             leadId: lead.id,
-            color: disposition?.color ?? DEFAULT_COLOR,
+            isSpecial: specialList != null,
+            // A special lead's main status is its list; the sub-dispo
+            // goes on the label's second line.
+            color: specialList ? specialList.color : (disposition?.color ?? DEFAULT_COLOR),
             isManual: lead.is_manual,
-            dispositionName: disposition?.name ?? "No Status",
+            dispositionName: specialList
+              ? [specialList.name, disposition?.name].filter(Boolean).join("\n")
+              : (disposition?.name ?? "No Status"),
           },
           geometry: { type: "Point" as const, coordinates: [lead.lng, lead.lat] },
         };
       }),
     }),
-    [locatedLeads, dispositionById]
+    [locatedLeads, dispositionById, specialListById]
   );
 
   const activateFeature = useCallback(
@@ -813,8 +861,18 @@ export function LeadsMap({
       // desktop too, where there's no tab bar to worry about. The Duo's short
       // sideways screen has no tab bar and can't spare the strip.
       padding={{ top: 0, bottom: isDuo ? 0 : 80, left: 0, right: 0 }}
-      onLoad={() => setLoaded(true)}
-      interactiveLayerIds={selectMode || isStaging ? [] : ["clusters", "unclustered-point"]}
+      onLoad={(e) => {
+        // Fires again after every style swap (satellite toggle), which
+        // drops added images — so stars are (re)drawn whenever missing.
+        e.target.on("styleimagemissing", (ev: { id: string }) => {
+          if (!ev.id.startsWith(STAR_IMAGE_PREFIX) || e.target.hasImage(ev.id)) return;
+          e.target.addImage(ev.id, drawStarImage(ev.id.slice(STAR_IMAGE_PREFIX.length)), {
+            pixelRatio: STAR_IMAGE_PIXEL_RATIO,
+          });
+        });
+        setLoaded(true);
+      }}
+      interactiveLayerIds={selectMode || isStaging ? [] : TAP_LAYERS}
       onClick={selectMode || isStaging ? undefined : handleClick}
       onError={(e) => {
         console.error("Mapbox error:", e.error);
@@ -844,6 +902,7 @@ export function LeadsMap({
           <Layer {...CLUSTER_LAYER} />
           <Layer {...CLUSTER_COUNT_LAYER} />
           <Layer {...UNCLUSTERED_LAYER} />
+          <Layer {...SPECIAL_LAYER} />
           <Layer {...UNCLUSTERED_LABEL_LAYER} />
         </Source>
       )}
@@ -868,6 +927,7 @@ export function LeadsMap({
           const selectionIndex = selectedLeadIds.indexOf(lead.id);
           const isSelected = selectionIndex !== -1;
           const disposition = lead.disposition_id ? dispositionById.get(lead.disposition_id) : undefined;
+          const specialList = lead.special_list_id ? specialListById.get(lead.special_list_id) : undefined;
           return (
             <Marker
               key={lead.id}
@@ -882,6 +942,8 @@ export function LeadsMap({
                 <div className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-full border-2 border-white bg-black text-xs font-bold text-white shadow">
                   {selectionIndex + 1}
                 </div>
+              ) : specialList ? (
+                <StarIcon color={specialList.color} className="h-[30px] w-[30px] cursor-pointer drop-shadow" />
               ) : (
                 <div
                   className="h-[22px] w-[22px] cursor-pointer rounded-full shadow"

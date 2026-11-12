@@ -9,6 +9,7 @@ export type Disposition = {
   color: string;
   sort_order: number;
   is_default: boolean;
+  special_only: boolean;
 };
 
 export function DispositionRow({ disposition }: { disposition: Disposition }) {
@@ -17,6 +18,7 @@ export function DispositionRow({ disposition }: { disposition: Disposition }) {
   const [color, setColor] = useState(disposition.color);
   const [sortOrder, setSortOrder] = useState(String(disposition.sort_order));
   const [isDefault, setIsDefault] = useState(disposition.is_default);
+  const [specialOnly, setSpecialOnly] = useState(disposition.special_only);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -25,6 +27,7 @@ export function DispositionRow({ disposition }: { disposition: Disposition }) {
     setColor(disposition.color);
     setSortOrder(String(disposition.sort_order));
     setIsDefault(disposition.is_default);
+    setSpecialOnly(disposition.special_only);
     setError(null);
     setEditing(false);
   }
@@ -37,6 +40,7 @@ export function DispositionRow({ disposition }: { disposition: Disposition }) {
         color,
         sortOrder: Number(sortOrder),
         isDefault,
+        specialOnly,
       });
       if (!result.ok) {
         setError(result.error);
@@ -85,7 +89,18 @@ export function DispositionRow({ disposition }: { disposition: Disposition }) {
           <input
             type="checkbox"
             checked={isDefault}
+            disabled={specialOnly}
             onChange={(e) => setIsDefault(e.target.checked)}
+          />
+        </td>
+        <td className="px-3 py-2">
+          <input
+            type="checkbox"
+            checked={specialOnly}
+            onChange={(e) => {
+              setSpecialOnly(e.target.checked);
+              if (e.target.checked) setIsDefault(false);
+            }}
           />
         </td>
         <td className="px-3 py-2 text-right">
@@ -127,6 +142,7 @@ export function DispositionRow({ disposition }: { disposition: Disposition }) {
       </td>
       <td className="px-3 py-2 tabular-nums">{disposition.sort_order}</td>
       <td className="px-3 py-2">{disposition.is_default ? "Default" : ""}</td>
+      <td className="px-3 py-2">{disposition.special_only ? "Yes" : ""}</td>
       <td className="px-3 py-2 text-right">
         <div className="flex justify-end gap-2">
           <button

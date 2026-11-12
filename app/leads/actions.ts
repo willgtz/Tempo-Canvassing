@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { geocodeAddress } from "@/lib/geocode/google";
 import type { Lead } from "./types";
+import type { SpecialLeadDetails } from "@/lib/special-lists";
 
 export type UpdateDispositionResult = { ok: true } | { ok: false; error: string };
 
@@ -344,7 +345,7 @@ export async function addManualLead(input: AddManualLeadInput): Promise<AddManua
       disposition_id: input.dispositionId,
     })
     .select(
-      "id, first_name, last_name, address_line, city, state, zipcode, phone, lat, lng, geocode_precision, disposition_id, prior_sale_date, is_manual, entered_by, created_at, updated_at"
+      "id, first_name, last_name, address_line, city, state, zipcode, phone, lat, lng, geocode_precision, disposition_id, prior_sale_date, is_manual, entered_by, special_list_id, created_at, updated_at"
     )
     .single();
 
@@ -489,7 +490,7 @@ export async function submitAppointment(
   const { data: refreshed, error: refetchError } = await supabase
     .from("leads")
     .select(
-      "id, first_name, last_name, address_line, city, state, zipcode, phone, lat, lng, geocode_precision, disposition_id, prior_sale_date, is_manual, entered_by, profiles!entered_by(full_name), created_at, updated_at"
+      "id, first_name, last_name, address_line, city, state, zipcode, phone, lat, lng, geocode_precision, disposition_id, prior_sale_date, is_manual, entered_by, special_list_id, profiles!entered_by(full_name), created_at, updated_at"
     )
     .eq("id", input.leadId)
     .single();
@@ -620,4 +621,23 @@ export async function archiveLead(leadId: string): Promise<ArchiveLeadResult> {
   revalidatePath("/leads");
   revalidatePath("/admin/leads/archived");
   return { ok: true };
+}
+
+export type GetSpecialLeadDetailsResult =
+  | { ok: true; details: SpecialLeadDetails }
+  | { ok: false; error: string };
+
+// The original appointment(s) a special lead came from plus every
+// appointment set from it since. get_special_lead_details checks list
+// access itself, since access holders can't read those appointments
+// directly.
+export async function getSpecialLeadDetails(leadId: string): Promise<GetSpecialLeadDetailsResult> {
+  const session = await getSession();
+  if (!session) return { ok: false, error: "Unauthorized" };
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("get_special_lead_details", { p_lead_id: leadId });
+  if (error) return { ok: false, error: error.message };
+
+  return { ok: true, details: (data as SpecialLeadDetails | null) ?? { sources: [], appointments: [] } };
 }
