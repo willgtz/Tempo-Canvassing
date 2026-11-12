@@ -53,7 +53,7 @@ export type SpecialListSettingsInput = {
   mapHiddenAppointmentStatusIds: string[];
   // Tempo CSC only — ignored for other lists.
   cscExcludedStatusIds?: string[];
-  cscExcludedCloserIds?: string[];
+  cscExcludedRepIds?: string[];
 };
 
 export async function updateSpecialList(
@@ -70,7 +70,7 @@ export async function updateSpecialList(
   const supabase = await createClient();
   const { data: current, error: currentError } = await supabase
     .from("special_lists")
-    .select("is_csc, csc_excluded_closer_ids")
+    .select("is_csc, csc_excluded_rep_ids")
     .eq("id", listId)
     .single();
   if (currentError || !current) return { ok: false, error: currentError?.message ?? "List not found." };
@@ -84,20 +84,21 @@ export async function updateSpecialList(
   };
   if (current.is_csc) {
     update.csc_excluded_status_ids = input.cscExcludedStatusIds ?? [];
-    update.csc_excluded_closer_ids = input.cscExcludedCloserIds ?? [];
+    update.csc_excluded_rep_ids = input.cscExcludedRepIds ?? [];
   }
 
   const { error } = await supabase.from("special_lists").update(update).eq("id", listId);
   if (error) return { ok: false, error: friendlyError(error.message) };
 
-  // A closer change applies right away, in both directions: newly
-  // excluded closers' leads are removed, un-excluded ones come back.
+  // A rep change applies right away, in both directions: appointments a
+  // newly excluded rep opened or closed are removed, un-excluded ones
+  // come back.
   let syncSummary: CscSyncSummary | null = null;
-  const previousClosers = new Set<string>(current.csc_excluded_closer_ids ?? []);
-  const nextClosers = new Set(input.cscExcludedCloserIds ?? []);
-  const closersChanged =
-    previousClosers.size !== nextClosers.size || [...nextClosers].some((id) => !previousClosers.has(id));
-  if (current.is_csc && closersChanged) {
+  const previousReps = new Set<string>(current.csc_excluded_rep_ids ?? []);
+  const nextReps = new Set(input.cscExcludedRepIds ?? []);
+  const repsChanged =
+    previousReps.size !== nextReps.size || [...nextReps].some((id) => !previousReps.has(id));
+  if (current.is_csc && repsChanged) {
     const result = await runCscSync();
     if (!result.ok) return { ok: false, error: `Saved, but the CSC check failed: ${result.error}` };
     syncSummary = result.summary;

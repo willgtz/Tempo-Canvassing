@@ -23,7 +23,7 @@ export default async function SpecialListDetailPage({
   const { data: list, error: listError } = await supabase
     .from("special_lists")
     .select(
-      "id, name, color, is_csc, csc_excluded_status_ids, csc_excluded_closer_ids, map_hidden_disposition_ids, map_hidden_appointment_status_ids, csc_last_run_at, csc_last_run_summary"
+      "id, name, color, is_csc, csc_excluded_status_ids, csc_excluded_rep_ids, map_hidden_disposition_ids, map_hidden_appointment_status_ids, csc_last_run_at, csc_last_run_summary"
     )
     .eq("id", id)
     .maybeSingle();

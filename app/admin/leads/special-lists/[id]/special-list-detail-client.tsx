@@ -39,7 +39,7 @@ type ListDetail = {
   color: string;
   is_csc: boolean;
   csc_excluded_status_ids: string[];
-  csc_excluded_closer_ids: string[];
+  csc_excluded_rep_ids: string[];
   map_hidden_disposition_ids: string[];
   map_hidden_appointment_status_ids: string[];
   csc_last_run_at: string | null;
@@ -64,7 +64,7 @@ function summaryText(s: CscSyncSummary) {
     `${s.attached} appointment${s.attached === 1 ? "" : "s"} attached to existing leads`,
   ];
   if (s.restored) parts.push(`${s.restored} restored`);
-  if (s.removed) parts.push(`${s.removed} removed for excluded closers`);
+  if (s.removed) parts.push(`${s.removed} removed for excluded reps`);
   return parts.join(" · ");
 }
 
@@ -451,27 +451,27 @@ function SettingsTab({
   const [hiddenDispositions, setHiddenDispositions] = useState(list.map_hidden_disposition_ids);
   const [hiddenStatuses, setHiddenStatuses] = useState(list.map_hidden_appointment_status_ids);
   const [excludedStatuses, setExcludedStatuses] = useState(list.csc_excluded_status_ids);
-  const [excludedClosers, setExcludedClosers] = useState(list.csc_excluded_closer_ids);
-  const [closerQuery, setCloserQuery] = useState("");
+  const [excludedReps, setExcludedReps] = useState(list.csc_excluded_rep_ids);
+  const [repQuery, setRepQuery] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isSaving, startSaving] = useTransition();
   const [isRunning, startRunning] = useTransition();
   const [isDeleting, startDeleting] = useTransition();
 
-  const closerOptions = profiles
-    .filter((p) => excludedClosers.includes(p.id) || p.full_name.toLowerCase().includes(closerQuery.trim().toLowerCase()))
+  const repOptions = profiles
+    .filter((p) => excludedReps.includes(p.id) || p.full_name.toLowerCase().includes(repQuery.trim().toLowerCase()))
     .map((p) => ({ id: p.id, label: p.full_name }));
 
   function handleSave() {
-    const closersChanged =
-      excludedClosers.length !== list.csc_excluded_closer_ids.length ||
-      excludedClosers.some((id) => !list.csc_excluded_closer_ids.includes(id));
+    const repsChanged =
+      excludedReps.length !== list.csc_excluded_rep_ids.length ||
+      excludedReps.some((id) => !list.csc_excluded_rep_ids.includes(id));
     if (
       list.is_csc &&
-      closersChanged &&
+      repsChanged &&
       !confirm(
-        "Changing excluded closers applies right away: CSC leads from newly excluded closers are removed, and leads from closers you un-excluded come back. Continue?"
+        "Changing excluded reps applies right away: CSC leads where a newly excluded rep was the opener or closer are removed, and leads from reps you un-excluded come back. Continue?"
       )
     ) {
       return;
@@ -485,7 +485,7 @@ function SettingsTab({
         mapHiddenDispositionIds: hiddenDispositions,
         mapHiddenAppointmentStatusIds: hiddenStatuses,
         cscExcludedStatusIds: excludedStatuses,
-        cscExcludedCloserIds: excludedClosers,
+        cscExcludedRepIds: excludedReps,
       });
       if (!result.ok) {
         setError(result.error);
@@ -570,18 +570,18 @@ function SettingsTab({
             selected={excludedStatuses}
             onChange={setExcludedStatuses}
           />
-          <p className="pt-3 text-xs font-medium">Never add appointments where the closer is</p>
+          <p className="pt-3 text-xs font-medium">Never add appointments where this rep was the opener or closer</p>
           <p className="text-xs text-black/50 dark:text-white/50">
             Applies right away: their leads already in the list are removed too.
           </p>
           <Input
-            value={closerQuery}
-            onChange={(e) => setCloserQuery(e.target.value)}
+            value={repQuery}
+            onChange={(e) => setRepQuery(e.target.value)}
             placeholder="Search people…"
             className="w-full"
           />
-          {(closerQuery.trim() || excludedClosers.length > 0) && (
-            <CheckboxList options={closerOptions} selected={excludedClosers} onChange={setExcludedClosers} />
+          {(repQuery.trim() || excludedReps.length > 0) && (
+            <CheckboxList options={repOptions} selected={excludedReps} onChange={setExcludedReps} />
           )}
 
           <div className="flex flex-wrap items-center gap-2 border-t border-black/10 pt-3 dark:border-white/10">
