@@ -99,7 +99,7 @@ export function hicToFormInput(hic: Hic): HicFormInput {
 export const LIGHTREACH_PRICE_EDIT_WARNING_DOLLARS = 10;
 
 export function lightreachPriceNeedsConfirm(form: HicFormInput, financingTypes: HicFinancingType[]): boolean {
-  const key = financingTypes.find((f) => f.id === form.financingTypeId)?.key;
+  const key = financingTypes.find((f) => f.id === form.financingTypeId)?.works_like;
   const calculated = form.lightreachCalculatedPrice;
   const entered = Number(form.contractPriceManual);
   return (
@@ -133,7 +133,8 @@ export function HicFormFields({
   const numberOfPanelsPreview =
     Number(form.systemSizeKw) > 0 ? Math.round((Number(form.systemSizeKw) * 1000) / 450) : null;
 
-  const selectedFinancingKey = financingTypes.find((f) => f.id === form.financingTypeId)?.key ?? null;
+  const selectedFinancing = financingTypes.find((f) => f.id === form.financingTypeId) ?? null;
+  const selectedFinancingKey = selectedFinancing?.works_like ?? null;
   const isLightreach = selectedFinancingKey === "lightreach";
   const isSungageLoan = selectedFinancingKey === "sungage_loan";
   const isCash = selectedFinancingKey === "cash";
@@ -150,7 +151,7 @@ export function HicFormFields({
   // clobbers a value the rep already typed.
   function handleFinancingChange(financingTypeId: string) {
     update("financingTypeId", financingTypeId);
-    const nextKey = financingTypes.find((f) => f.id === financingTypeId)?.key;
+    const nextKey = financingTypes.find((f) => f.id === financingTypeId)?.works_like;
     if (nextKey === "cash" && (form.amountDueAtSigning.trim() === "" || Number(form.amountDueAtSigning) === 0)) {
       update("amountDueAtSigning", String(CASH_DEFAULT_AMOUNT_DUE_AT_SIGNING));
     }
@@ -411,7 +412,7 @@ export function HicFormFields({
                 className="block w-full"
               />
               <p className="text-[11px] text-black/50 dark:text-white/50">
-                {isLightreach ? "Enter exactly as LightReach shows, including decimals." : "Estimated first-year production for this system."}
+                {isLightreach ? `Enter exactly as ${selectedFinancing?.label ?? "the lender"} shows, including decimals.` : "Estimated first-year production for this system."}
               </p>
             </div>
           )}
@@ -482,7 +483,7 @@ export function HicFormFields({
               form.contractPriceManual.trim() !== "" &&
               Number(form.contractPriceManual) !== form.lightreachCalculatedPrice
                 ? `Edited — calculated ${formatCurrency(form.lightreachCalculatedPrice)}. Changing production, rate, or escalator recalculates it.`
-                : "Calculated from production, rate, and escalator. Edit it if LightReach's exact price is different."}
+                : `Calculated from production, rate, and escalator. Edit it if ${selectedFinancing?.label ?? "the lender"}'s exact price is different.`}
             </p>
             {lightreachPriceNeedsConfirm(form, financingTypes) && (
               <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-2 text-xs text-amber-700 dark:text-amber-300">
@@ -595,7 +596,7 @@ export function HicFormFields({
 
       {isLightreach && mismatchWarning && (
         <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-2 text-xs text-amber-700 dark:text-amber-300">
-          LightReach&apos;s first-year payment for these numbers is usually{" "}
+          {selectedFinancing?.label ?? "The lender"}&apos;s first-year payment for these numbers is usually{" "}
           {formatCurrency(
             Math.round(((Number(form.estProductionKwh) * form.kwhRate) / 12) * 100) / 100
           )}{" "}

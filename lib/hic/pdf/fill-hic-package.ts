@@ -247,33 +247,71 @@ export type PackageDocument = { templateKey: string; bytes: Uint8Array };
 // there) because the public signing routes need this same resolution
 // order to map each template's field positions into the final MERGED
 // document's global page numbers — see resolveSignerFields below.
-export async function resolveApplicableTemplateKeys(hic: Hic): Promise<string[]> {
+type PackageTarget = Pick<Hic, "financing_type_id" | "language" | "install_city">;
+
+// A rule's template_key names a document; the language-specific copy is
+// `<key>_<language>` (hic → hic_en / hic_es, loan_hic → loan_hic_es).
+// When that doesn't exist the rule's own template is used, but only if
+// it's language-neutral or already in this HIC's language — an English
+// contract is never silently sent on a Spanish HIC.
+function pickTemplateKey(
+  ruleKey: string,
+  language: string,
+  templates: Map<string, { language: string | null }>
+): string | null {
+  const localized = `${ruleKey}_${language}`;
+  if (templates.has(localized)) return localized;
+  const base = templates.get(ruleKey);
+  if (base && (base.language === null || base.language === language)) return ruleKey;
+  return null;
+}
+
+async function resolvePackage(target: PackageTarget): Promise<{ keys: string[]; missing: string[] }> {
   const supabase = await createClient();
 
-  const { data: rules } = await supabase
-    .from("hic_package_rules")
-    .select("template_key, financing_type_id, condition_type, city_list, is_enabled, sort_order")
-    .eq("is_enabled", true)
-    .order("sort_order");
+  const [{ data: rules }, { data: templates }] = await Promise.all([
+    supabase
+      .from("hic_package_rules")
+      .select("template_key, financing_type_id, condition_type, city_list, is_enabled, sort_order")
+      .eq("is_enabled", true)
+      .order("sort_order"),
+    supabase.from("hic_templates").select("key, language"),
+  ]);
+  const templateMap = new Map((templates ?? []).map((t) => [t.key as string, { language: t.language as string | null }]));
 
-  const installCity = hic.install_city.trim().toLowerCase();
-  return (rules ?? [])
-    .filter((r) => {
-      if (r.financing_type_id && r.financing_type_id !== hic.financing_type_id) return false;
-      if (r.condition_type === "city_in_list") {
-        return ((r.city_list ?? []) as string[]).map((c) => c.toLowerCase()).includes(installCity);
-      }
-      return true;
-    })
-    .map((r) => {
-      if (r.template_key === "hic") return `hic_${hic.language}`;
-      // Sungage Loan's two templates don't share LightReach's hic_en/
-      // hic_es naming (loan_hic / loan_hic_es instead), so this needs
-      // its own sentinel the same way "hic" does above.
-      if (r.template_key === "loan_hic") return hic.language === "es" ? "loan_hic_es" : "loan_hic";
-      if (r.template_key === "cash_hic") return hic.language === "es" ? "cash_hic_es" : "cash_hic";
-      return r.template_key;
-    });
+  const installCity = target.install_city.trim().toLowerCase();
+  const keys: string[] = [];
+  const missing: string[] = [];
+  for (const r of rules ?? []) {
+    if (r.financing_type_id && r.financing_type_id !== target.financing_type_id) continue;
+    if (r.condition_type === "city_in_list") {
+      if (!((r.city_list ?? []) as string[]).map((c) => c.toLowerCase()).includes(installCity)) continue;
+    }
+    const key = pickTemplateKey(r.template_key, target.language, templateMap);
+    if (key) keys.push(key);
+    else missing.push(`${r.template_key}_${target.language}`);
+  }
+  return { keys, missing };
+}
+
+// Which documents apply to this specific HIC, in order — driven
+// entirely by hic_package_rules (the financing type's contract; + any
+// extra documents like the LightReach equipment supplement; + Henderson
+// form if the install city matches). Exported separately from
+// fillHicPackage because the public signing routes need this same
+// resolution order to map each template's field positions into the
+// final MERGED document's global page numbers — see resolveSignerFields.
+export async function resolveApplicableTemplateKeys(hic: Hic): Promise<string[]> {
+  const { keys, missing } = await resolvePackage(hic);
+  if (missing.length > 0) throw new Error(`Missing HIC template: ${missing.join(", ")}`);
+  return keys;
+}
+
+// For saving a draft: names any document this financing type needs that
+// has no template in the chosen language yet (e.g. a Spanish Enfin HIC
+// before an Enfin_HIC_es template is uploaded).
+export async function findMissingPackageTemplates(target: PackageTarget): Promise<string[]> {
+  return (await resolvePackage(target)).missing;
 }
 
 // Freezes which template_version a HIC's package used at the moment

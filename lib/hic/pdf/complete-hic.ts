@@ -3,6 +3,7 @@ import { PDFDocument, PDFPage, StandardFonts, rgb } from "pdf-lib";
 import { createHash } from "crypto";
 import { fillHicPackage, resolveApplicableTemplateKeys } from "./fill-hic-package";
 import { uploadHicDocument } from "../storage";
+import { createClient } from "@/lib/supabase/server";
 import { formatDocumentDate } from "../format";
 import { parseUserAgent } from "../parse-user-agent";
 import type { Hic, HicSigner } from "@/app/appointments/send-hic/types";
@@ -27,6 +28,11 @@ export type CompletionResult = { storagePath: string; sha256: string };
 // the result as the immutable final signed document.
 export async function completeHic(hic: Hic, signers: HicSigner[]): Promise<CompletionResult> {
   const applicableKeys = await resolveApplicableTemplateKeys(hic);
+  const supabase = await createClient();
+  const { data: templateRows } = await supabase.from("hic_templates").select("key, label").in("key", applicableKeys);
+  const documentLabels = applicableKeys.map(
+    (key) => TEMPLATE_LABELS[key] ?? templateRows?.find((t) => t.key === key)?.label ?? key
+  );
   const documents = await fillHicPackage(hic, signers);
 
   const merged = await PDFDocument.create();
@@ -38,7 +44,7 @@ export async function completeHic(hic: Hic, signers: HicSigner[]): Promise<Compl
   const preCertificateBytes = await merged.save();
   const sha256 = createHash("sha256").update(preCertificateBytes).digest("hex");
 
-  await appendCertificatePage(merged, hic, signers, applicableKeys, sha256);
+  await appendCertificatePage(merged, hic, signers, documentLabels, sha256);
   const finalBytes = await merged.save();
 
   const storagePath = `completed/${hic.id}/signed.pdf`;
@@ -51,7 +57,7 @@ async function appendCertificatePage(
   doc: PDFDocument,
   hic: Hic,
   signers: HicSigner[],
-  templateKeys: string[],
+  documentLabels: string[],
   sha256: string
 ): Promise<void> {
   const helveticaBold = await doc.embedFont(StandardFonts.HelveticaBold);
@@ -88,8 +94,8 @@ async function appendCertificatePage(
   y -= 10;
 
   drawLine("Documents included", { bold: true, size: 12 });
-  for (const key of templateKeys) {
-    drawLine(`• ${TEMPLATE_LABELS[key] ?? key}`);
+  for (const label of documentLabels) {
+    drawLine(`• ${label}`);
   }
   y -= 10;
 

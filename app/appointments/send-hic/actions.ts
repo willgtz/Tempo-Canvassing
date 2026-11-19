@@ -7,7 +7,7 @@ import { requireSession, type UserSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { calculateContractPrice, calculateMonthlyPaymentCheck } from "@/lib/hic/contract-price";
 import { generateDraftPreview } from "@/lib/hic/pdf/generate-draft-preview";
-import { resolveTemplateVersionSnapshot } from "@/lib/hic/pdf/fill-hic-package";
+import { findMissingPackageTemplates, resolveTemplateVersionSnapshot } from "@/lib/hic/pdf/fill-hic-package";
 import { isValidEmail, isValidPhoneInput } from "@/lib/hic/format";
 import { generateSigningToken, rotatedTokenColumns } from "@/lib/hic/signing-token";
 import { sendHicEmail } from "@/lib/hic/send-email";
@@ -93,16 +93,30 @@ function cashAmountDueAtSigning(input: HicFormInput): number {
 
 async function resolveFinancingType(
   supabase: Awaited<ReturnType<typeof createClient>>,
-  financingTypeId: string
+  input: HicFormInput
 ): Promise<{ ok: true; key: string } | { ok: false; error: string }> {
   const { data, error } = await supabase
     .from("hic_financing_types")
-    .select("key, is_enabled")
-    .eq("id", financingTypeId)
+    .select("label, works_like, is_enabled")
+    .eq("id", input.financingTypeId)
     .single();
   if (error || !data) return { ok: false, error: "Invalid financing type." };
   if (!data.is_enabled) return { ok: false, error: "This financing type isn't available yet." };
-  return { ok: true, key: data.key };
+  const missing = await findMissingPackageTemplates({
+    financing_type_id: input.financingTypeId,
+    language: input.language,
+    install_city: input.installCity,
+  });
+  if (missing.length > 0) {
+    const languageName = input.language === "es" ? "Spanish" : "English";
+    return {
+      ok: false,
+      error: `${data.label} doesn't have a ${languageName} contract yet. Upload one on HIC Templates with the key ${missing.join(", ")}.`,
+    };
+  }
+  // `key` here is the behavior (works_like), not the type's own key, so
+  // e.g. Enfin runs through every LightReach rule below.
+  return { ok: true, key: data.works_like };
 }
 
 // Who countersigns / appears on the contract. A rep can only ever be
@@ -292,7 +306,7 @@ export async function createHicDraft(appointmentId: string, input: HicFormInput)
   const supabase = await createClient();
   const settings = await getHicSettings(supabase);
 
-  const financingType = await resolveFinancingType(supabase, input.financingTypeId);
+  const financingType = await resolveFinancingType(supabase, input);
   if (!financingType.ok) return financingType;
 
   const validationError = validateInput(input, settings, financingType.key);
@@ -359,7 +373,7 @@ export async function createStandaloneHicDraft(input: HicFormInput): Promise<Hic
   const supabase = await createClient();
   const settings = await getHicSettings(supabase);
 
-  const financingType = await resolveFinancingType(supabase, input.financingTypeId);
+  const financingType = await resolveFinancingType(supabase, input);
   if (!financingType.ok) return financingType;
 
   const validationError = validateInput(input, settings, financingType.key);
@@ -409,7 +423,7 @@ export async function updateHicDraft(hicId: string, input: HicFormInput): Promis
   const supabase = await createClient();
   const settings = await getHicSettings(supabase);
 
-  const financingType = await resolveFinancingType(supabase, input.financingTypeId);
+  const financingType = await resolveFinancingType(supabase, input);
   if (!financingType.ok) return financingType;
 
   const validationError = validateInput(input, settings, financingType.key);

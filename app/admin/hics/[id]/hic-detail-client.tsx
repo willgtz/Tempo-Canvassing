@@ -81,7 +81,7 @@ export function HicDetailClient({
   const canVoid = hic.status !== "voided";
   const canCorrect = hic.status !== "draft" && !hic.corrected_into_hic_id;
 
-  const selectedFinancingKey = financingTypes.find((f) => f.id === hic.financing_type_id)?.key ?? null;
+  const selectedFinancingKey = financingTypes.find((f) => f.id === hic.financing_type_id)?.works_like ?? null;
   const isLightreach = selectedFinancingKey === "lightreach";
   const isSungageLoan = selectedFinancingKey === "sungage_loan";
   const isCash = selectedFinancingKey === "cash";

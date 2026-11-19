@@ -67,7 +67,7 @@ export default async function AppointmentsPage() {
     // Send HIC's financing-type dropdown (only LightReach enabled for
     // now) — small, static-ish lookup table, fine to fetch unconditionally
     // alongside everything else this page already always needs.
-    supabase.from("hic_financing_types").select("id, key, label, is_enabled").order("sort_order"),
+    supabase.from("hic_financing_types").select("id, key, label, is_enabled, works_like").order("sort_order"),
   ]);
 
   if (apptError || statusError) {

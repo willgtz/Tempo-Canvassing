@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
 import { cn } from "@/components/ui/cn";
 import {
+  addFinancingType,
   addNotificationRecipient,
   addPackageRule,
   addPanelOption,
@@ -29,6 +30,7 @@ import type {
   HicEmailTemplateType,
   HicEquipmentSupplementDefaults,
   HicFinancingType,
+  HicFinancingWorksLike,
   HicNotificationRecipient,
   HicPackageRule,
   HicPanelOption,
@@ -116,13 +118,23 @@ export function HicSettingsClient({
 }
 
 // ------------------------------------------------------------
+const WORKS_LIKE_LABEL: Record<HicFinancingWorksLike, string> = {
+  lightreach: "Works like LightReach",
+  sungage_loan: "Works like Sungage Loan",
+  cash: "Works like Cash",
+};
+
 function FinancingTypesCard({ financingTypes }: { financingTypes: HicFinancingType[] }) {
   const [types, setTypes] = useState(financingTypes);
+  const [newLabel, setNewLabel] = useState("");
+  const [newWorksLike, setNewWorksLike] = useState<HicFinancingWorksLike>("lightreach");
   const [error, setError] = useState<string | null>(null);
+  const [added, setAdded] = useState<string | null>(null);
   const [isSaving, startSaving] = useTransition();
 
   function handleToggle(type: HicFinancingType) {
     setError(null);
+    setAdded(null);
     startSaving(async () => {
       const result = await toggleFinancingTypeEnabled(type.id, !type.is_enabled);
       if (!result.ok) {
@@ -130,6 +142,21 @@ function FinancingTypesCard({ financingTypes }: { financingTypes: HicFinancingTy
         return;
       }
       setTypes((prev) => prev.map((t) => (t.id === type.id ? { ...t, is_enabled: !t.is_enabled } : t)));
+    });
+  }
+
+  function handleAdd() {
+    setError(null);
+    setAdded(null);
+    startSaving(async () => {
+      const result = await addFinancingType(newLabel, newWorksLike);
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      setTypes((prev) => [...prev, result.financingType]);
+      setAdded(result.financingType.label);
+      setNewLabel("");
     });
   }
 
@@ -143,14 +170,17 @@ function FinancingTypesCard({ financingTypes }: { financingTypes: HicFinancingTy
       </p>
       <div className="space-y-1.5">
         {types.map((t) => (
-          <div key={t.id} className="flex items-center justify-between rounded border border-black/10 px-2 py-1.5 text-sm dark:border-white/10">
-            <span>{t.label}</span>
+          <div key={t.id} className="flex items-center justify-between gap-2 rounded border border-black/10 px-2 py-1.5 text-sm dark:border-white/10">
+            <span>
+              {t.label}{" "}
+              <span className="text-xs text-black/50 dark:text-white/50">· {WORKS_LIKE_LABEL[t.works_like]}</span>
+            </span>
             <button
               type="button"
               onClick={() => handleToggle(t)}
               disabled={isSaving}
               className={cn(
-                "rounded-full px-3 py-1 text-xs font-medium disabled:opacity-50",
+                "shrink-0 rounded-full px-3 py-1 text-xs font-medium disabled:opacity-50",
                 t.is_enabled
                   ? "bg-green-600/10 text-green-700 hover:bg-green-600/20 dark:bg-green-500/20 dark:text-green-300"
                   : "bg-black/10 text-black/60 hover:bg-black/20 dark:bg-white/10 dark:text-white/60"
@@ -160,6 +190,39 @@ function FinancingTypesCard({ financingTypes }: { financingTypes: HicFinancingTy
             </button>
           </div>
         ))}
+      </div>
+
+      <div className="space-y-2 border-t border-black/10 pt-3 dark:border-white/10">
+        <p className="text-xs font-medium">Add a financing type</p>
+        <div className="flex flex-wrap items-center gap-2">
+          <Input
+            value={newLabel}
+            onChange={(e) => setNewLabel(e.target.value)}
+            placeholder="Name, e.g. Enfin"
+            className="w-44"
+          />
+          <Select value={newWorksLike} onChange={(e) => setNewWorksLike(e.target.value as HicFinancingWorksLike)}>
+            {(Object.keys(WORKS_LIKE_LABEL) as HicFinancingWorksLike[]).map((w) => (
+              <option key={w} value={w}>
+                {WORKS_LIKE_LABEL[w]}
+              </option>
+            ))}
+          </Select>
+          <Button type="button" onClick={handleAdd} disabled={isSaving || !newLabel.trim()}>
+            Add
+          </Button>
+        </div>
+        <p className="text-xs text-black/50 dark:text-white/50">
+          &ldquo;Works like&rdquo; sets the HIC form fields and price rules it uses. New types start disabled. Before
+          enabling one: upload its contract on HIC Templates (a Spanish copy uses the same key plus <code>_es</code>,
+          e.g. <code>my_hic</code> and <code>my_hic_es</code>), position the fields, add a package rule below for that
+          template key, and add a panel for it.
+        </p>
+        {added && (
+          <p className="text-sm text-green-700 dark:text-green-400">
+            {added} added. Finish the steps above, then enable it.
+          </p>
+        )}
       </div>
       {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
     </Card>

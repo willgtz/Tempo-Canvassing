@@ -1,8 +1,14 @@
+// Which built-in behavior (form fields, validation, contract price) a
+// financing type uses. Its own key is just an identifier — every rule in
+// the app reads works_like, so new types can be added from HIC Settings.
+export type HicFinancingWorksLike = "lightreach" | "sungage_loan" | "cash";
+
 export type HicFinancingType = {
   id: string;
   key: string;
   label: string;
   is_enabled: boolean;
+  works_like: HicFinancingWorksLike;
 };
 
 export type HicPanelOption = {

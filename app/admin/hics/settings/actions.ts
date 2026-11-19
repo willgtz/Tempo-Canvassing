@@ -5,6 +5,8 @@ import { getAdminSession } from "@/lib/auth/admin";
 import { createClient } from "@/lib/supabase/server";
 import type {
   HicEmailTemplateType,
+  HicFinancingType,
+  HicFinancingWorksLike,
   HicPackageRule,
   HicNotificationRecipient,
   HicPanelOption,
@@ -196,6 +198,26 @@ export async function toggleFinancingTypeEnabled(id: string, isEnabled: boolean)
 
   const supabase = await createClient();
   const { data: old } = await supabase.from("hic_financing_types").select("*").eq("id", id).single();
+
+  // A type with no contract or no panel can't produce a HIC, so it can't
+  // be offered to reps yet.
+  if (isEnabled) {
+    const [{ count: ruleCount }, { count: panelCount }] = await Promise.all([
+      supabase
+        .from("hic_package_rules")
+        .select("id", { count: "exact", head: true })
+        .eq("financing_type_id", id)
+        .eq("is_enabled", true),
+      supabase
+        .from("hic_panel_options")
+        .select("id", { count: "exact", head: true })
+        .eq("financing_type_id", id)
+        .eq("is_active", true),
+    ]);
+    if (!ruleCount) return { ok: false, error: "Add a package rule with this type's contract template before enabling it." };
+    if (!panelCount) return { ok: false, error: "Add a panel for this type before enabling it." };
+  }
+
   const { error } = await supabase.from("hic_financing_types").update({ is_enabled: isEnabled }).eq("id", id);
   if (error) return { ok: false, error: error.message };
 
@@ -211,6 +233,49 @@ export async function toggleFinancingTypeEnabled(id: string, isEnabled: boolean)
   revalidatePath("/admin/hics");
   revalidatePath("/admin/appointments");
   return { ok: true };
+}
+
+const WORKS_LIKE_VALUES: HicFinancingWorksLike[] = ["lightreach", "sungage_loan", "cash"];
+
+// New types start disabled: they still need a contract template, a
+// package rule and a panel before reps can pick them.
+export async function addFinancingType(
+  label: string,
+  worksLike: HicFinancingWorksLike
+): Promise<{ ok: true; financingType: HicFinancingType } | { ok: false; error: string }> {
+  const session = await getAdminSession();
+  if (!session) return { ok: false, error: "Unauthorized" };
+
+  const name = label.trim();
+  if (!name) return { ok: false, error: "Name is required." };
+  if (!WORKS_LIKE_VALUES.includes(worksLike)) return { ok: false, error: "Pick what it works like." };
+  const key = name.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+  if (!key) return { ok: false, error: "Use letters or numbers in the name." };
+
+  const supabase = await createClient();
+  const { data: existing } = await supabase.from("hic_financing_types").select("key, label, sort_order");
+  if ((existing ?? []).some((t) => t.key === key || t.label.toLowerCase() === name.toLowerCase())) {
+    return { ok: false, error: "A financing type with that name already exists." };
+  }
+  const sortOrder = Math.max(-1, ...(existing ?? []).map((t) => t.sort_order as number)) + 1;
+
+  const { data, error } = await supabase
+    .from("hic_financing_types")
+    .insert({ key, label: name, works_like: worksLike, is_enabled: false, sort_order: sortOrder })
+    .select("id, key, label, is_enabled, works_like")
+    .single();
+  if (error || !data) return { ok: false, error: error?.message ?? "Failed to add financing type." };
+
+  await supabase.from("hic_settings_history").insert({
+    setting_key: "hic_financing_types",
+    old_value: null,
+    new_value: data,
+    changed_by: session.userId,
+  });
+
+  revalidatePath(SETTINGS_PATH);
+  revalidatePath("/admin/hics/templates");
+  return { ok: true, financingType: data as HicFinancingType };
 }
 
 // ------------------------------------------------------------

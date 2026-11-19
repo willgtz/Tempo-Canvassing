@@ -44,7 +44,7 @@ export function HicReviewScreen({
   const [error, setError] = useState<string | null>(null);
   const [isSending, startSending] = useTransition();
 
-  const isCash = financingTypes.find((f) => f.id === hic.financing_type_id)?.key === "cash";
+  const isCash = financingTypes.find((f) => f.id === hic.financing_type_id)?.works_like === "cash";
   const cashPayments = isCash ? calculateCashPayments(hic.contract_price ?? 0, hic.amount_due_at_signing) : null;
 
   const [preview, setPreview] = useState<{ url: string; pageCount: number } | null>(null);

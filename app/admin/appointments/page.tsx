@@ -69,7 +69,7 @@ export default async function AppointmentsPage() {
       .order("sort_order"),
     supabase.from("profiles").select("id, full_name").eq("active", true).order("full_name"),
     supabase.from("appointment_detail_sections").select("key").order("sort_order"),
-    supabase.from("hic_financing_types").select("id, key, label, is_enabled").order("sort_order"),
+    supabase.from("hic_financing_types").select("id, key, label, is_enabled, works_like").order("sort_order"),
   ]);
 
   const sectionOrder = detailSections?.length
