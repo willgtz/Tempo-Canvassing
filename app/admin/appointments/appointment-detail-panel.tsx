@@ -31,6 +31,7 @@ import type { AppointmentFormField } from "@/app/leads/types";
 import { StatusSelect } from "./status-select";
 import { SendHicSection } from "@/app/appointments/send-hic/send-hic-section";
 import type { Hic, HicFinancingType } from "@/app/appointments/send-hic/types";
+import { LinkifiedText } from "@/components/linkified-text";
 
 // Configured once William confirms the deal tool's actual stable
 // production URL (Vercel Dashboard → tempo-deal-tool project → Domains —
@@ -582,7 +583,7 @@ export function AppointmentDetailPanel({
               <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-black/50 dark:text-white/50">
                 Appointment Note
               </p>
-              <p className="whitespace-pre-wrap">{submissionNoteText}</p>
+              <p className="whitespace-pre-wrap break-words"><LinkifiedText text={submissionNoteText} /></p>
             </div>
           )}
 
@@ -635,7 +636,7 @@ export function AppointmentDetailPanel({
                   </div>
                 </div>
               ) : (
-                <p className="whitespace-pre-wrap">{n.note}</p>
+                <p className="whitespace-pre-wrap break-words"><LinkifiedText text={n.note} /></p>
               )}
             </div>
           ))}

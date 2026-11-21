@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { getSpecialLeadDetails } from "./actions";
 import type { SpecialLeadDetails, SpecialLeadSource } from "@/lib/special-lists";
+import { LinkifiedText } from "@/components/linkified-text";
 
 function formatDateTime(iso: string) {
   return new Date(iso).toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
@@ -50,7 +51,7 @@ function SourceAppointment({ source, isAdmin, defaultOpen }: { source: SpecialLe
         {source.responses.map((r) => (
           <div key={r.label} className="contents">
             <dt className="text-black/50 dark:text-white/50">{r.label}</dt>
-            <dd className="whitespace-pre-wrap break-words">{r.value}</dd>
+            <dd className="whitespace-pre-wrap break-words"><LinkifiedText text={r.value} /></dd>
           </div>
         ))}
       </dl>
@@ -78,7 +79,7 @@ function SourceAppointment({ source, isAdmin, defaultOpen }: { source: SpecialLe
               <p className="text-xs text-black/50 dark:text-white/50">
                 {n.author_name} · {formatDateTime(n.created_at)}
               </p>
-              <p className="whitespace-pre-wrap">{n.note}</p>
+              <p className="whitespace-pre-wrap break-words"><LinkifiedText text={n.note} /></p>
             </div>
           ))
         )}

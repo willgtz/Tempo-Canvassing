@@ -21,6 +21,7 @@ import type { AppointmentFormField, Disposition, Lead } from "./types";
 import type { SpecialList } from "@/lib/special-lists";
 import { StarIcon } from "./star-icon";
 import { SpecialLeadDetailsSection } from "./special-lead-details";
+import { LinkifiedText } from "@/components/linkified-text";
 
 const VISIBILITY_REASON_LABELS: Record<string, string> = {
   admin: "Admin",
@@ -556,7 +557,7 @@ export function LeadDetailPanel({
                 <p className="text-xs text-black/50 dark:text-white/50">
                   {n.author_name} · {new Date(n.created_at).toLocaleString()}
                 </p>
-                <p className="whitespace-pre-wrap">{n.note}</p>
+                <p className="whitespace-pre-wrap break-words"><LinkifiedText text={n.note} /></p>
               </div>
             ))}
           </div>

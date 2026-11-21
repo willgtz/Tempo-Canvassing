@@ -11,6 +11,7 @@ import { calculateCashPayments } from "@/lib/hic/cash-payments";
 import type { Hic, HicFinancingType, HicStatus, HicSigner } from "@/app/appointments/send-hic/types";
 import type { ContractPriceYear } from "@/lib/hic/contract-price";
 import type { HicEvent } from "./page";
+import { LinkifiedText } from "@/components/linkified-text";
 
 const STATUS_LABEL: Record<HicStatus, string> = {
   draft: "Draft",
@@ -356,7 +357,7 @@ export function HicDetailClient({
       {hic.notes && (
         <div className="space-y-1.5 rounded-md border border-black/10 p-3 dark:border-white/10">
           <SectionLabel>Notes</SectionLabel>
-          <p className="whitespace-pre-wrap text-sm">{hic.notes}</p>
+          <p className="whitespace-pre-wrap break-words text-sm"><LinkifiedText text={hic.notes} /></p>
         </div>
       )}
 

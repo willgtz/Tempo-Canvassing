@@ -26,6 +26,7 @@ import type {
 } from "@/app/admin/appointments/types";
 import type { AppointmentFormField } from "@/app/leads/types";
 import type { Hic, HicFinancingType } from "./send-hic/types";
+import { LinkifiedText } from "@/components/linkified-text";
 
 // Deliberately simpler than app/admin/appointments/appointment-detail-panel.tsx
 // — no assignment editing (that's an admin-only action either way, per
@@ -405,7 +406,7 @@ export function RepAppointmentDetail({
                 <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-black/50 dark:text-white/50">
                   Appointment Note
                 </p>
-                <p className="whitespace-pre-wrap">{submissionNoteText}</p>
+                <p className="whitespace-pre-wrap break-words"><LinkifiedText text={submissionNoteText} /></p>
               </div>
             )}
 
@@ -414,7 +415,7 @@ export function RepAppointmentDetail({
                 <p className="text-xs text-black/50 dark:text-white/50">
                   {note.author_name} · {new Date(note.created_at).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}
                 </p>
-                <p>{note.note}</p>
+                <p className="whitespace-pre-wrap break-words"><LinkifiedText text={note.note} /></p>
               </div>
             ))}
           </div>
